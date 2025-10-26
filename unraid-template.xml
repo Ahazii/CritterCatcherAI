@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>CritterCatcherAI</Name>
+  <Repository>ghcr.io/ahazii/crittercatcherai:latest</Repository>
+  <Registry>https://ghcr.io/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Ahazii/CritterCatcherAI</Support>
+  <Project>https://github.com/Ahazii/CritterCatcherAI</Project>
+  <Overview>CritterCatcherAI automatically downloads Ring doorbell videos, analyzes them with AI (object detection and face recognition), and organizes them into categorized folders. Detect animals like hedgehogs, foxes, birds, or identify specific people automatically.</Overview>
+  <Category>MediaApp:Video Tools:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/icon.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Ring Username" Target="RING_USERNAME" Default="" Mode="" Description="Your Ring account email address" Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Ring Password" Target="RING_PASSWORD" Default="" Mode="" Description="Your Ring account password" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, ERROR" Type="Variable" Display="always" Required="false" Mask="false">INFO</Config>
+  <Config Name="Run Once" Target="RUN_ONCE" Default="false" Mode="" Description="Set to 'true' to run once and exit, 'false' for continuous operation" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Container timezone (e.g., America/New_York, Europe/London)" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="Config Path" Target="/app/config" Default="/mnt/user/appdata/crittercatcher/config" Mode="ro" Description="Configuration files directory (read-only)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/config</Config>
+  <Config Name="Downloads Path" Target="/data/downloads" Default="/mnt/user/appdata/crittercatcher/downloads" Mode="rw" Description="Temporary storage for downloaded Ring videos" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/downloads</Config>
+  <Config Name="Sorted Videos Path" Target="/data/sorted" Default="/mnt/user/Videos/CritterCatcher/sorted" Mode="rw" Description="Final destination for organized videos by category" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Videos/CritterCatcher/sorted</Config>
+  <Config Name="Face Database Path" Target="/data/faces" Default="/mnt/user/appdata/crittercatcher/faces" Mode="rw" Description="Face encodings database and training images" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/faces</Config>
+  <Config Name="Token Storage Path" Target="/data/ring_token.json" Default="/mnt/user/appdata/crittercatcher/ring_token.json" Mode="rw" Description="Ring API authentication token (file path)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/ring_token.json</Config>
+  <Config Name="Download Hours" Target="DOWNLOAD_HOURS" Default="24" Mode="" Description="How many hours back to download Ring videos" Type="Variable" Display="advanced" Required="false" Mask="false">24</Config>
+  <Config Name="Check Interval (minutes)" Target="INTERVAL_MINUTES" Default="60" Mode="" Description="Minutes between processing runs (continuous mode only)" Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
+  <Config Name="Confidence Threshold" Target="CONFIDENCE_THRESHOLD" Default="0.25" Mode="" Description="Object detection confidence (0.0-1.0, lower=more detections)" Type="Variable" Display="advanced" Required="false" Mask="false">0.25</Config>
+  <Config Name="Face Tolerance" Target="FACE_TOLERANCE" Default="0.6" Mode="" Description="Face recognition tolerance (0.0-1.0, lower=stricter matching)" Type="Variable" Display="advanced" Required="false" Mask="false">0.6</Config>
+  <Config Name="Detection Priority" Target="DETECTION_PRIORITY" Default="people" Mode="" Description="Sorting priority: 'people' or 'objects'" Type="Variable" Display="advanced" Required="false" Mask="false">people</Config>
+  <Config Name="GPU Support" Target="" Default="" Mode="" Description="Uncomment the device mapping below for NVIDIA GPU acceleration" Type="Label" Display="advanced" Required="false" Mask="false"/>
+  <!-- Uncomment for NVIDIA GPU support (requires nvidia-docker runtime)
+  <Config Name="GPU Device" Target="" Default="" Mode="" Description="GPU0" Type="Device" Display="advanced" Required="false" Mask="false">/dev/dri/card0</Config>
+  -->
+</Container>

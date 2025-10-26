@@ -51,12 +51,24 @@ def process_videos(config: dict):
     """Main video processing pipeline."""
     logger = logging.getLogger(__name__)
     
-    # Get configuration values
+    # Get configuration values (environment variables override config file)
     download_path = config.get('paths', {}).get('downloads', '/data/downloads')
     sorted_path = config.get('paths', {}).get('sorted', '/data/sorted')
     
     ring_config = config.get('ring', {})
     detection_config = config.get('detection', {})
+    
+    # Allow environment variable overrides for key settings
+    if os.environ.get('DOWNLOAD_HOURS'):
+        ring_config['download_hours'] = int(os.environ.get('DOWNLOAD_HOURS'))
+    if os.environ.get('INTERVAL_MINUTES'):
+        config['interval_minutes'] = int(os.environ.get('INTERVAL_MINUTES'))
+    if os.environ.get('CONFIDENCE_THRESHOLD'):
+        detection_config['confidence_threshold'] = float(os.environ.get('CONFIDENCE_THRESHOLD'))
+    if os.environ.get('FACE_TOLERANCE'):
+        detection_config['face_tolerance'] = float(os.environ.get('FACE_TOLERANCE'))
+    if os.environ.get('DETECTION_PRIORITY'):
+        detection_config['priority'] = os.environ.get('DETECTION_PRIORITY')
     
     # Initialize components
     logger.info("Initializing CritterCatcherAI components")
