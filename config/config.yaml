@@ -1,0 +1,56 @@
+# CritterCatcherAI Configuration
+
+# Paths (container paths - map these in docker-compose.yml)
+paths:
+  downloads: /data/downloads
+  sorted: /data/sorted
+  face_encodings: /data/faces/encodings.pkl
+
+# Ring doorbell settings
+ring:
+  # How many hours back to download videos
+  download_hours: 24
+  
+  # Optional: limit number of videos per run (null for no limit)
+  download_limit: null
+
+# Detection settings
+detection:
+  # Object labels to detect (add any objects you want to detect)
+  object_labels:
+    - hedgehog
+    - fox
+    - cat
+    - dog
+    - squirrel
+    - wren
+    - finch
+    - robin
+    - crow
+    - bird
+    - person
+    - delivery person
+    - car
+    - bicycle
+  
+  # Confidence threshold for object detection (0.0-1.0)
+  # Lower = more detections but less accurate
+  # Higher = fewer detections but more accurate
+  confidence_threshold: 0.25
+  
+  # Face recognition tolerance (0.0-1.0)
+  # Lower = more strict matching
+  # Higher = more lenient matching
+  face_tolerance: 0.6
+  
+  # Priority for sorting: "people" or "objects"
+  # "people" = prioritize face recognition over object detection
+  # "objects" = prioritize object detection over face recognition
+  priority: people
+
+# Application settings
+# Run once and exit, or run continuously
+run_once: false
+
+# Interval between processing runs (in minutes)
+interval_minutes: 60

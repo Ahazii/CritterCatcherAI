@@ -1,0 +1,176 @@
+"""
+Ring video downloader module.
+Downloads videos from Ring doorbells using the ring-doorbell library.
+"""
+import os
+import logging
+from pathlib import Path
+from datetime import datetime, timedelta
+from typing import List, Optional
+import json
+
+from ring_doorbell import Ring, Auth
+from oauthlib.oauth2 import MissingTokenError
+
+
+logger = logging.getLogger(__name__)
+
+
+class RingDownloader:
+    """Handles downloading videos from Ring devices."""
+    
+    def __init__(self, download_path: str, token_file: str = "/data/ring_token.json"):
+        """
+        Initialize the Ring downloader.
+        
+        Args:
+            download_path: Path where videos will be downloaded
+            token_file: Path to store/load refresh token
+        """
+        self.download_path = Path(download_path)
+        self.download_path.mkdir(parents=True, exist_ok=True)
+        self.token_file = Path(token_file)
+        self.ring = None
+        self.auth = None
+        
+        logger.info(f"Initialized RingDownloader with download path: {download_path}")
+    
+    def authenticate(self, username: Optional[str] = None, password: Optional[str] = None) -> bool:
+        """
+        Authenticate with Ring service using refresh token or credentials.
+        
+        Args:
+            username: Ring account username (email)
+            password: Ring account password
+            
+        Returns:
+            bool: True if authentication successful
+        """
+        try:
+            # Try to load existing token
+            if self.token_file.exists():
+                logger.info("Loading existing Ring refresh token")
+                with open(self.token_file, 'r') as f:
+                    token_data = json.load(f)
+                    self.auth = Auth("CritterCatcherAI/1.0", token_data)
+                    self.ring = Ring(self.auth)
+                    self.ring.update_data()
+                    logger.info("Successfully authenticated with existing token")
+                    return True
+            
+            # If no token exists, authenticate with credentials
+            if username and password:
+                logger.info(f"Authenticating with Ring account: {username}")
+                self.auth = Auth("CritterCatcherAI/1.0")
+                
+                # This may require 2FA - user will need to handle via CLI or environment
+                self.auth.fetch_token(username, password)
+                
+                # Save token for future use
+                token_data = self.auth.token
+                with open(self.token_file, 'w') as f:
+                    json.dump(token_data, f)
+                logger.info("Saved refresh token for future use")
+                
+                self.ring = Ring(self.auth)
+                self.ring.update_data()
+                logger.info("Successfully authenticated with credentials")
+                return True
+            
+            logger.error("No valid authentication method available")
+            return False
+            
+        except MissingTokenError:
+            logger.error("Token expired or invalid, re-authentication required")
+            if self.token_file.exists():
+                self.token_file.unlink()
+            return False
+        except Exception as e:
+            logger.error(f"Authentication failed: {e}", exc_info=True)
+            return False
+    
+    def get_devices(self) -> List:
+        """
+        Get list of Ring devices.
+        
+        Returns:
+            List of Ring devices
+        """
+        if not self.ring:
+            logger.error("Not authenticated with Ring")
+            return []
+        
+        devices = []
+        devices.extend(self.ring.doorbots)
+        devices.extend(self.ring.stickup_cams)
+        
+        logger.info(f"Found {len(devices)} Ring devices")
+        return devices
+    
+    def download_recent_videos(self, hours: int = 24, limit: Optional[int] = None) -> List[Path]:
+        """
+        Download videos from the last N hours.
+        
+        Args:
+            hours: Number of hours to look back
+            limit: Maximum number of videos to download
+            
+        Returns:
+            List of downloaded video file paths
+        """
+        if not self.ring:
+            logger.error("Not authenticated with Ring")
+            return []
+        
+        downloaded_files = []
+        devices = self.get_devices()
+        
+        for device in devices:
+            logger.info(f"Checking videos for device: {device.name}")
+            
+            try:
+                # Get video history
+                history = device.history(limit=limit or 100, kind='ding')
+                
+                # Filter by time
+                cutoff_time = datetime.now() - timedelta(hours=hours)
+                
+                for event in history:
+                    event_time = datetime.fromtimestamp(event['created_at'])
+                    
+                    if event_time < cutoff_time:
+                        continue
+                    
+                    # Download video
+                    video_id = event['id']
+                    video_url = device.recording_url(video_id)
+                    
+                    if not video_url:
+                        logger.warning(f"No video URL for event {video_id}")
+                        continue
+                    
+                    # Create filename with timestamp and device name
+                    timestamp_str = event_time.strftime("%Y%m%d_%H%M%S")
+                    filename = f"{device.name}_{timestamp_str}_{video_id}.mp4"
+                    filepath = self.download_path / filename
+                    
+                    # Skip if already downloaded
+                    if filepath.exists():
+                        logger.debug(f"Video already exists: {filename}")
+                        downloaded_files.append(filepath)
+                        continue
+                    
+                    # Download the video
+                    logger.info(f"Downloading video: {filename}")
+                    device.recording_download(video_id, filename=str(filepath))
+                    downloaded_files.append(filepath)
+                    
+                    if limit and len(downloaded_files) >= limit:
+                        logger.info(f"Reached download limit of {limit}")
+                        break
+                        
+            except Exception as e:
+                logger.error(f"Error downloading videos from {device.name}: {e}", exc_info=True)
+        
+        logger.info(f"Downloaded {len(downloaded_files)} videos")
+        return downloaded_files

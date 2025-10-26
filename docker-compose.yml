@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  crittercatcher:
+    build: .
+    image: crittercatcher-ai:latest
+    container_name: crittercatcher-ai
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - LOG_LEVEL=INFO
+      - RING_USERNAME=${RING_USERNAME}
+      - RING_PASSWORD=${RING_PASSWORD}
+      - RUN_ONCE=false
+      - TZ=America/New_York
+    
+    # Volume mappings for Unraid
+    volumes:
+      # Configuration
+      - ./config:/app/config:ro
+      
+      # Downloaded videos (temporary storage)
+      - /mnt/user/appdata/crittercatcher/downloads:/data/downloads
+      
+      # Sorted videos (organized by class)
+      - /mnt/user/Videos/CritterCatcher/sorted:/data/sorted
+      
+      # Face encodings database
+      - /mnt/user/appdata/crittercatcher/faces:/data/faces
+      
+      # Ring authentication token
+      - /mnt/user/appdata/crittercatcher/tokens:/data
+    
+    # Optional: GPU support for faster inference
+    # Uncomment if you have NVIDIA GPU and nvidia-docker installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    
+    # Network mode
+    network_mode: bridge
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
