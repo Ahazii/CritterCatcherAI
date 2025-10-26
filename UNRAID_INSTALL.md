@@ -17,7 +17,7 @@
 
 1. Download the template:
    ```bash
-   wget -O /boot/config/plugins/dockerMan/templates-user/my-CritterCatcherAI.xml https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/unraid-template.xml
+   wget -O /boot/config/plugins/dockerMan/templates-user/my-CritterCatcherAI.xml https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/my-CritterCatcherAI.xml
    ```
 
 2. Go to **Docker** tab in Unraid

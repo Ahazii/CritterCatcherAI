@@ -12,7 +12,7 @@
   <Overview>CritterCatcherAI automatically downloads Ring doorbell videos, analyzes them with AI (object detection and face recognition), and organizes them into categorized folders. Detect animals like hedgehogs, foxes, birds, or identify specific people automatically.</Overview>
   <Category>MediaApp:Video Tools:</Category>
   <WebUI/>
-  <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/unraid-template.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/my-CritterCatcherAI.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/icon.png</Icon>
   <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
