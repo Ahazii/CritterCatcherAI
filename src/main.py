@@ -153,6 +153,14 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info("Starting CritterCatcherAI")
     
+    # Start web server in separate thread
+    import threading
+    from webapp import start_web_server
+    
+    web_thread = threading.Thread(target=start_web_server, daemon=True)
+    web_thread.start()
+    logger.info("Web interface started on http://0.0.0.0:8080")
+    
     # Load configuration
     config = load_config()
     

@@ -39,6 +39,9 @@ COPY config/ ./config/
 # Create volume mount points
 VOLUME ["/data/downloads", "/data/sorted", "/data/faces"]
 
+# Expose web interface port
+EXPOSE 8080
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
