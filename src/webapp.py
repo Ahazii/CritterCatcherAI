@@ -325,8 +325,10 @@ async def health_check():
     return {"status": "healthy"}
 
 
-def start_web_server(host: str = "0.0.0.0", port: int = 8080):
+def start_web_server(host: str = "0.0.0.0", port: int = None):
     """Start the web server."""
+    if port is None:
+        port = int(os.environ.get('WEB_PORT', 8080))
     logger.info(f"Starting web interface on http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
 

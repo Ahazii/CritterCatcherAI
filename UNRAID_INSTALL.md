@@ -50,6 +50,7 @@
 | `CONFIDENCE_THRESHOLD` | No | 0.25 | Object detection threshold (0.0-1.0) |
 | `FACE_TOLERANCE` | No | 0.6 | Face recognition tolerance (0.0-1.0) |
 | `DETECTION_PRIORITY` | No | people | "people" or "objects" |
+| `WEB_PORT` | No | 8080 | Web interface port (change if conflicts) |
 
 **Volume Mappings:**
 | Container Path | Host Path | Mode | Description |
