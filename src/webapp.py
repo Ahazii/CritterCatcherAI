@@ -280,6 +280,7 @@ async def ring_authenticate(credentials: dict):
             raise HTTPException(status_code=400, detail="Username and password required")
         
         from ring_downloader import RingDownloader
+        from ring_doorbell.exceptions import Requires2FAError
         
         rd = RingDownloader(
             download_path="/data/downloads",
@@ -287,21 +288,37 @@ async def ring_authenticate(credentials: dict):
         )
         
         # Try to authenticate
-        if rd.authenticate(username, password):
-            return {
-                "status": "success",
-                "message": "Ring authentication successful. Token saved."
-            }
-        else:
-            raise HTTPException(status_code=401, detail="Authentication failed. Check credentials.")
-            
-    except Exception as e:
-        error_msg = str(e)
-        if "2fa" in error_msg.lower() or "verification" in error_msg.lower():
+        try:
+            if code_2fa:
+                # Use 2FA authentication method
+                if rd.authenticate_with_2fa(username, password, code_2fa):
+                    return {
+                        "status": "success",
+                        "message": "Ring authentication successful. Token saved."
+                    }
+                else:
+                    raise HTTPException(status_code=401, detail="2FA authentication failed. Check your code.")
+            else:
+                # Try regular authentication first
+                if rd.authenticate(username, password):
+                    return {
+                        "status": "success",
+                        "message": "Ring authentication successful. Token saved."
+                    }
+                else:
+                    raise HTTPException(status_code=401, detail="Authentication failed. Check credentials.")
+        except Requires2FAError:
+            # 2FA is required
             return {
                 "status": "needs_2fa",
                 "message": "2FA code required. Please check your email/SMS/authenticator app."
             }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Ring authentication error: {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
 
 

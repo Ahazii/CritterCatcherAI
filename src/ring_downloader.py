@@ -65,6 +65,7 @@ class RingDownloader:
                 
                 try:
                     # Try to authenticate - this may require 2FA
+                    # The ring-doorbell library uses oauthlib which supports 2FA callback
                     self.auth.fetch_token(username, password)
                     
                     # Save token for future use
@@ -111,6 +112,41 @@ class RingDownloader:
             return False
         except Exception as e:
             logger.error(f"Authentication failed: {e}", exc_info=True)
+            return False
+    
+    def authenticate_with_2fa(self, username: str, password: str, code_2fa: str) -> bool:
+        """
+        Authenticate with Ring using 2FA code.
+        
+        Args:
+            username: Ring account username (email)
+            password: Ring account password
+            code_2fa: 2FA verification code
+            
+        Returns:
+            bool: True if authentication successful
+        """
+        try:
+            logger.info(f"Authenticating with Ring and 2FA code: {username}")
+            self.auth = Auth("CritterCatcherAI/1.0")
+            
+            # Fetch token with 2FA code
+            self.auth.fetch_token(username, password, code_2fa)
+            
+            # Save token for future use
+            token_data = self.auth.token
+            self.token_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.token_file, 'w') as f:
+                json.dump(token_data, f)
+            logger.info("Saved refresh token for future use")
+            
+            self.ring = Ring(self.auth)
+            self.ring.update_data()
+            logger.info("Successfully authenticated with 2FA")
+            return True
+            
+        except Exception as e:
+            logger.error(f"2FA authentication failed: {e}", exc_info=True)
             return False
     
     def get_devices(self) -> List:
