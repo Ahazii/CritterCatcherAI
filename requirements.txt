@@ -3,14 +3,13 @@ ring-doorbell==0.8.12
 oauthlib==3.2.2
 
 # AI/ML libraries
-torch==2.1.0
-torchvision==0.16.0
+# torch and torchvision installed separately in Dockerfile (CPU version)
 transformers==4.35.0
 pillow==10.1.0
 
 # Face recognition
 face-recognition==1.3.0
-dlib==19.24.2
+# dlib installed separately in Dockerfile
 
 # Computer vision
 opencv-python==4.8.1.78
