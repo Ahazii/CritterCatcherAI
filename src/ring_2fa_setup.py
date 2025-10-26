@@ -5,7 +5,9 @@ Run this script interactively to set up 2FA authentication with Ring.
 """
 import os
 import sys
-from ring_downloader import RingDownloader
+import json
+from pathlib import Path
+from ring_doorbell import Auth, Ring
 
 def main():
     print("=" * 80)
@@ -29,28 +31,37 @@ def main():
     print("If you have 2FA enabled, you'll be prompted to enter the code...")
     print()
     
-    # Initialize downloader
-    rd = RingDownloader(
-        download_path="/tmp",
-        token_file="/data/tokens/ring_token.json"
-    )
+    token_file = Path("/data/tokens/ring_token.json")
+    
+    # 2FA callback function
+    def two_fa_callback():
+        code = input("\nEnter 2FA code (check SMS/email/app): ")
+        return code.strip()
     
     # Attempt authentication
     try:
-        if rd.authenticate(username, password):
-            print()
-            print("=" * 80)
-            print("SUCCESS! Authentication completed.")
-            print("=" * 80)
-            print()
-            print("Your Ring token has been saved to: /data/ring_token.json")
-            print("You can now start the CritterCatcherAI container normally.")
-            print()
-            sys.exit(0)
-        else:
-            print()
-            print("Authentication failed. Please check your credentials.")
-            sys.exit(1)
+        auth = Auth("CritterCatcherAI/1.0", two_fa_callback)
+        auth.fetch_token(username, password)
+        
+        # Save token
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(token_file, 'w') as f:
+            json.dump(auth.token, f)
+        
+        # Verify by creating Ring instance
+        ring = Ring(auth)
+        ring.update_data()
+        
+        print()
+        print("=" * 80)
+        print("SUCCESS! Authentication completed.")
+        print("=" * 80)
+        print()
+        print(f"Your Ring token has been saved to: {token_file}")
+        print("You can now start the CritterCatcherAI container normally.")
+        print()
+        sys.exit(0)
+        
     except KeyboardInterrupt:
         print()
         print("Authentication cancelled.")
@@ -61,8 +72,9 @@ def main():
         print()
         print("Please ensure:")
         print("  1. Your Ring username and password are correct")
-        print("  2. You have internet connectivity")
-        print("  3. Your Ring account is active")
+        print("  2. You entered the correct 2FA code")
+        print("  3. You have internet connectivity")
+        print("  4. Your Ring account is active")
         sys.exit(1)
 
 if __name__ == "__main__":
