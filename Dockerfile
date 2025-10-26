@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
+    wget \
     libopencv-dev \
     libboost-all-dev \
-    libdlib-dev \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y \
     libxvidcore-dev \
     libx264-dev \
     libatlas-base-dev \
+    libopenblas-dev \
+    liblapack-dev \
     gfortran \
     && rm -rf /var/lib/apt/lists/*
 
