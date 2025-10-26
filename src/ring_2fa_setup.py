@@ -33,15 +33,20 @@ def main():
     
     token_file = Path("/data/tokens/ring_token.json")
     
-    # 2FA callback function
-    def two_fa_callback():
-        code = input("\nEnter 2FA code (check SMS/email/app): ")
-        return code.strip()
-    
     # Attempt authentication
     try:
-        auth = Auth("CritterCatcherAI/1.0", two_fa_callback)
-        auth.fetch_token(username, password)
+        auth = Auth("CritterCatcherAI/1.0")
+        
+        # Try to fetch token - if 2FA is needed, it will raise an exception
+        try:
+            auth.fetch_token(username, password)
+        except Exception as e:
+            # If 2FA is required, ask for code
+            if "2fa" in str(e).lower() or "tsv_state" in str(e).lower():
+                code = input("\nEnter 2FA code (check SMS/email/app): ")
+                auth.fetch_token(username, password, code)
+            else:
+                raise
         
         # Save token
         token_file.parent.mkdir(parents=True, exist_ok=True)
