@@ -294,18 +294,18 @@ async def ring_authenticate(credentials: dict):
         )
         
         # Try to authenticate
-        try:
-            if code_2fa:
-                # Use 2FA authentication method
-                if rd.authenticate_with_2fa(username, password, code_2fa):
-                    return {
-                        "status": "success",
-                        "message": "Ring authentication successful. Token saved."
-                    }
-                else:
-                    raise HTTPException(status_code=401, detail="2FA authentication failed. Check your code.")
+        if code_2fa:
+            # Use 2FA authentication method
+            if rd.authenticate_with_2fa(username, password, code_2fa):
+                return {
+                    "status": "success",
+                    "message": "Ring authentication successful. Token saved."
+                }
             else:
-                # Try regular authentication first
+                raise HTTPException(status_code=401, detail="2FA authentication failed. Check your code.")
+        else:
+            # Try regular authentication first - expect 2FA error
+            try:
                 if rd.authenticate(username, password):
                     return {
                         "status": "success",
@@ -313,12 +313,15 @@ async def ring_authenticate(credentials: dict):
                     }
                 else:
                     raise HTTPException(status_code=401, detail="Authentication failed. Check credentials.")
-        except Requires2FAError:
-            # 2FA is required
-            return {
-                "status": "needs_2fa",
-                "message": "2FA code required. Please check your email/SMS/authenticator app."
-            }
+            except Requires2FAError:
+                # 2FA is required - return special status
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "needs_2fa",
+                        "message": "2FA code required. Please check your email/SMS/authenticator app."
+                    }
+                )
             
     except HTTPException:
         raise
@@ -365,46 +368,18 @@ async def trigger_processing(background_tasks: BackgroundTasks):
 
 @app.get("/api/logs/stream")
 async def stream_logs():
-    """Stream logs in real-time using Server-Sent Events."""
+    """Stream logs - Note: Real-time streaming not available from inside container."""
     async def event_generator():
-        # Use subprocess to tail docker logs instead of reading /proc
-        import subprocess
-        
-        try:
-            # Get recent logs first
-            result = subprocess.run(
-                ['docker', 'logs', '--tail', '50', 'crittercatcher-ai'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            
-            # Send recent logs
-            for line in result.stdout.splitlines():
-                if line.strip():
-                    yield {"data": line}
-            for line in result.stderr.splitlines():
-                if line.strip():
-                    yield {"data": line}
-            
-            # Now follow logs in real-time
-            process = subprocess.Popen(
-                ['docker', 'logs', '-f', '--tail', '0', 'crittercatcher-ai'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-            
-            while True:
-                line = process.stdout.readline()
-                if line:
-                    yield {"data": line.strip()}
-                else:
-                    await asyncio.sleep(0.5)
-                    
-        except Exception as e:
-            yield {"data": f"Error streaming logs: {e}. Check Docker permissions."}
+        yield {"data": "=" * 80}
+        yield {"data": "Log Streaming from Inside Container Not Supported"}
+        yield {"data": "=" * 80}
+        yield {"data": ""}
+        yield {"data": "To view logs, use one of these methods:"}
+        yield {"data": "  1. Unraid Dashboard: Click container icon → View Logs"}
+        yield {"data": "  2. Terminal: docker logs -f crittercatcher-ai"}
+        yield {"data": "  3. Unraid Terminal: docker logs --tail 100 crittercatcher-ai"}
+        yield {"data": ""}
+        yield {"data": "Recent activity can be seen in the Dashboard stats above."}
     
     return EventSourceResponse(event_generator())
 
