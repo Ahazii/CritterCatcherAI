@@ -81,25 +81,8 @@ class RingDownloader:
                     return True
                     
                 except Exception as auth_error:
-                    if "2fa" in str(auth_error).lower() or "verification" in str(auth_error).lower():
-                        logger.error("="*80)
-                        logger.error("2FA AUTHENTICATION REQUIRED")
-                        logger.error("="*80)
-                        logger.error("Ring requires 2FA verification. Please follow these steps:")
-                        logger.error("")
-                        logger.error("1. Stop this container")
-                        logger.error("2. Run this command in Unraid terminal:")
-                        logger.error("")
-                        logger.error("   docker run -it --rm -v /mnt/user/appdata/crittercatcher/tokens:/data \\")
-                        logger.error("     --env RING_USERNAME=your@email.com \\")
-                        logger.error("     --env RING_PASSWORD=yourpassword \\")
-                        logger.error("     ghcr.io/ahazii/crittercatcherai:latest \\")
-                        logger.error("     python -c \"from ring_downloader import RingDownloader; \\")
-                        logger.error("     \"rd = RingDownloader('/tmp'); rd.authenticate('your@email.com', 'yourpassword')\"")
-                        logger.error("")
-                        logger.error("3. Enter the 2FA code when prompted")
-                        logger.error("4. Restart this container")
-                        logger.error("="*80)
+                    # Don't log verbose 2FA instructions - web GUI handles this
+                    logger.error(f"Authentication failed: {auth_error}")
                     raise
             
             logger.error("No valid authentication method available")

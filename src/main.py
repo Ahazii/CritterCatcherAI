@@ -89,13 +89,34 @@ def process_videos(config: dict):
         tolerance=detection_config.get('face_tolerance', 0.6)
     )
     
-    # Authenticate with Ring
-    logger.info("Authenticating with Ring")
-    ring_username = os.environ.get('RING_USERNAME')
-    ring_password = os.environ.get('RING_PASSWORD')
+    # Check if Ring token exists, skip auth if not (force web GUI setup)
+    token_file = Path("/data/tokens/ring_token.json")
     
-    if not ring_downloader.authenticate(ring_username, ring_password):
-        logger.error("Failed to authenticate with Ring")
+    if not token_file.exists():
+        logger.warning("="*80)
+        logger.warning("NO RING TOKEN FOUND - AUTHENTICATION REQUIRED")
+        logger.warning("="*80)
+        logger.warning("Please complete Ring authentication using the web interface:")
+        logger.warning("")
+        logger.warning("  1. Open the web interface in your browser")
+        logger.warning("  2. Navigate to the 'Ring Setup' tab")
+        logger.warning("  3. Enter your Ring credentials")
+        logger.warning("  4. Complete 2FA verification when prompted")
+        logger.warning("")
+        logger.warning("Video processing will begin automatically after authentication.")
+        logger.warning("="*80)
+        return
+    
+    # Authenticate with existing token
+    logger.info("Authenticating with Ring using saved token")
+    
+    if not ring_downloader.authenticate():
+        logger.error("Failed to authenticate with Ring (token may be expired)")
+        logger.error("Please re-authenticate using the web interface (Ring Setup tab)")
+        # Delete invalid token
+        if token_file.exists():
+            token_file.unlink()
+            logger.info("Removed invalid token file")
         return
     
     # Download recent videos

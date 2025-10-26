@@ -499,6 +499,11 @@
     </header>
 
     <div class="container">
+        <!-- Alert Banner -->
+        <div id="alertBanner" style="display: none; background: var(--warning-color); color: white; padding: 1rem; border-radius: 8px; margin: 1rem 0; text-align: center;">
+            <strong>⚠ Ring Not Authenticated</strong> - Please complete Ring authentication in the <a href="#" onclick="switchTab('ring'); return false;" style="color: white; text-decoration: underline; font-weight: bold;">Ring Setup tab</a> to begin processing videos.
+        </div>
+        
         <!-- Status Section -->
         <div class="dashboard-grid">
             <div class="card stat-card">
@@ -632,6 +637,22 @@
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeToggle').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+        // Check Ring authentication on page load
+        async function checkRingAuthStatus() {
+            try {
+                const response = await fetch('/api/ring/status');
+                const data = await response.json();
+                if (!data.authenticated) {
+                    document.getElementById('alertBanner').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Failed to check Ring status:', error);
+            }
+        }
+        
+        // Check on load
+        checkRingAuthStatus();
 
         // Tab Switching
         function switchTab(tabName) {
@@ -769,17 +790,22 @@
                     msg.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
                         ✓ ${data.message}
                     </div>`;
+                    // Hide alert banner
+                    document.getElementById('alertBanner').style.display = 'none';
                     setTimeout(() => {
                         loadRingStatus();
                         document.getElementById('ringUsername').value = '';
                         document.getElementById('ringPassword').value = '';
                         document.getElementById('ring2faCode').value = '';
+                        document.getElementById('ring2faGroup').style.display = 'none';
                     }, 2000);
                 } else if (data.status === 'needs_2fa') {
                     document.getElementById('ring2faGroup').style.display = 'block';
                     document.getElementById('ring2faCode').focus();
-                    msg.innerHTML = `<div style="color: var(--warning-color); padding: 1rem; background: rgba(237, 137, 54, 0.1); border-radius: 6px;">
-                        ⚠ ${data.message}
+                    msg.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
+                        ✓ Ring has sent a verification code!<br>
+                        <strong style="margin-top: 0.5rem; display: block;">${data.message}</strong><br>
+                        <span style="font-size: 0.875rem; margin-top: 0.5rem; display: block;">Enter the code in the field below and click Submit.</span>
                     </div>`;
                     btn.textContent = 'Submit 2FA Code';
                 } else {

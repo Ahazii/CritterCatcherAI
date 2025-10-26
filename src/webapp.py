@@ -295,39 +295,60 @@ async def ring_authenticate(credentials: dict):
         
         # Try to authenticate
         if code_2fa:
+            logger.info(f"Attempting 2FA authentication for {username}")
             # Use 2FA authentication method
             if rd.authenticate_with_2fa(username, password, code_2fa):
+                logger.info("2FA authentication successful")
                 return {
                     "status": "success",
                     "message": "Ring authentication successful. Token saved."
                 }
             else:
+                logger.warning("2FA authentication failed")
                 raise HTTPException(status_code=401, detail="2FA authentication failed. Check your code.")
         else:
             # Try regular authentication first - expect 2FA error
+            logger.info(f"Attempting authentication for {username}")
             try:
                 if rd.authenticate(username, password):
+                    logger.info("Authentication successful without 2FA")
                     return {
                         "status": "success",
                         "message": "Ring authentication successful. Token saved."
                     }
                 else:
+                    logger.warning("Authentication failed")
                     raise HTTPException(status_code=401, detail="Authentication failed. Check credentials.")
-            except Requires2FAError:
+            except Requires2FAError as e2fa:
                 # 2FA is required - return special status
+                logger.info(f"2FA required for {username}")
                 return JSONResponse(
                     status_code=200,
                     content={
                         "status": "needs_2fa",
-                        "message": "2FA code required. Please check your email/SMS/authenticator app."
+                        "message": "2FA code required. Check your phone/email for the verification code."
                     }
                 )
+            except Exception as auth_ex:
+                # Check if it's a 2FA requirement in disguise
+                error_str = str(auth_ex).lower()
+                if "2fa" in error_str or "verification" in error_str or "requires2faerror" in error_str:
+                    logger.info(f"2FA required (detected from error: {error_str})")
+                    return JSONResponse(
+                        status_code=200,
+                        content={
+                            "status": "needs_2fa",
+                            "message": "2FA code required. Check your phone/email for the verification code."
+                        }
+                    )
+                # Otherwise re-raise
+                raise
             
     except HTTPException:
         raise
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Ring authentication error: {error_msg}")
+        logger.error(f"Ring authentication error: {error_msg}", exc_info=True)
         raise HTTPException(status_code=500, detail=error_msg)
 
 
