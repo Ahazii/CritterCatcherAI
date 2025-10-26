@@ -107,16 +107,33 @@ run_once: false
 interval_minutes: 60
 ```
 
-### 3. Start the Container
+### 3. Handle Ring 2FA Authentication (If Enabled)
+
+**If you have 2FA enabled on your Ring account**, you must authenticate interactively BEFORE starting the container normally:
+
+```bash
+# SSH into your Unraid server, then run:
+docker run -it --rm \
+  -v /mnt/user/appdata/crittercatcher/tokens:/data \
+  -e RING_USERNAME="your@email.com" \
+  -e RING_PASSWORD="yourpassword" \
+  ghcr.io/ahazii/crittercatcherai:latest \
+  python src/ring_2fa_setup.py
+```
+
+**You will be prompted to:**
+1. Enter your 2FA code (check your email/SMS/authenticator app)
+2. The script will save the authentication token
+3. Exit once you see "SUCCESS!"
+
+**After 2FA setup is complete**, the token is saved and you can start the container normally.
+
+### 4. Start the Container
 
 1. Start the container from Unraid Docker tab
-2. If you have 2FA enabled on Ring, you'll need to enter the code on first run:
-   ```bash
-   docker logs -f crittercatcher-ai
-   ```
-   Watch for the 2FA prompt and enter via console if needed
+2. The container will use the saved token (no more 2FA prompts needed)
 
-### 4. Verify Operation
+### 5. Verify Operation
 
 Check the logs:
 ```bash
@@ -229,6 +246,19 @@ Processing will be 3-5x faster with GPU.
 rm /mnt/user/appdata/crittercatcher/ring_token.json
 docker restart crittercatcher-ai
 ```
+
+### 2FA Code Not Working
+- Ensure you're using the LATEST code (they expire quickly)
+- Check if you're looking at the right 2FA method (SMS vs email vs authenticator)
+- Try running the 2FA setup script again:
+  ```bash
+  docker run -it --rm \
+    -v /mnt/user/appdata/crittercatcher/tokens:/data \
+    -e RING_USERNAME="your@email.com" \
+    -e RING_PASSWORD="yourpassword" \
+    ghcr.io/ahazii/crittercatcherai:latest \
+    python src/ring_2fa_setup.py
+  ```
 
 ### No Videos Being Downloaded
 - Verify Ring credentials are correct

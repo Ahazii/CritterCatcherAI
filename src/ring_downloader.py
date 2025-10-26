@@ -63,19 +63,43 @@ class RingDownloader:
                 logger.info(f"Authenticating with Ring account: {username}")
                 self.auth = Auth("CritterCatcherAI/1.0")
                 
-                # This may require 2FA - user will need to handle via CLI or environment
-                self.auth.fetch_token(username, password)
-                
-                # Save token for future use
-                token_data = self.auth.token
-                with open(self.token_file, 'w') as f:
-                    json.dump(token_data, f)
-                logger.info("Saved refresh token for future use")
-                
-                self.ring = Ring(self.auth)
-                self.ring.update_data()
-                logger.info("Successfully authenticated with credentials")
-                return True
+                try:
+                    # Try to authenticate - this may require 2FA
+                    self.auth.fetch_token(username, password)
+                    
+                    # Save token for future use
+                    token_data = self.auth.token
+                    self.token_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.token_file, 'w') as f:
+                        json.dump(token_data, f)
+                    logger.info("Saved refresh token for future use")
+                    
+                    self.ring = Ring(self.auth)
+                    self.ring.update_data()
+                    logger.info("Successfully authenticated with credentials")
+                    return True
+                    
+                except Exception as auth_error:
+                    if "2fa" in str(auth_error).lower() or "verification" in str(auth_error).lower():
+                        logger.error("="*80)
+                        logger.error("2FA AUTHENTICATION REQUIRED")
+                        logger.error("="*80)
+                        logger.error("Ring requires 2FA verification. Please follow these steps:")
+                        logger.error("")
+                        logger.error("1. Stop this container")
+                        logger.error("2. Run this command in Unraid terminal:")
+                        logger.error("")
+                        logger.error("   docker run -it --rm -v /mnt/user/appdata/crittercatcher/tokens:/data \\")
+                        logger.error("     --env RING_USERNAME=your@email.com \\")
+                        logger.error("     --env RING_PASSWORD=yourpassword \\")
+                        logger.error("     ghcr.io/ahazii/crittercatcherai:latest \\")
+                        logger.error("     python -c \"from ring_downloader import RingDownloader; \\")
+                        logger.error("     \"rd = RingDownloader('/tmp'); rd.authenticate('your@email.com', 'yourpassword')\"")
+                        logger.error("")
+                        logger.error("3. Enter the 2FA code when prompted")
+                        logger.error("4. Restart this container")
+                        logger.error("="*80)
+                    raise
             
             logger.error("No valid authentication method available")
             return False
