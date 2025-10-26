@@ -31,7 +31,7 @@ services:
       - /mnt/user/appdata/crittercatcher/faces:/data/faces
       
       # Ring authentication token
-      - /mnt/user/appdata/crittercatcher/tokens:/data
+      - /mnt/user/appdata/crittercatcher/tokens:/data/tokens
     
     # Optional: GPU support for faster inference
     # Uncomment if you have NVIDIA GPU and nvidia-docker installed

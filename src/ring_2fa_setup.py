@@ -32,7 +32,7 @@ def main():
     # Initialize downloader
     rd = RingDownloader(
         download_path="/tmp",
-        token_file="/data/ring_token.json"
+        token_file="/data/tokens/ring_token.json"
     )
     
     # Attempt authentication

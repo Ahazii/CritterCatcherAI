@@ -243,7 +243,7 @@ Processing will be 3-5x faster with GPU.
 ### Ring Authentication Fails
 ```bash
 # Delete token and force re-auth
-rm /mnt/user/appdata/crittercatcher/ring_token.json
+rm /mnt/user/appdata/crittercatcher/tokens/ring_token.json
 docker restart crittercatcher-ai
 ```
 

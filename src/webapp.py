@@ -283,7 +283,7 @@ async def ring_authenticate(credentials: dict):
         
         rd = RingDownloader(
             download_path="/data/downloads",
-            token_file="/data/ring_token.json"
+            token_file="/data/tokens/ring_token.json"
         )
         
         # Try to authenticate
@@ -308,7 +308,7 @@ async def ring_authenticate(credentials: dict):
 @app.get("/api/ring/status")
 async def ring_auth_status():
     """Check if Ring token exists."""
-    token_file = Path("/data/ring_token.json")
+    token_file = Path("/data/tokens/ring_token.json")
     return {
         "authenticated": token_file.exists(),
         "token_path": str(token_file)

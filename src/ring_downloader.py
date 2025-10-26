@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class RingDownloader:
     """Handles downloading videos from Ring devices."""
     
-    def __init__(self, download_path: str, token_file: str = "/data/ring_token.json"):
+    def __init__(self, download_path: str, token_file: str = "/data/tokens/ring_token.json"):
         """
         Initialize the Ring downloader.
         
