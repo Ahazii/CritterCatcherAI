@@ -1,29 +1,20 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for dlib, opencv, and face_recognition
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
     wget \
-    libopencv-dev \
-    libboost-all-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
-    libatlas-base-dev \
-    libopenblas-dev \
-    liblapack-dev \
-    gfortran \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
