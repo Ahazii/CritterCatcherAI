@@ -268,6 +268,53 @@ async def train_face(person_name: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/ring/auth")
+async def ring_authenticate(credentials: dict):
+    """Authenticate with Ring (handles 2FA)."""
+    try:
+        username = credentials.get('username')
+        password = credentials.get('password')
+        code_2fa = credentials.get('code_2fa')  # Optional 2FA code
+        
+        if not username or not password:
+            raise HTTPException(status_code=400, detail="Username and password required")
+        
+        from ring_downloader import RingDownloader
+        
+        rd = RingDownloader(
+            download_path="/data/downloads",
+            token_file="/data/ring_token.json"
+        )
+        
+        # Try to authenticate
+        if rd.authenticate(username, password):
+            return {
+                "status": "success",
+                "message": "Ring authentication successful. Token saved."
+            }
+        else:
+            raise HTTPException(status_code=401, detail="Authentication failed. Check credentials.")
+            
+    except Exception as e:
+        error_msg = str(e)
+        if "2fa" in error_msg.lower() or "verification" in error_msg.lower():
+            return {
+                "status": "needs_2fa",
+                "message": "2FA code required. Please check your email/SMS/authenticator app."
+            }
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@app.get("/api/ring/status")
+async def ring_auth_status():
+    """Check if Ring token exists."""
+    token_file = Path("/data/ring_token.json")
+    return {
+        "authenticated": token_file.exists(),
+        "token_path": str(token_file)
+    }
+
+
 @app.post("/api/process")
 async def trigger_processing(background_tasks: BackgroundTasks):
     """Manually trigger video processing."""

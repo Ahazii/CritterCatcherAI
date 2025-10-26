@@ -523,6 +523,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
             <button class="tab" onclick="switchTab('videos')">🎥 Videos</button>
+            <button class="tab" onclick="switchTab('ring')">🔔 Ring Setup</button>
             <button class="tab" onclick="switchTab('faces')">👤 Face Training</button>
             <button class="tab" onclick="switchTab('config')">⚙️ Configuration</button>
             <button class="tab" onclick="switchTab('logs')">📋 Logs</button>
@@ -541,6 +542,40 @@
             <div class="card">
                 <div class="card-title">Recent Videos</div>
                 <div class="video-grid" id="videoGrid"></div>
+            </div>
+        </div>
+
+        <!-- Ring Setup Tab -->
+        <div id="ring" class="tab-content">
+            <div class="card">
+                <div class="card-title">Ring Authentication Status</div>
+                <div id="ringStatus" style="padding: 1rem; text-align: center;">
+                    <div class="spinner"></div>
+                    <p>Checking authentication status...</p>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 1.5rem;" id="ringAuthCard">
+                <div class="card-title">Setup Ring Authentication</div>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Enter your Ring credentials. If you have 2FA enabled, you'll be prompted for the code.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Ring Email Address</label>
+                    <input type="email" class="form-input" id="ringUsername" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ring Password</label>
+                    <input type="password" class="form-input" id="ringPassword" placeholder="Enter your password">
+                </div>
+                <div class="form-group" id="ring2faGroup" style="display: none;">
+                    <label class="form-label">2FA Code</label>
+                    <input type="text" class="form-input" id="ring2faCode" placeholder="Enter 6-digit code" maxlength="6">
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                        Check your email, SMS, or authenticator app for the code.
+                    </p>
+                </div>
+                <button class="btn" onclick="authenticateRing()" id="ringAuthBtn">Authenticate with Ring</button>
+                <div id="ringAuthMessage" style="margin-top: 1rem;"></div>
             </div>
         </div>
 
@@ -607,6 +642,7 @@
 
             // Load tab-specific data
             if (tabName === 'videos') loadVideos();
+            if (tabName === 'ring') loadRingStatus();
             if (tabName === 'faces') loadFaces();
             if (tabName === 'config') loadConfig();
             if (tabName === 'logs') startLogStream();
@@ -661,6 +697,110 @@
                 document.getElementById('statsChart').innerHTML = html;
             } catch (error) {
                 console.error('Failed to fetch stats:', error);
+            }
+        }
+
+        async function loadRingStatus() {
+            try {
+                const response = await fetch('/api/ring/status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('ringStatus');
+                if (data.authenticated) {
+                    statusDiv.innerHTML = `
+                        <div style="color: var(--success-color); font-size: 3rem; margin-bottom: 1rem;">✓</div>
+                        <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">Ring Authenticated</div>
+                        <div style="color: var(--text-secondary);">Token is saved and valid</div>
+                        <button class="btn" style="margin-top: 1rem; background: var(--danger-color);" onclick="deleteRingToken()">Delete Token</button>
+                    `;
+                    document.getElementById('ringAuthCard').style.display = 'none';
+                } else {
+                    statusDiv.innerHTML = `
+                        <div style="color: var(--warning-color); font-size: 3rem; margin-bottom: 1rem;">⚠</div>
+                        <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">Not Authenticated</div>
+                        <div style="color: var(--text-secondary);">Please authenticate with Ring below</div>
+                    `;
+                    document.getElementById('ringAuthCard').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Failed to load Ring status:', error);
+            }
+        }
+
+        async function authenticateRing() {
+            const username = document.getElementById('ringUsername').value;
+            const password = document.getElementById('ringPassword').value;
+            const code2fa = document.getElementById('ring2faCode').value;
+            
+            if (!username || !password) {
+                alert('Please enter your Ring email and password');
+                return;
+            }
+            
+            const btn = document.getElementById('ringAuthBtn');
+            const msg = document.getElementById('ringAuthMessage');
+            
+            btn.disabled = true;
+            btn.textContent = 'Authenticating...';
+            msg.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/ring/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        code_2fa: code2fa || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    msg.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
+                        ✓ ${data.message}
+                    </div>`;
+                    setTimeout(() => {
+                        loadRingStatus();
+                        document.getElementById('ringUsername').value = '';
+                        document.getElementById('ringPassword').value = '';
+                        document.getElementById('ring2faCode').value = '';
+                    }, 2000);
+                } else if (data.status === 'needs_2fa') {
+                    document.getElementById('ring2faGroup').style.display = 'block';
+                    document.getElementById('ring2faCode').focus();
+                    msg.innerHTML = `<div style="color: var(--warning-color); padding: 1rem; background: rgba(237, 137, 54, 0.1); border-radius: 6px;">
+                        ⚠ ${data.message}
+                    </div>`;
+                    btn.textContent = 'Submit 2FA Code';
+                } else {
+                    msg.innerHTML = `<div style="color: var(--danger-color); padding: 1rem; background: rgba(245, 101, 101, 0.1); border-radius: 6px;">
+                        ✗ ${data.message || 'Authentication failed'}
+                    </div>`;
+                }
+            } catch (error) {
+                msg.innerHTML = `<div style="color: var(--danger-color); padding: 1rem; background: rgba(245, 101, 101, 0.1); border-radius: 6px;">
+                    ✗ Error: ${error.message}
+                </div>`;
+            } finally {
+                btn.disabled = false;
+                if (btn.textContent === 'Authenticating...') {
+                    btn.textContent = 'Authenticate with Ring';
+                }
+            }
+        }
+
+        async function deleteRingToken() {
+            if (!confirm('Are you sure you want to delete the Ring authentication token? You will need to re-authenticate.')) {
+                return;
+            }
+            
+            try {
+                // This would need a backend endpoint to delete the token
+                alert('Token deletion coming soon. For now, use SSH: rm /mnt/user/appdata/crittercatcher/ring_token.json');
+            } catch (error) {
+                alert('Failed to delete token');
             }
         }
 
