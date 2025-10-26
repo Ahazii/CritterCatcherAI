@@ -276,8 +276,14 @@ async def ring_authenticate(credentials: dict):
         password = credentials.get('password')
         code_2fa = credentials.get('code_2fa')  # Optional 2FA code
         
+        # Use environment variables if not provided
+        if not username:
+            username = os.environ.get('RING_USERNAME')
+        if not password:
+            password = os.environ.get('RING_PASSWORD')
+        
         if not username or not password:
-            raise HTTPException(status_code=400, detail="Username and password required")
+            raise HTTPException(status_code=400, detail="Username and password required (via form or environment)")
         
         from ring_downloader import RingDownloader
         from ring_doorbell.exceptions import Requires2FAError
@@ -324,11 +330,13 @@ async def ring_authenticate(credentials: dict):
 
 @app.get("/api/ring/status")
 async def ring_auth_status():
-    """Check if Ring token exists."""
+    """Check if Ring token exists and return credentials from env."""
     token_file = Path("/data/tokens/ring_token.json")
     return {
         "authenticated": token_file.exists(),
-        "token_path": str(token_file)
+        "token_path": str(token_file),
+        "username": os.environ.get("RING_USERNAME", ""),
+        "has_password": bool(os.environ.get("RING_PASSWORD"))
     }
 
 
@@ -359,26 +367,44 @@ async def trigger_processing(background_tasks: BackgroundTasks):
 async def stream_logs():
     """Stream logs in real-time using Server-Sent Events."""
     async def event_generator():
-        log_file = Path("/proc/1/fd/1")  # Docker stdout
-        
-        if not log_file.exists():
-            # Fallback to buffered logs
-            for log_line in app_state["log_buffer"]:
-                yield {"data": log_line}
-            return
+        # Use subprocess to tail docker logs instead of reading /proc
+        import subprocess
         
         try:
-            with open(log_file, 'r') as f:
-                # Seek to end
-                f.seek(0, 2)
-                while True:
-                    line = f.readline()
-                    if line:
-                        yield {"data": line.strip()}
-                    else:
-                        await asyncio.sleep(0.5)
+            # Get recent logs first
+            result = subprocess.run(
+                ['docker', 'logs', '--tail', '50', 'crittercatcher-ai'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            # Send recent logs
+            for line in result.stdout.splitlines():
+                if line.strip():
+                    yield {"data": line}
+            for line in result.stderr.splitlines():
+                if line.strip():
+                    yield {"data": line}
+            
+            # Now follow logs in real-time
+            process = subprocess.Popen(
+                ['docker', 'logs', '-f', '--tail', '0', 'crittercatcher-ai'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            while True:
+                line = process.stdout.readline()
+                if line:
+                    yield {"data": line.strip()}
+                else:
+                    await asyncio.sleep(0.5)
+                    
         except Exception as e:
-            yield {"data": f"Error reading logs: {e}"}
+            yield {"data": f"Error streaming logs: {e}. Check Docker permissions."}
     
     return EventSourceResponse(event_generator())
 

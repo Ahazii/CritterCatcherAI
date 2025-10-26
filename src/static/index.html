@@ -721,6 +721,15 @@
                         <div style="color: var(--text-secondary);">Please authenticate with Ring below</div>
                     `;
                     document.getElementById('ringAuthCard').style.display = 'block';
+                    
+                    // Pre-fill credentials from environment if available
+                    if (data.username) {
+                        document.getElementById('ringUsername').value = data.username;
+                        document.getElementById('ringUsername').readOnly = true;
+                    }
+                    if (data.has_password) {
+                        document.getElementById('ringPassword').placeholder = "Using password from environment";
+                    }
                 }
             } catch (error) {
                 console.error('Failed to load Ring status:', error);
@@ -728,14 +737,13 @@
         }
 
         async function authenticateRing() {
-            const username = document.getElementById('ringUsername').value;
-            const password = document.getElementById('ringPassword').value;
+            let username = document.getElementById('ringUsername').value;
+            let password = document.getElementById('ringPassword').value;
             const code2fa = document.getElementById('ring2faCode').value;
             
-            if (!username || !password) {
-                alert('Please enter your Ring email and password');
-                return;
-            }
+            // Use null to signal backend to use environment variables
+            if (!username) username = null;
+            if (!password) password = null;
             
             const btn = document.getElementById('ringAuthBtn');
             const msg = document.getElementById('ringAuthMessage');
