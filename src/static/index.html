@@ -640,7 +640,10 @@
         <!-- Videos Tab -->
         <div id="videos" class="tab-content">
             <div class="card">
-                <div class="card-title">Recent Videos</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">Recent Videos</div>
+                    <button class="btn" onclick="loadVideos()" style="padding: 0.4rem 1rem; font-size: 0.875rem;">🔄 Refresh</button>
+                </div>
                 <div class="video-grid" id="videoGrid"></div>
             </div>
         </div>
@@ -751,6 +754,7 @@
 
         // Tab Switching
         function switchTab(tabName) {
+            currentTab = tabName; // Track the current tab
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             event.target.classList.add('active');
@@ -1164,6 +1168,9 @@
             }
         }
 
+        // Track current active tab
+        let currentTab = 'dashboard';
+
         // Initialize
         fetchStatus();
         fetchStats();
@@ -1171,6 +1178,10 @@
         setInterval(() => {
             fetchStatus();
             fetchStats();
+            // Auto-refresh Videos tab if it's currently active
+            if (currentTab === 'videos') {
+                loadVideos();
+            }
         }, 5000);
     </script>
 </body>

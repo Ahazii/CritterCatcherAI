@@ -140,6 +140,11 @@ def process_videos(config: dict):
     # Process each video
     for video_path in downloaded_videos:
         try:
+            # Check if video still exists (may have been processed/moved already)
+            if not video_path.exists():
+                logger.debug(f"Skipping {video_path.name}: already processed or moved")
+                continue
+            
             logger.info(f"Processing video: {video_path.name}")
             
             # Run object detection
