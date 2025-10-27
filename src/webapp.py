@@ -852,6 +852,7 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
     """Approve discovered objects and add them to tracking list."""
     try:
         labels = request.get('labels', [])
+        relabel_from = request.get('relabel_from')  # Optional: for correcting misidentifications
         
         if not labels:
             raise HTTPException(status_code=400, detail="No labels specified")
@@ -876,21 +877,67 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
             
             logger.info(f"Added {len(new_labels)} labels to tracking: {new_labels}")
         
+        # Handle relabeling (correcting misidentifications)
+        if relabel_from:
+            import shutil
+            old_label_dir = DETECTED_OBJECTS_PATH / relabel_from.replace(" ", "_")
+            new_label_dir = DETECTED_OBJECTS_PATH / labels[0].replace(" ", "_")
+            
+            if old_label_dir.exists():
+                new_label_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Move all images from old label to new label
+                moved_count = 0
+                for img_file in old_label_dir.glob("*.jpg"):
+                    metadata_file = old_label_dir / f"{img_file.name}.json"
+                    
+                    # Move image
+                    new_img_path = new_label_dir / img_file.name
+                    shutil.move(str(img_file), str(new_img_path))
+                    
+                    # Move and update metadata
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r') as f:
+                            metadata = json.load(f)
+                        metadata['label'] = labels[0]
+                        
+                        new_metadata_path = new_label_dir / f"{img_file.name}.json"
+                        with open(new_metadata_path, 'w') as f:
+                            json.dump(metadata, f)
+                        metadata_file.unlink()
+                    
+                    moved_count += 1
+                
+                # Remove old directory
+                if old_label_dir.exists() and not list(old_label_dir.iterdir()):
+                    old_label_dir.rmdir()
+                
+                logger.info(f"Relabeled {moved_count} detections from '{relabel_from}' to '{labels[0]}'")
+        
         # Remove from discoveries
         if DISCOVERIES_FILE.exists():
             with open(DISCOVERIES_FILE, 'r') as f:
                 discoveries = json.load(f)
             
+            # Remove both old and new labels from discoveries
             for label in labels:
                 discoveries.pop(label, None)
+            if relabel_from:
+                discoveries.pop(relabel_from, None)
             
             with open(DISCOVERIES_FILE, 'w') as f:
                 json.dump(discoveries, f, indent=2)
         
-        return {
-            "status": "success",
-            "message": f"Added {len(new_labels)} new object(s) to tracking list"
-        }
+        if relabel_from:
+            return {
+                "status": "success",
+                "message": f"Corrected '{relabel_from}' → '{labels[0]}' and added to tracking"
+            }
+        else:
+            return {
+                "status": "success",
+                "message": f"Added {len(new_labels)} new object(s) to tracking list"
+            }
     
     except HTTPException:
         raise

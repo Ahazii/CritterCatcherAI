@@ -747,7 +747,10 @@
                     <button class="btn btn-small" onclick="loadDiscoveries()">🔄 Refresh</button>
                 </div>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    New objects automatically detected in your videos. Select which ones to track!
+                    Discovery Mode found these objects in your videos. Choose what to do with each:
+                    <br><strong>✓ Track This</strong> = Add to your tracking list
+                    <br><strong>✗ Not Interested</strong> = Blacklist (AI is correct, but you don't care)
+                    <br><strong>❌ Wrong Label</strong> = AI misidentified this object
                 </p>
                 <div id="discoveriesContainer"></div>
             </div>
@@ -1552,11 +1555,12 @@ dog">${objectLabels.join('
                     html += '</div>';
                 }
                 
-                // Add action buttons
+// Add action buttons
                 html += `
                     <div class="label-controls" style="margin-top: 1.5rem;">
-                        <button class="btn" onclick="approveDiscoveries()" style="background: var(--success-color);">✓ Track Selected</button>
-                        <button class="btn" onclick="ignoreDiscoveries()" style="background: var(--danger-color);">✗ Ignore Selected</button>
+                        <button class="btn" onclick="approveDiscoveries()" style="background: var(--success-color);">✓ Track This Object</button>
+                        <button class="btn" onclick="ignoreDiscoveries()" style="background: var(--warning-color); color: white;">✗ Not Interested (Blacklist)</button>
+                        <button class="btn" onclick="relabelDiscoveries()" style="background: var(--danger-color);">❌ Wrong Label - Let Me Fix It</button>
                     </div>
                 `;
                 
@@ -1602,11 +1606,12 @@ dog">${objectLabels.join('
         
         async function ignoreDiscoveries() {
             if (selectedDiscoveries.size === 0) {
-                alert('Please select at least one discovery to ignore');
+                alert('Please select at least one discovery');
                 return;
             }
             
-            if (!confirm('Add selected objects to blacklist? They will not be suggested again.')) {
+            const labelText = Array.from(selectedDiscoveries).join(', ');
+            if (!confirm(`Blacklist "${labelText}"?\n\nThe AI correctly identified these objects, but you're not interested in tracking them. They won't be suggested again.`)) {
                 return;
             }
             
@@ -1624,6 +1629,57 @@ dog">${objectLabels.join('
             } catch (error) {
                 console.error('Failed to ignore discoveries:', error);
                 alert('Failed to ignore discoveries');
+            }
+        }
+        
+        async function relabelDiscoveries() {
+            if (selectedDiscoveries.size === 0) {
+                alert('Please select discoveries to relabel');
+                return;
+            }
+            
+            if (selectedDiscoveries.size > 1) {
+                alert('Please select only ONE discovery at a time to relabel');
+                return;
+            }
+            
+            const oldLabel = Array.from(selectedDiscoveries)[0];
+            const newLabel = prompt(
+                `The AI thinks this is "${oldLabel}" but you disagree.\n\n` +
+                `What is the CORRECT label for these images?\n\n` +
+                `Examples: hedgehog, fox, cat, person, car, etc.`,
+                oldLabel
+            );
+            
+            if (newLabel === null || newLabel.trim() === '') {
+                return; // Cancelled or empty
+            }
+            
+            const correctedLabel = newLabel.trim().toLowerCase();
+            
+            if (correctedLabel === oldLabel) {
+                alert('That\'s the same label! No changes made.');
+                return;
+            }
+            
+            try {
+                // First, approve the discovery with the corrected label
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        labels: [correctedLabel],
+                        relabel_from: oldLabel
+                    })
+                });
+                
+                const data = await response.json();
+                alert(`Corrected: "${oldLabel}" → "${correctedLabel}"\n\n${data.message}`);
+                loadDiscoveries(); // Reload
+                
+            } catch (error) {
+                console.error('Failed to relabel discovery:', error);
+                alert('Failed to relabel discovery');
             }
         }
         
