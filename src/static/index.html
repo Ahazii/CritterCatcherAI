@@ -1121,11 +1121,16 @@
                     body: JSON.stringify(config)
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const result = await response.json();
+                const message = result.message || 'Configuration saved successfully';
                 
                 const msgDiv = document.getElementById('configMessage');
                 msgDiv.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
-                    ✓ ${result.message}<br>
+                    ✓ ${message}<br>
                     <span style="font-size: 0.875rem; margin-top: 0.5rem; display: block;">Changes will take effect on the next processing run.</span>
                 </div>`;
                 
