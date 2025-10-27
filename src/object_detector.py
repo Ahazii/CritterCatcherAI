@@ -3,15 +3,17 @@ Object detection module using CLIP for open-vocabulary detection.
 Allows detection of arbitrary objects without training.
 """
 import logging
-from pathlib import Path
-from typing import List, Dict, Tuple
-import cv2
 import numpy as np
 import torch
+import cv2
 from PIL import Image
+from pathlib import Path
+from typing import Dict, List, Tuple
 from transformers import CLIPProcessor, CLIPModel
 import json
 from datetime import datetime
+import fcntl
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -327,37 +329,86 @@ class ObjectDetector:
         discoveries_file = Path("/data/objects/discoveries.json")
         discoveries_file.parent.mkdir(parents=True, exist_ok=True)
         
-        try:
-            # Load existing discoveries
-            if discoveries_file.exists():
-                with open(discoveries_file, 'r') as f:
-                    all_discoveries = json.load(f)
-            else:
-                all_discoveries = {}
-            
-            # Add new discoveries
-            timestamp = datetime.now().isoformat()
-            for label, confidence in discovered.items():
-                if label not in all_discoveries:
-                    all_discoveries[label] = {
-                        "label": label,
-                        "first_seen": timestamp,
-                        "detection_count": 0,
-                        "total_confidence": 0.0,
-                        "videos": []
-                    }
+        # Retry logic with file locking
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                # Acquire exclusive lock on the file
+                with open(discoveries_file, 'a+') as lock_file:
+                    try:
+                        # Try to acquire lock (non-blocking on first attempt, then blocking)
+                        if attempt == 0:
+                            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        else:
+                            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                        
+                        # Read existing discoveries
+                        lock_file.seek(0)
+                        content = lock_file.read()
+                        
+                        if content.strip():
+                            all_discoveries = json.loads(content)
+                        else:
+                            all_discoveries = {}
+                        
+                        # Add new discoveries
+                        timestamp = datetime.now().isoformat()
+                        for label, confidence in discovered.items():
+                            if label not in all_discoveries:
+                                all_discoveries[label] = {
+                                    "label": label,
+                                    "first_seen": timestamp,
+                                    "detection_count": 0,
+                                    "total_confidence": 0.0,
+                                    "videos": []
+                                }
+                            
+                            # Update stats
+                            all_discoveries[label]["detection_count"] += 1
+                            all_discoveries[label]["total_confidence"] += confidence
+                            if video_name not in all_discoveries[label]["videos"]:
+                                all_discoveries[label]["videos"].append(video_name)
+                        
+                        # Write back
+                        lock_file.seek(0)
+                        lock_file.truncate()
+                        json.dump(all_discoveries, lock_file, indent=2)
+                        
+                        # Release lock
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                        
+                        logger.debug(f"Saved {len(discovered)} discoveries")
+                        return  # Success!
+                        
+                    except BlockingIOError:
+                        # File is locked, retry after short delay
+                        if attempt < max_retries - 1:
+                            time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                            continue
+                        else:
+                            raise
+                            
+            except json.JSONDecodeError as e:
+                logger.warning(f"Corrupted discoveries JSON on attempt {attempt + 1}, reinitializing: {e}")
+                # If JSON is corrupted, reinitialize with current discoveries only
+                if attempt == max_retries - 1:
+                    with open(discoveries_file, 'w') as f:
+                        all_discoveries = {}
+                        timestamp = datetime.now().isoformat()
+                        for label, confidence in discovered.items():
+                            all_discoveries[label] = {
+                                "label": label,
+                                "first_seen": timestamp,
+                                "detection_count": 1,
+                                "total_confidence": confidence,
+                                "videos": [video_name]
+                            }
+                        json.dump(all_discoveries, f, indent=2)
+                    logger.info("Reinitialized discoveries.json")
+                    return
+                time.sleep(0.1)
                 
-                # Update stats
-                all_discoveries[label]["detection_count"] += 1
-                all_discoveries[label]["total_confidence"] += confidence
-                if video_name not in all_discoveries[label]["videos"]:
-                    all_discoveries[label]["videos"].append(video_name)
-            
-            # Save
-            with open(discoveries_file, 'w') as f:
-                json.dump(all_discoveries, f, indent=2)
-            
-            logger.debug(f"Saved {len(discovered)} discoveries")
-            
-        except Exception as e:
-            logger.error(f"Failed to save discoveries: {e}")
+            except Exception as e:
+                logger.error(f"Failed to save discoveries (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    raise
