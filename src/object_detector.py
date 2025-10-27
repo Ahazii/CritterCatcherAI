@@ -17,16 +17,18 @@ logger = logging.getLogger(__name__)
 class ObjectDetector:
     """Open-vocabulary object detector using CLIP."""
     
-    def __init__(self, labels: List[str], confidence_threshold: float = 0.25):
+    def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5):
         """
         Initialize the object detector.
         
         Args:
             labels: List of object labels to detect (e.g., ["hedgehog", "fox", "bird"])
             confidence_threshold: Minimum confidence score to consider a detection valid
+            num_frames: Number of frames to extract and analyze from each video
         """
         self.labels = labels
         self.confidence_threshold = confidence_threshold
+        self.num_frames = num_frames
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         logger.info(f"Initializing CLIP model on device: {self.device}")
@@ -112,20 +114,24 @@ class ObjectDetector:
         
         return detections
     
-    def detect_objects_in_video(self, video_path: Path) -> Dict[str, float]:
+    def detect_objects_in_video(self, video_path: Path, num_frames: int = None) -> Dict[str, float]:
         """
         Detect objects across entire video.
         
         Args:
             video_path: Path to video file
+            num_frames: Number of frames to analyze (defaults to instance setting)
             
         Returns:
             Dictionary mapping label to max confidence score across all frames
         """
-        logger.info(f"Analyzing video: {video_path.name}")
+        if num_frames is None:
+            num_frames = self.num_frames
+        
+        logger.info(f"Analyzing video: {video_path.name} ({num_frames} frames)")
         
         # Extract frames
-        frames = self.extract_frames(video_path)
+        frames = self.extract_frames(video_path, num_frames=num_frames)
         
         if not frames:
             logger.warning(f"No frames extracted from {video_path.name}")

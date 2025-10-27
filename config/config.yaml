@@ -38,10 +38,21 @@ detection:
   # Higher = fewer detections but more accurate
   confidence_threshold: 0.25
   
+  # Number of frames to analyze for object detection (3-20)
+  # More frames = more accurate but slower processing
+  object_frames: 5
+  
   # Face recognition tolerance (0.0-1.0)
   # Lower = more strict matching
   # Higher = more lenient matching
   face_tolerance: 0.6
+  
+  # Number of frames to analyze for face recognition (5-30)
+  # More frames = better chance of recognition but slower
+  face_frames: 10
+  
+  # Face detection model: "hog" (fast, CPU-friendly) or "cnn" (accurate, GPU recommended)
+  face_model: hog
   
   # Priority for sorting: "people" or "objects"
   # "people" = prioritize face recognition over object detection

@@ -80,13 +80,16 @@ def process_videos(config: dict):
     object_labels = detection_config.get('object_labels', ['hedgehog', 'fox', 'bird', 'cat', 'dog'])
     object_detector = ObjectDetector(
         labels=object_labels,
-        confidence_threshold=detection_config.get('confidence_threshold', 0.25)
+        confidence_threshold=detection_config.get('confidence_threshold', 0.25),
+        num_frames=detection_config.get('object_frames', 5)
     )
     
     # Initialize face recognizer
     face_recognizer = FaceRecognizer(
         encodings_path=config.get('paths', {}).get('face_encodings', '/data/faces/encodings.pkl'),
-        tolerance=detection_config.get('face_tolerance', 0.6)
+        tolerance=detection_config.get('face_tolerance', 0.6),
+        num_frames=detection_config.get('face_frames', 10),
+        model=detection_config.get('face_model', 'hog')
     )
     
     # Check if Ring token exists, skip auth if not (force web GUI setup)

@@ -16,16 +16,20 @@ logger = logging.getLogger(__name__)
 class FaceRecognizer:
     """Face recognition for identifying people in videos."""
     
-    def __init__(self, encodings_path: str = "/data/faces/encodings.pkl", tolerance: float = 0.6):
+    def __init__(self, encodings_path: str = "/data/faces/encodings.pkl", tolerance: float = 0.6, num_frames: int = 10, model: str = 'hog'):
         """
         Initialize the face recognizer.
         
         Args:
             encodings_path: Path to saved face encodings database
             tolerance: Face matching tolerance (lower is more strict)
+            num_frames: Number of frames to extract and analyze from each video
+            model: Face detection model to use ('hog' or 'cnn')
         """
         self.encodings_path = Path(encodings_path)
         self.tolerance = tolerance
+        self.num_frames = num_frames
+        self.model = model
         self.known_faces = {}  # Dict mapping name -> list of encodings
         
         # Load existing encodings if available
@@ -71,7 +75,7 @@ class FaceRecognizer:
                 image = face_recognition.load_image_file(str(image_path))
                 
                 # Find faces and encode
-                face_locations = face_recognition.face_locations(image)
+                face_locations = face_recognition.face_locations(image, model=self.model)
                 face_encodings = face_recognition.face_encodings(image, face_locations)
                 
                 if face_encodings:
@@ -134,7 +138,7 @@ class FaceRecognizer:
             Set of recognized person names
         """
         # Find faces
-        face_locations = face_recognition.face_locations(frame)
+        face_locations = face_recognition.face_locations(frame, model=self.model)
         
         if not face_locations:
             return set()
@@ -159,12 +163,13 @@ class FaceRecognizer:
         
         return recognized_names
     
-    def recognize_faces_in_video(self, video_path: Path) -> Set[str]:
+    def recognize_faces_in_video(self, video_path: Path, num_frames: int = None) -> Set[str]:
         """
         Recognize all faces across the video.
         
         Args:
             video_path: Path to video file
+            num_frames: Number of frames to analyze (defaults to instance setting)
             
         Returns:
             Set of all recognized person names
@@ -173,10 +178,13 @@ class FaceRecognizer:
             logger.debug("No known faces to recognize")
             return set()
         
-        logger.info(f"Analyzing faces in video: {video_path.name}")
+        if num_frames is None:
+            num_frames = self.num_frames
+        
+        logger.info(f"Analyzing faces in video: {video_path.name} ({num_frames} frames, {self.model} model)")
         
         # Extract frames
-        frames = self.extract_frames(video_path)
+        frames = self.extract_frames(video_path, num_frames=num_frames)
         
         if not frames:
             logger.warning(f"No frames extracted from {video_path.name}")

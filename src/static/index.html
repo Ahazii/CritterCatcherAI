@@ -1004,7 +1004,10 @@
                 const detection = data.config.detection;
                 const objectLabels = detection.object_labels || [];
                 const confidence = detection.confidence_threshold || 0.25;
+                const objectFrames = detection.object_frames || 5;
                 const faceTolerance = detection.face_tolerance || 0.6;
+                const faceFrames = detection.face_frames || 10;
+                const faceModel = detection.face_model || 'hog';
                 const priority = detection.priority || 'people';
                 
                 const form = document.getElementById('configForm');
@@ -1022,6 +1025,20 @@
                                style="width: 100%;">
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Lower (0.1) = More detections, less accurate. Higher (0.9) = Fewer detections, more accurate. Recommended: 0.25-0.4
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            Object Detection Frames: <strong id="objectFramesValue">${objectFrames}</strong>
+                        </label>
+                        <input type="range" id="objectFrames" class="form-input" 
+                               value="${objectFrames}" 
+                               step="1" min="3" max="20" 
+                               oninput="document.getElementById('objectFramesValue').textContent = this.value"
+                               style="width: 100%;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Number of video frames to analyze for object detection. More frames = more accurate but slower processing. Recommended: 5-10
                         </p>
                     </div>
                     
@@ -1048,6 +1065,31 @@
                                style="width: 100%;">
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Lower (0.3) = Strict matching. Higher (0.9) = Lenient matching. Recommended: 0.5-0.7
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            Face Recognition Frames: <strong id="faceFramesValue">${faceFrames}</strong>
+                        </label>
+                        <input type="range" id="faceFrames" class="form-input" 
+                               value="${faceFrames}" 
+                               step="1" min="5" max="30" 
+                               oninput="document.getElementById('faceFramesValue').textContent = this.value"
+                               style="width: 100%;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Number of video frames to analyze for face recognition. More frames = better chance of recognition but slower. Recommended: 10-15
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Face Detection Model</label>
+                        <select id="faceModel" class="form-select" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
+                            <option value="hog" ${faceModel === 'hog' ? 'selected' : ''}>HOG (Fast, CPU-friendly)</option>
+                            <option value="cnn" ${faceModel === 'cnn' ? 'selected' : ''}>CNN (Accurate, GPU recommended)</option>
+                        </select>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            HOG is faster and works well on CPU. CNN is more accurate but requires more processing power.
                         </p>
                     </div>
                     
@@ -1107,7 +1149,10 @@
                         detection: {
                             object_labels: labels,
                             confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
+                            object_frames: parseInt(document.getElementById('objectFrames').value),
                             face_tolerance: parseFloat(document.getElementById('faceTolerance').value),
+                            face_frames: parseInt(document.getElementById('faceFrames').value),
+                            face_model: document.getElementById('faceModel').value,
                             priority: document.getElementById('detectionPriority').value
                         },
                         run_once: false,
