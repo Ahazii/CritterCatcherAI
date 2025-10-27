@@ -15,6 +15,9 @@ services:
       - RUN_ONCE=false
       - TZ=America/New_York
       - WEB_PORT=8080
+      - PUID=99
+      - PGID=100
+      - UMASK=0000
     
     # Volume mappings for Unraid
     volumes:

@@ -49,7 +49,17 @@ RUN if command -v git > /dev/null 2>&1 && [ -d .git ]; then \
     echo "Build version: $VERSION" && \
     echo "Build date: $BUILD_DATE"
 
-# Create volume mount points
+# Create application user with specific UID/GID (99:100 is default for Unraid)
+# This ensures files are created with proper ownership
+ARG PUID=99
+ARG PGID=100
+RUN groupadd -g ${PGID} appgroup || true && \
+    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser || true
+
+# Create volume mount points with proper permissions
+RUN mkdir -p /data/downloads /data/sorted /data/faces /data/tokens && \
+    chown -R ${PUID}:${PGID} /data /app
+
 VOLUME ["/data/downloads", "/data/sorted", "/data/faces"]
 
 # Expose web interface port
@@ -58,6 +68,11 @@ EXPOSE 8080
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
+# Set umask to create files with 0666 (rw-rw-rw-) and directories with 0777 (rwxrwxrwx)
+ENV UMASK=0000
+
+# Switch to application user
+USER ${PUID}:${PGID}
 
 # Run the main application
-CMD ["python", "-u", "src/main.py"]
+CMD ["sh", "-c", "umask 0000 && python -u src/main.py"]
