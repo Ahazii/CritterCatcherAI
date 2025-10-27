@@ -13,6 +13,8 @@ from ring_doorbell import Ring, Auth
 from ring_doorbell.exceptions import Requires2FAError
 from oauthlib.oauth2 import MissingTokenError
 
+from datetime_utils import parse_timestamp, format_timestamp
+
 
 logger = logging.getLogger(__name__)
 
@@ -231,22 +233,14 @@ class RingDownloader:
                 logger.info(f"Filtering for videos after {cutoff_time}")
                 
                 for event in history:
-                    # Parse the ISO format timestamp from Ring API
-                    # Example: "2025-10-25T18:23:19.683Z"
+                    # Parse the timestamp from Ring API (handles various formats)
                     created_at = event.get('created_at')
                     
-                    # Handle different types: string, datetime, or Unix timestamp
-                    if isinstance(created_at, datetime):
-                        # Already a datetime object
-                        event_time = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
-                    elif isinstance(created_at, str):
-                        # Parse ISO format string
-                        event_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                        # Convert to local time (naive datetime for comparison)
-                        event_time = event_time.replace(tzinfo=None)
-                    else:
-                        # Fallback: assume it's a Unix timestamp (int or float)
-                        event_time = datetime.fromtimestamp(created_at)
+                    try:
+                        event_time = parse_timestamp(created_at)
+                    except ValueError as e:
+                        logger.error(f"Failed to parse timestamp for event {event.get('id')}: {e}")
+                        continue
                     
                     logger.debug(f"Event {event['id']} created at {event_time}")
                     
@@ -263,7 +257,7 @@ class RingDownloader:
                         continue
                     
                     # Create filename with timestamp and device name
-                    timestamp_str = event_time.strftime("%Y%m%d_%H%M%S")
+                    timestamp_str = format_timestamp(event_time)
                     filename = f"{device.name}_{timestamp_str}_{video_id}.mp4"
                     filepath = self.download_path / filename
                     
@@ -327,21 +321,14 @@ class RingDownloader:
                 logger.info(f"Download All: Found {len(history)} events for {device.name}")
                 
                 for event in history:
-                    # Parse the ISO format timestamp from Ring API
+                    # Parse the timestamp from Ring API (handles various formats)
                     created_at = event.get('created_at')
                     
-                    # Handle different types: string, datetime, or Unix timestamp
-                    if isinstance(created_at, datetime):
-                        # Already a datetime object
-                        event_time = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
-                    elif isinstance(created_at, str):
-                        # Parse ISO format string
-                        event_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                        # Convert to local time (naive datetime for comparison)
-                        event_time = event_time.replace(tzinfo=None)
-                    else:
-                        # Fallback: assume it's a Unix timestamp (int or float)
-                        event_time = datetime.fromtimestamp(created_at)
+                    try:
+                        event_time = parse_timestamp(created_at)
+                    except ValueError as e:
+                        logger.error(f"Failed to parse timestamp for event {event.get('id')}: {e}")
+                        continue
                     
                     # Check time filter if specified
                     if cutoff_time and event_time < cutoff_time:
@@ -357,7 +344,7 @@ class RingDownloader:
                         continue
                     
                     # Create filename
-                    timestamp_str = event_time.strftime("%Y%m%d_%H%M%S")
+                    timestamp_str = format_timestamp(event_time)
                     filename = f"{device.name}_{timestamp_str}_{video_id}.mp4"
                     filepath = self.download_path / filename
                     
