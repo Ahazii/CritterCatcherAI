@@ -222,7 +222,8 @@ class RingDownloader:
             
             try:
                 # Get video history
-                history = device.history(limit=limit or 100, kind='ding')
+                # Don't filter by kind - get all events (motion, ding, etc.)
+                history = device.history(limit=limit or 100)
                 logger.info(f"Found {len(history)} events in history for {device.name}")
                 
                 # Filter by time
@@ -316,7 +317,8 @@ class RingDownloader:
             
             try:
                 # Get video history (100 is the API limit per request)
-                history = device.history(limit=100, kind='ding')
+                # Don't filter by kind - get all events (motion, ding, etc.)
+                history = device.history(limit=100)
                 logger.info(f"Download All: Found {len(history)} events for {device.name}")
                 
                 for event in history:
