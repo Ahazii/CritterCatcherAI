@@ -17,11 +17,49 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 import uvicorn
+import requests
 
 logger = logging.getLogger(__name__)
 
+
+def get_app_version():
+    """Get application version from version.txt file or fallback"""
+    version_file = Path('/app/version.txt')
+    try:
+        if version_file.exists():
+            with open(version_file, 'r') as f:
+                version = f.read().strip()
+                if version:
+                    return version
+    except Exception as e:
+        logger.debug(f"Could not read version file: {e}")
+    
+    # Fallback version
+    return "v0.1.0-dev"
+
+
+def get_build_date():
+    """Get Docker image build date from build_date.txt file or fallback"""
+    build_date_file = Path('/app/build_date.txt')
+    try:
+        if build_date_file.exists():
+            with open(build_date_file, 'r') as f:
+                build_date = f.read().strip()
+                if build_date:
+                    return build_date
+    except Exception as e:
+        logger.debug(f"Could not read build_date file: {e}")
+    
+    # Fallback
+    return "Unknown"
+
 # Initialize FastAPI app
 app = FastAPI(title="CritterCatcherAI", version="1.0.0")
+
+# Log version on startup
+app_version = get_app_version()
+app_build_date = get_build_date()
+logger.info(f"CritterCatcherAI starting up - Version: {app_version}, Built: {app_build_date}")
 
 # Add CORS middleware
 app.add_middleware(
@@ -55,7 +93,12 @@ async def root():
     index_file = static_path / "index.html"
     if not index_file.exists():
         return HTMLResponse("<h1>CritterCatcherAI</h1><p>Web interface loading...</p>")
-    return HTMLResponse(content=index_file.read_text(), status_code=200)
+    
+    # Inject version and build date into HTML
+    html_content = index_file.read_text()
+    html_content = html_content.replace('{{version}}', get_app_version())
+    html_content = html_content.replace('{{build_date}}', get_build_date())
+    return HTMLResponse(content=html_content, status_code=200)
 
 
 @app.get("/api/status")
@@ -494,6 +537,100 @@ async def stream_logs():
 async def health_check():
     """Health check endpoint for Docker."""
     return {"status": "healthy"}
+
+
+@app.get("/api/version")
+async def get_version():
+    """Get application version information."""
+    return {
+        "version": get_app_version(),
+        "build_date": get_build_date()
+    }
+
+
+@app.get("/api/check_update")
+async def check_update():
+    """Check for updates from GitHub releases."""
+    try:
+        # GitHub repo details
+        repo_owner = "Ahazii"
+        repo_name = "CritterCatcherAI"
+        
+        # Get current version
+        current_version = get_app_version()
+        
+        # Check GitHub API for latest release
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+        response = requests.get(api_url, timeout=10)
+        
+        if response.status_code == 200:
+            release_data = response.json()
+            latest_version = release_data.get('tag_name', '')
+            release_url = release_data.get('html_url', '')
+            release_notes = release_data.get('body', '')
+            published_at = release_data.get('published_at', '')
+            
+            # Compare versions (strip 'v' prefix if present)
+            current_ver = current_version.lstrip('v')
+            latest_ver = latest_version.lstrip('v')
+            
+            # Improved version comparison:
+            # - Treat 'dev' versions as pre-release (always older than proper releases)
+            # - Compare semantic versions properly
+            update_available = False
+            if latest_ver and current_ver:
+                # If current is dev version, any proper release is newer
+                if 'dev' in current_ver.lower():
+                    # Extract base version from dev string (e.g., "0.1.0-dev-xxx" -> "0.1.0")
+                    current_base = current_ver.split('-')[0]
+                    # Compare base version with latest
+                    try:
+                        current_parts = [int(x) for x in current_base.split('.')]
+                        latest_parts = [int(x) for x in latest_ver.split('.')]
+                        # Pad shorter version with zeros
+                        max_len = max(len(current_parts), len(latest_parts))
+                        current_parts += [0] * (max_len - len(current_parts))
+                        latest_parts += [0] * (max_len - len(latest_parts))
+                        update_available = latest_parts > current_parts
+                    except (ValueError, AttributeError):
+                        # Fallback to string comparison
+                        update_available = latest_ver > current_ver
+                else:
+                    # Normal semantic version comparison
+                    try:
+                        current_parts = [int(x) for x in current_ver.split('.')]
+                        latest_parts = [int(x) for x in latest_ver.split('.')]
+                        max_len = max(len(current_parts), len(latest_parts))
+                        current_parts += [0] * (max_len - len(current_parts))
+                        latest_parts += [0] * (max_len - len(latest_parts))
+                        update_available = latest_parts > current_parts
+                    except (ValueError, AttributeError):
+                        update_available = latest_ver > current_ver
+            
+            logger.debug(f"Update check: current={current_version}, latest={latest_version}, update_available={update_available}")
+            
+            return {
+                "success": True,
+                "update_available": update_available,
+                "current_version": current_version,
+                "latest_version": latest_version,
+                "release_url": release_url,
+                "release_notes": release_notes[:200] + '...' if len(release_notes) > 200 else release_notes,
+                "published_at": published_at
+            }
+        else:
+            logger.debug(f"GitHub API returned status {response.status_code}")
+            return {
+                "success": False,
+                "message": f"GitHub API returned status {response.status_code}"
+            }
+            
+    except Exception as e:
+        logger.debug(f"Error checking for updates: {e}")
+        return {
+            "success": False,
+            "message": f"Error checking for updates: {str(e)}"
+        }
 
 
 def start_web_server(host: str = "0.0.0.0", port: int = None):

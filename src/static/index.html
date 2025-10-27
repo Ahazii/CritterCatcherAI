@@ -509,12 +509,72 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent-color);
         }
+        
+        /* Version display */
+        .version {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+        
+        .version a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        
+        .version a:hover {
+            text-decoration: underline;
+            color: var(--accent-color);
+        }
+        
+        .build-date {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.2rem;
+        }
+        
+        /* Update notification banner */
+        .update-banner {
+            background: #ff9800;
+            color: #fff;
+            padding: 0.8em 1em;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+            border-bottom: 3px solid #f57c00;
+        }
+        
+        .update-banner.show {
+            display: block;
+        }
+        
+        .update-banner a {
+            color: #fff;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+        
+        .update-banner a:hover {
+            color: #ffeb3b;
+        }
     </style>
 </head>
 <body>
+    <div id="update-banner" class="update-banner">
+        🎉 Update Available! <span id="update-version"></span> - 
+        <a id="update-link" href="#" target="_blank">Download Now</a>
+    </div>
     <header>
         <div class="header-content">
-            <div class="logo">🦔 CritterCatcherAI</div>
+            <div>
+                <div class="logo">
+                    🦔 CritterCatcherAI 
+                    <span class="version">
+                        <a href="https://github.com/Ahazii/CritterCatcherAI/releases" target="_blank" title="View releases">{{version}}</a>
+                    </span>
+                </div>
+                <div class="build-date">Built: {{build_date}}</div>
+            </div>
             <div class="header-actions">
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
                 <div class="download-controls">
@@ -1058,9 +1118,56 @@
             uploadFiles();
         });
 
+        // Update checker
+        function checkForUpdates() {
+            const lastCheck = localStorage.getItem('lastUpdateCheck');
+            const now = Date.now();
+            const checkInterval = 6 * 60 * 60 * 1000; // 6 hours
+            
+            if (lastCheck && (now - parseInt(lastCheck)) < checkInterval) {
+                // Use cached result
+                const cachedResult = localStorage.getItem('updateCheckResult');
+                if (cachedResult) {
+                    const result = JSON.parse(cachedResult);
+                    if (result.update_available) {
+                        showUpdateBanner(result);
+                    }
+                }
+                return;
+            }
+            
+            // Perform new check
+            fetch('/api/check_update')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.update_available) {
+                        showUpdateBanner(data);
+                    }
+                    // Cache the result
+                    localStorage.setItem('lastUpdateCheck', now.toString());
+                    localStorage.setItem('updateCheckResult', JSON.stringify(data));
+                })
+                .catch(err => {
+                    console.log('Update check failed:', err);
+                });
+        }
+        
+        function showUpdateBanner(data) {
+            const banner = document.getElementById('update-banner');
+            const versionSpan = document.getElementById('update-version');
+            const link = document.getElementById('update-link');
+            
+            if (banner && versionSpan && link) {
+                versionSpan.textContent = `${data.latest_version} is now available`;
+                link.href = data.release_url;
+                banner.classList.add('show');
+            }
+        }
+
         // Initialize
         fetchStatus();
         fetchStats();
+        checkForUpdates(); // Check for updates on load
         setInterval(() => {
             fetchStatus();
             fetchStats();

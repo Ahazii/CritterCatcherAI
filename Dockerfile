@@ -36,6 +36,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY config/ ./config/
 
+# Capture version information and build timestamp at build time
+# Try to get git tag, fallback to commit hash, fallback to version.txt
+RUN if command -v git > /dev/null 2>&1 && [ -d .git ]; then \
+        VERSION=$(git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo "v0.1.0-dev-$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"); \
+    else \
+        VERSION="v0.1.0"; \
+    fi && \
+    BUILD_DATE=$(date -u +'%Y-%m-%d %H:%M:%S UTC') && \
+    echo $VERSION > /app/version.txt && \
+    echo $BUILD_DATE > /app/build_date.txt && \
+    echo "Build version: $VERSION" && \
+    echo "Build date: $BUILD_DATE"
+
 # Create volume mount points
 VOLUME ["/data/downloads", "/data/sorted", "/data/faces"]
 
