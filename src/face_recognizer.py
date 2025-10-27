@@ -193,12 +193,11 @@ class FaceRecognizer:
         Returns:
             Set of all recognized person names
         """
-        if not self.known_faces:
-            logger.debug("No known faces to recognize")
-            return set()
-        
         if num_frames is None:
             num_frames = self.num_frames
+        
+        if not self.known_faces:
+            logger.info(f"No trained faces yet - all detected faces will be saved as unknown")
         
         logger.info(f"Analyzing faces in video: {video_path.name} ({num_frames} frames, {self.model} model)")
         
