@@ -697,6 +697,16 @@
                 <div class="stat-value" style="font-size: 1rem;" id="lastRun">Never</div>
             </div>
         </div>
+        
+        <!-- Reprocess Button -->
+        <div style="margin-top: 1rem; text-align: center;">
+            <button class="btn" onclick="reprocessAllVideos()" style="background: var(--warning-color); padding: 0.75rem 2rem;">
+                🔄 Reprocess All Videos
+            </button>
+            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                Move all videos back to downloads and reanalyze with current settings
+            </p>
+        </div>
 
         <!-- Tabs -->
         <div class="tabs">
@@ -730,8 +740,20 @@
         
         <!-- Review & Label Tab -->
         <div id="review" class="tab-content">
-            <!-- Unknown Faces Section -->
+            <!-- Discoveries Section -->
             <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">🔍 Discovered Objects <span id="discoveryBadge" class="status-badge" style="margin-left: 0.5rem; display: none;"></span></div>
+                    <button class="btn btn-small" onclick="loadDiscoveries()">🔄 Refresh</button>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    New objects automatically detected in your videos. Select which ones to track!
+                </p>
+                <div id="discoveriesContainer"></div>
+            </div>
+            
+            <!-- Unknown Faces Section -->
+            <div class="card" style="margin-top: 1.5rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <div class="card-title" style="margin-bottom: 0;">Unknown Faces</div>
                     <button class="btn btn-small" onclick="loadUnknownFaces()">🔄 Refresh</button>
@@ -870,6 +892,7 @@
             // Load tab-specific data
             if (tabName === 'videos') loadVideos();
             if (tabName === 'review') {
+                loadDiscoveries();
                 loadUnknownFaces();
                 loadDetectedObjects();
             }
@@ -1120,6 +1143,12 @@
                 const faceFrames = detection.face_frames || 10;
                 const faceModel = detection.face_model || 'hog';
                 const priority = detection.priority || 'people';
+                const discoveryMode = detection.discovery_mode !== undefined ? detection.discovery_mode : true;
+                const discoveryThreshold = detection.discovery_threshold || 0.30;
+                const ignoredLabels = detection.ignored_labels || [];
+                
+                // Store in memory for editing
+                window.currentIgnoredLabels = [...ignoredLabels];
                 
                 const form = document.getElementById('configForm');
                 form.innerHTML = `
@@ -1155,9 +1184,55 @@
                     
                     <div class="form-group">
                         <label class="form-label">Objects to Detect (one per line)</label>
-                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog\nfox\ncat\ndog">${objectLabels.join('\n')}</textarea>
+                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog\\nfox\\ncat\\ndog">${objectLabels.join('\\n')}</textarea>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Common options: hedgehog, fox, cat, dog, squirrel, bird, crow, robin, person, car, bicycle
+                        </p>
+                    </div>
+                    
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">🔍 Discovery Mode</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="discoveryMode" ${discoveryMode ? 'checked' : ''} style="width: auto;">
+                            Enable Discovery Mode
+                        </label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Automatically detect new objects in videos and suggest them for tracking. Great for finding animals you didn't know visit!
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            Discovery Threshold: <strong id="discoveryThresholdValue">${discoveryThreshold}</strong>
+                        </label>
+                        <input type="range" id="discoveryThreshold" class="form-input" 
+                               value="${discoveryThreshold}" 
+                               step="0.05" min="0.2" max="0.5" 
+                               oninput="document.getElementById('discoveryThresholdValue').textContent = this.value"
+                               style="width: 100%;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Higher threshold = fewer but more confident discoveries. Recommended: 0.30
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Blacklist (objects to ignore)</label>
+                        <div id="blacklistContainer" style="margin-bottom: 0.5rem;">
+                            ${ignoredLabels.map(label => `
+                                <span style="display: inline-block; background: var(--danger-color); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin: 0.25rem; font-size: 0.875rem;">
+                                    ${label} <button onclick="removeFromBlacklist('${label}')" style="background: none; border: none; color: white; cursor: pointer; margin-left: 0.25rem;">✕</button>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="newBlacklistItem" class="form-input" placeholder="Add label to blacklist" style="flex: 1;">
+                            <button class="btn btn-small" onclick="addToBlacklist()">Add</button>
+                        </div>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Objects in the blacklist won't be suggested as discoveries (e.g., cloud, grass, tree)
                         </p>
                     </div>
                     
@@ -1261,6 +1336,9 @@
                             object_labels: labels,
                             confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
                             object_frames: parseInt(document.getElementById('objectFrames').value),
+                            discovery_mode: document.getElementById('discoveryMode').checked,
+                            discovery_threshold: parseFloat(document.getElementById('discoveryThreshold').value),
+                            ignored_labels: window.currentIgnoredLabels || [],
                             face_tolerance: parseFloat(document.getElementById('faceTolerance').value),
                             face_frames: parseInt(document.getElementById('faceFrames').value),
                             face_model: document.getElementById('faceModel').value,
@@ -1296,6 +1374,48 @@
                 msgDiv.innerHTML = `<div style="color: var(--danger-color); padding: 1rem; background: rgba(245, 101, 101, 0.1); border-radius: 6px;">
                     ✗ Failed to save configuration: ${error.message}
                 </div>`;
+            }
+        }
+
+        // Store current blacklist in memory
+        window.currentIgnoredLabels = [];
+        
+        async function addToBlacklist() {
+            const input = document.getElementById('newBlacklistItem');
+            const label = input.value.trim();
+            
+            if (!label) return;
+            
+            if (!window.currentIgnoredLabels) window.currentIgnoredLabels = [];
+            if (window.currentIgnoredLabels.includes(label)) {
+                alert('Label already in blacklist');
+                return;
+            }
+            
+            window.currentIgnoredLabels.push(label);
+            input.value = '';
+            loadConfig(); // Reload to show updated blacklist
+        }
+        
+        async function removeFromBlacklist(label) {
+            if (!window.currentIgnoredLabels) window.currentIgnoredLabels = [];
+            window.currentIgnoredLabels = window.currentIgnoredLabels.filter(l => l !== label);
+            loadConfig(); // Reload to show updated blacklist
+        }
+        
+        async function reprocessAllVideos() {
+            if (!confirm('Reprocess ALL videos?\n\nThis will:\n- Move all sorted videos back to downloads\n- Delete sorted directories\n- Reanalyze with current settings\n\nThis may take a while. Continue?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/reprocess', { method: 'POST' });
+                const data = await response.json();
+                alert(data.message);
+                fetchStatus();
+            } catch (error) {
+                console.error('Failed to trigger reprocessing:', error);
+                alert('Failed to start reprocessing');
             }
         }
 
@@ -1376,6 +1496,132 @@
         // Review & Label Tab Functions
         const selectedFaces = new Set();
         const selectedObjects = new Set();
+        const selectedDiscoveries = new Set();
+        
+        async function loadDiscoveries() {
+            try {
+                const response = await fetch('/api/discoveries');
+                const data = await response.json();
+                const container = document.getElementById('discoveriesContainer');
+                const badge = document.getElementById('discoveryBadge');
+                
+                if (!data.discoveries || data.discoveries.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No new discoveries yet. Enable Discovery Mode in Configuration and process some videos!</p>';
+                    badge.style.display = 'none';
+                    return;
+                }
+                
+                // Show badge
+                badge.textContent = `${data.discoveries.length} new!`;
+                badge.className = 'status-badge processing';
+                badge.style.display = 'inline-flex';
+                
+                let html = '';
+                
+                for (const discovery of data.discoveries) {
+                    const avgConfidence = (discovery.avg_confidence * 100).toFixed(1);
+                    html += `
+                        <div class="group-header">
+                            <div>
+                                <strong>${discovery.label}</strong> - ${discovery.detection_count} detection(s), ${avgConfidence}% confidence
+                                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    First seen: ${new Date(discovery.first_seen).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="checkbox" id="discovery-${discovery.label}" onchange="toggleDiscovery('${discovery.label}')" style="width: auto; margin-right: 0.5rem;">
+                                <label for="discovery-${discovery.label}">Select</label>
+                            </div>
+                        </div>
+                        <div class="image-grid">
+                    `;
+                    
+                    for (const img of discovery.sample_images) {
+                        html += `
+                            <div class="image-item">
+                                <img src="/api/detected_objects/image/${img.path}" alt="${discovery.label}">
+                                <div class="confidence-badge">${discovery.label}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                }
+                
+                // Add action buttons
+                html += `
+                    <div class="label-controls" style="margin-top: 1.5rem;">
+                        <button class="btn" onclick="approveDiscoveries()" style="background: var(--success-color);">✓ Track Selected</button>
+                        <button class="btn" onclick="ignoreDiscoveries()" style="background: var(--danger-color);">✗ Ignore Selected</button>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+                selectedDiscoveries.clear();
+                
+            } catch (error) {
+                console.error('Failed to load discoveries:', error);
+            }
+        }
+        
+        function toggleDiscovery(label) {
+            const checkbox = document.getElementById(`discovery-${label}`);
+            if (checkbox.checked) {
+                selectedDiscoveries.add(label);
+            } else {
+                selectedDiscoveries.delete(label);
+            }
+        }
+        
+        async function approveDiscoveries() {
+            if (selectedDiscoveries.size === 0) {
+                alert('Please select at least one discovery to track');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: Array.from(selectedDiscoveries) })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                loadDiscoveries(); // Reload
+                
+            } catch (error) {
+                console.error('Failed to approve discoveries:', error);
+                alert('Failed to approve discoveries');
+            }
+        }
+        
+        async function ignoreDiscoveries() {
+            if (selectedDiscoveries.size === 0) {
+                alert('Please select at least one discovery to ignore');
+                return;
+            }
+            
+            if (!confirm('Add selected objects to blacklist? They will not be suggested again.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/discoveries/ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: Array.from(selectedDiscoveries) })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                loadDiscoveries(); // Reload
+                
+            } catch (error) {
+                console.error('Failed to ignore discoveries:', error);
+                alert('Failed to ignore discoveries');
+            }
+        }
         
         async function loadUnknownFaces() {
             try {

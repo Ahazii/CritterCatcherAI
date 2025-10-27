@@ -15,11 +15,31 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Broad detection list for discovery mode
+DISCOVERY_OBJECTS = [
+    # Wildlife
+    "hedgehog", "fox", "badger", "deer", "rabbit", "squirrel", "mouse", "rat",
+    "bird", "crow", "robin", "pigeon", "owl", "hawk", "duck", "goose",
+    # Pets
+    "cat", "dog", "kitten", "puppy",
+    # People & Activities  
+    "person", "delivery person", "mail carrier", "child", "adult",
+    # Vehicles
+    "car", "truck", "van", "bicycle", "motorcycle", "scooter",
+    # Objects
+    "package", "box", "bag", "bottle", "umbrella",
+    # Nature (often false positives, consider blacklisting)
+    "tree", "bush", "flower", "leaf",
+]
+
 
 class ObjectDetector:
     """Open-vocabulary object detector using CLIP."""
     
-    def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, detected_objects_path: str = "/data/objects/detected"):
+    def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, 
+                 detected_objects_path: str = "/data/objects/detected", 
+                 discovery_mode: bool = False, discovery_threshold: float = 0.30,
+                 ignored_labels: List[str] = None):
         """
         Initialize the object detector.
         
@@ -28,12 +48,30 @@ class ObjectDetector:
             confidence_threshold: Minimum confidence score to consider a detection valid
             num_frames: Number of frames to extract and analyze from each video
             detected_objects_path: Path to save detected object images
+            discovery_mode: Enable automatic discovery of new objects
+            discovery_threshold: Minimum confidence for discovered objects
+            ignored_labels: List of labels to ignore in discovery mode
         """
         self.labels = labels
         self.confidence_threshold = confidence_threshold
         self.num_frames = num_frames
         self.detected_objects_path = Path(detected_objects_path)
         self.detected_objects_path.mkdir(parents=True, exist_ok=True)
+        
+        # Discovery mode settings
+        self.discovery_mode = discovery_mode
+        self.discovery_threshold = discovery_threshold
+        self.ignored_labels = set(ignored_labels or [])
+        
+        # Combined labels for detection
+        if self.discovery_mode:
+            # Add discovery objects that aren't already tracked or ignored
+            discovery_labels = [obj for obj in DISCOVERY_OBJECTS 
+                              if obj not in self.labels and obj not in self.ignored_labels]
+            self.all_labels = list(self.labels) + discovery_labels
+            logger.info(f"Discovery mode enabled: tracking {len(self.labels)} focused + {len(discovery_labels)} discovery labels")
+        else:
+            self.all_labels = list(self.labels)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         logger.info(f"Initializing CLIP model on device: {self.device}")
@@ -42,8 +80,8 @@ class ObjectDetector:
         self.model.to(self.device)
         
         # Prepare text prompts for each label
-        self.text_prompts = [f"a photo of a {label}" for label in labels]
-        logger.info(f"Initialized ObjectDetector with {len(labels)} labels: {labels}")
+        self.text_prompts = [f"a photo of a {label}" for label in self.all_labels]
+        logger.info(f"Initialized ObjectDetector with {len(self.all_labels)} total labels ({len(self.labels)} focused)")
     
     def extract_frames(self, video_path: Path, num_frames: int = 5) -> List[np.ndarray]:
         """
@@ -115,17 +153,35 @@ class ObjectDetector:
         
         # Convert to dictionary and save detections
         detections = {}
-        for idx, label in enumerate(self.labels):
+        discovered = {}  # New discoveries
+        
+        for idx, label in enumerate(self.all_labels):
             confidence = probs[0][idx].item()
+            
+            # Determine if this is a focused or discovery label
+            is_focused = label in self.labels
+            is_discovery = not is_focused and label not in self.ignored_labels
+            
             # Save ALL detections with confidence scores
             if save_detections and confidence > 0.01:  # Very low threshold to catch all
                 self._save_detected_object(
                     frame, label, confidence,
-                    video_name, frame_idx
+                    video_name, frame_idx,
+                    is_discovery=is_discovery
                 )
-            # Only return detections above threshold
-            if confidence >= self.confidence_threshold:
+            
+            # Process focused labels
+            if is_focused and confidence >= self.confidence_threshold:
                 detections[label] = confidence
+            
+            # Process discoveries
+            elif is_discovery and confidence >= self.discovery_threshold:
+                discovered[label] = confidence
+                logger.info(f"🔍 Discovered new object: {label} (confidence: {confidence:.2f})")
+        
+        # Store discoveries for later retrieval
+        if discovered:
+            self._save_discoveries(discovered, video_name)
         
         return detections
     
@@ -208,7 +264,7 @@ class ObjectDetector:
             return "unknown"
     
     def _save_detected_object(self, frame: np.ndarray, label: str, confidence: float,
-                             video_name: str, frame_idx: int) -> bool:
+                             video_name: str, frame_idx: int, is_discovery: bool = False) -> bool:
         """
         Save a detected object image and metadata.
         
@@ -218,6 +274,7 @@ class ObjectDetector:
             confidence: Detection confidence score
             video_name: Name of source video
             frame_idx: Frame index
+            is_discovery: Whether this is a newly discovered object
             
         Returns:
             True if saved, False if skipped
@@ -244,7 +301,8 @@ class ObjectDetector:
                 "frame_idx": frame_idx,
                 "label": label,
                 "confidence": confidence,
-                "timestamp": timestamp
+                "timestamp": timestamp,
+                "is_discovery": is_discovery
             }
             
             metadata_path = label_dir / f"{filename}.json"
@@ -257,3 +315,49 @@ class ObjectDetector:
         except Exception as e:
             logger.error(f"Failed to save detected object: {e}")
             return False
+    
+    def _save_discoveries(self, discovered: Dict[str, float], video_name: str):
+        """
+        Save discovered objects for user confirmation.
+        
+        Args:
+            discovered: Dictionary of discovered labels and confidence scores
+            video_name: Name of source video
+        """
+        discoveries_file = Path("/data/discoveries.json")
+        discoveries_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # Load existing discoveries
+            if discoveries_file.exists():
+                with open(discoveries_file, 'r') as f:
+                    all_discoveries = json.load(f)
+            else:
+                all_discoveries = {}
+            
+            # Add new discoveries
+            timestamp = datetime.now().isoformat()
+            for label, confidence in discovered.items():
+                if label not in all_discoveries:
+                    all_discoveries[label] = {
+                        "label": label,
+                        "first_seen": timestamp,
+                        "detection_count": 0,
+                        "total_confidence": 0.0,
+                        "videos": []
+                    }
+                
+                # Update stats
+                all_discoveries[label]["detection_count"] += 1
+                all_discoveries[label]["total_confidence"] += confidence
+                if video_name not in all_discoveries[label]["videos"]:
+                    all_discoveries[label]["videos"].append(video_name)
+            
+            # Save
+            with open(discoveries_file, 'w') as f:
+                json.dump(all_discoveries, f, indent=2)
+            
+            logger.debug(f"Saved {len(discovered)} discoveries")
+            
+        except Exception as e:
+            logger.error(f"Failed to save discoveries: {e}")

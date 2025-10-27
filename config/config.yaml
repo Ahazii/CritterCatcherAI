@@ -58,6 +58,21 @@ detection:
   # "people" = prioritize face recognition over object detection
   # "objects" = prioritize object detection over face recognition
   priority: people
+  
+  # Discovery mode: automatically find new objects in videos
+  discovery_mode: true
+  
+  # Confidence threshold for discovering new objects (higher than regular threshold)
+  discovery_threshold: 0.30
+  
+  # Objects to ignore (blacklist) - won't be suggested as discoveries
+  ignored_labels:
+    - cloud
+    - sky
+    - grass
+  
+  # Discovered objects pending user confirmation (managed by system)
+  discovered_labels: []
 
 # Application settings
 # Run once and exit, or run continuously

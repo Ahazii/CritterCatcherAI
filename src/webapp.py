@@ -87,7 +87,9 @@ CONFIG_PATH = Path("/app/config/config.yaml")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
+DISCOVERIES_FILE = Path("/data/discoveries.json")
 SORTED_PATH = Path("/data/sorted")
+DOWNLOADS_PATH = Path("/data/downloads")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -793,6 +795,284 @@ async def relabel_detected_object(request: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to relabel object: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/discoveries")
+async def get_discoveries():
+    """Get list of discovered objects pending user confirmation."""
+    try:
+        if not DISCOVERIES_FILE.exists():
+            return {"discoveries": []}
+        
+        with open(DISCOVERIES_FILE, 'r') as f:
+            all_discoveries = json.load(f)
+        
+        # Format for UI
+        discoveries = []
+        for label, data in all_discoveries.items():
+            avg_confidence = data["total_confidence"] / data["detection_count"] if data["detection_count"] > 0 else 0
+            
+            # Get sample images
+            label_dir = DETECTED_OBJECTS_PATH / label.replace(" ", "_")
+            sample_images = []
+            if label_dir.exists():
+                for img_file in list(label_dir.glob("*.jpg"))[:3]:  # Get 3 samples
+                    metadata_file = label_dir / f"{img_file.name}.json"
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r') as mf:
+                            metadata = json.load(mf)
+                            if metadata.get('is_discovery', False):
+                                sample_images.append({
+                                    "filename": img_file.name,
+                                    "path": f"{label.replace(' ', '_')}/{img_file.name}"
+                                })
+            
+            discoveries.append({
+                "label": label,
+                "detection_count": data["detection_count"],
+                "avg_confidence": avg_confidence,
+                "first_seen": data["first_seen"],
+                "videos": data["videos"],
+                "sample_images": sample_images
+            })
+        
+        # Sort by detection count
+        discoveries.sort(key=lambda x: x["detection_count"], reverse=True)
+        
+        return {"discoveries": discoveries}
+    
+    except Exception as e:
+        logger.error(f"Failed to get discoveries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/discoveries/approve")
+async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
+    """Approve discovered objects and add them to tracking list."""
+    try:
+        labels = request.get('labels', [])
+        
+        if not labels:
+            raise HTTPException(status_code=400, detail="No labels specified")
+        
+        # Load config
+        if not CONFIG_PATH.exists():
+            raise HTTPException(status_code=404, detail="Config file not found")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Add to object_labels
+        current_labels = config.get('detection', {}).get('object_labels', [])
+        new_labels = [label for label in labels if label not in current_labels]
+        
+        if new_labels:
+            config['detection']['object_labels'].extend(new_labels)
+            
+            # Save config
+            with open(CONFIG_PATH, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False)
+            
+            logger.info(f"Added {len(new_labels)} labels to tracking: {new_labels}")
+        
+        # Remove from discoveries
+        if DISCOVERIES_FILE.exists():
+            with open(DISCOVERIES_FILE, 'r') as f:
+                discoveries = json.load(f)
+            
+            for label in labels:
+                discoveries.pop(label, None)
+            
+            with open(DISCOVERIES_FILE, 'w') as f:
+                json.dump(discoveries, f, indent=2)
+        
+        return {
+            "status": "success",
+            "message": f"Added {len(new_labels)} new object(s) to tracking list"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve discoveries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/discoveries/ignore")
+async def ignore_discoveries(request: dict):
+    """Ignore discovered objects (add to blacklist)."""
+    try:
+        labels = request.get('labels', [])
+        
+        if not labels:
+            raise HTTPException(status_code=400, detail="No labels specified")
+        
+        # Load config
+        if not CONFIG_PATH.exists():
+            raise HTTPException(status_code=404, detail="Config file not found")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Add to ignored_labels
+        ignored_labels = config.get('detection', {}).get('ignored_labels', [])
+        new_ignored = [label for label in labels if label not in ignored_labels]
+        
+        if new_ignored:
+            if 'ignored_labels' not in config['detection']:
+                config['detection']['ignored_labels'] = []
+            config['detection']['ignored_labels'].extend(new_ignored)
+            
+            # Save config
+            with open(CONFIG_PATH, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False)
+            
+            logger.info(f"Added {len(new_ignored)} labels to blacklist: {new_ignored}")
+        
+        # Remove from discoveries
+        if DISCOVERIES_FILE.exists():
+            with open(DISCOVERIES_FILE, 'r') as f:
+                discoveries = json.load(f)
+            
+            for label in labels:
+                discoveries.pop(label, None)
+            
+            with open(DISCOVERIES_FILE, 'w') as f:
+                json.dump(discoveries, f, indent=2)
+        
+        # Delete detection images for ignored labels
+        for label in labels:
+            label_dir = DETECTED_OBJECTS_PATH / label.replace(" ", "_")
+            if label_dir.exists():
+                import shutil
+                shutil.rmtree(label_dir)
+                logger.info(f"Deleted detection images for ignored label: {label}")
+        
+        return {
+            "status": "success",
+            "message": f"Ignored {len(new_ignored)} object(s) and added to blacklist"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to ignore discoveries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/blacklist/remove")
+async def remove_from_blacklist(request: dict):
+    """Remove labels from blacklist."""
+    try:
+        labels = request.get('labels', [])
+        
+        if not labels:
+            raise HTTPException(status_code=400, detail="No labels specified")
+        
+        # Load config
+        if not CONFIG_PATH.exists():
+            raise HTTPException(status_code=404, detail="Config file not found")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Remove from ignored_labels
+        ignored_labels = config.get('detection', {}).get('ignored_labels', [])
+        removed = [label for label in labels if label in ignored_labels]
+        
+        if removed:
+            config['detection']['ignored_labels'] = [l for l in ignored_labels if l not in labels]
+            
+            # Save config
+            with open(CONFIG_PATH, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False)
+            
+            logger.info(f"Removed {len(removed)} labels from blacklist: {removed}")
+        
+        return {
+            "status": "success",
+            "message": f"Removed {len(removed)} object(s) from blacklist"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove from blacklist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reprocess")
+async def reprocess_all_videos(background_tasks: BackgroundTasks):
+    """Move all sorted videos back to downloads and trigger reprocessing."""
+    try:
+        if app_state["is_processing"]:
+            return {"status": "already_running", "message": "Processing is already in progress"}
+        
+        if not SORTED_PATH.exists():
+            return {"status": "no_videos", "message": "No sorted videos found"}
+        
+        # Count videos to move
+        video_count = 0
+        for video_file in SORTED_PATH.rglob("*.mp4"):
+            video_count += 1
+        
+        if video_count == 0:
+            return {"status": "no_videos", "message": "No videos found in sorted directories"}
+        
+        logger.info(f"Reprocessing: moving {video_count} videos back to downloads")
+        
+        def reprocess_task():
+            app_state["is_processing"] = True
+            try:
+                import shutil
+                
+                # Move all videos back
+                DOWNLOADS_PATH.mkdir(parents=True, exist_ok=True)
+                moved_count = 0
+                
+                for video_file in list(SORTED_PATH.rglob("*.mp4")):
+                    dest = DOWNLOADS_PATH / video_file.name
+                    # Handle name conflicts
+                    counter = 1
+                    while dest.exists():
+                        dest = DOWNLOADS_PATH / f"{video_file.stem}_{counter}{video_file.suffix}"
+                        counter += 1
+                    
+                    shutil.move(str(video_file), str(dest))
+                    moved_count += 1
+                    logger.debug(f"Moved: {video_file.name} -> {dest.name}")
+                
+                logger.info(f"Moved {moved_count} videos back to downloads")
+                
+                # Delete sorted directories
+                if SORTED_PATH.exists():
+                    for item in SORTED_PATH.iterdir():
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                    logger.info("Deleted sorted directories")
+                
+                # Trigger processing
+                from main import process_videos, load_config
+                config = load_config()
+                logger.info("Starting reprocessing...")
+                process_videos(config)
+                logger.info("Reprocessing complete")
+                
+            except Exception as e:
+                logger.error(f"Reprocessing failed: {e}", exc_info=True)
+            finally:
+                app_state["is_processing"] = False
+        
+        background_tasks.add_task(reprocess_task)
+        
+        return {
+            "status": "started",
+            "message": f"Reprocessing {video_count} videos..."
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to start reprocessing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

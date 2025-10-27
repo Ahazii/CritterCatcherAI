@@ -78,11 +78,23 @@ def process_videos(config: dict):
     
     # Initialize object detector with configured labels
     object_labels = detection_config.get('object_labels', ['hedgehog', 'fox', 'bird', 'cat', 'dog'])
+    discovery_mode = detection_config.get('discovery_mode', False)
+    discovery_threshold = detection_config.get('discovery_threshold', 0.30)
+    ignored_labels = detection_config.get('ignored_labels', [])
+    
     object_detector = ObjectDetector(
         labels=object_labels,
         confidence_threshold=detection_config.get('confidence_threshold', 0.25),
-        num_frames=detection_config.get('object_frames', 5)
+        num_frames=detection_config.get('object_frames', 5),
+        discovery_mode=discovery_mode,
+        discovery_threshold=discovery_threshold,
+        ignored_labels=ignored_labels
     )
+    
+    if discovery_mode:
+        logger.info("Discovery mode is ENABLED - will automatically detect new objects")
+    else:
+        logger.info("Discovery mode is DISABLED - only tracking specified objects")
     
     # Initialize face recognizer
     face_recognizer = FaceRecognizer(
