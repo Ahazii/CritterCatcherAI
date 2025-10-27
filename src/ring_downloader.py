@@ -10,6 +10,7 @@ from typing import List, Optional
 import json
 
 from ring_doorbell import Ring, Auth
+from ring_doorbell.exceptions import Requires2FAError
 from oauthlib.oauth2 import MissingTokenError
 
 
@@ -88,6 +89,10 @@ class RingDownloader:
             logger.error("No valid authentication method available")
             return False
             
+        except Requires2FAError:
+            # Let 2FA error bubble up to webapp for handling
+            logger.info("2FA required - passing to web interface")
+            raise
         except MissingTokenError:
             logger.error("Token expired or invalid, re-authentication required")
             if self.token_file.exists():
