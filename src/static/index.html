@@ -883,13 +883,35 @@
         
         // Check on load
         checkRingAuthStatus();
+        
+        // Helper function for tab labels
+        function getTabLabel(tabName) {
+            const labels = {
+                'dashboard': '📊 Dashboard',
+                'videos': '🎥 Videos',
+                'review': '🏷️ Review & Label',
+                'ring': '🔔 Ring Setup',
+                'faces': '👤 Face Training',
+                'config': '⚙️ Configuration',
+                'logs': '📋 Logs'
+            };
+            return labels[tabName] || tabName;
+        }
 
         // Tab Switching
         function switchTab(tabName) {
             currentTab = tabName; // Track the current tab
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            event.target.classList.add('active');
+            
+            // Find and activate the tab button
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                if (tab.textContent.includes(getTabLabel(tabName))) {
+                    tab.classList.add('active');
+                }
+            });
+            
             document.getElementById(tabName).classList.add('active');
 
             // Load tab-specific data
