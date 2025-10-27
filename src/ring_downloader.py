@@ -70,7 +70,8 @@ class RingDownloader:
                     self.auth.fetch_token(username, password)
                     
                     # Save token for future use
-                    token_data = self.auth.token
+                    # Access token from internal OAuth session
+                    token_data = self.auth._oauth.token
                     self.token_file.parent.mkdir(parents=True, exist_ok=True)
                     with open(self.token_file, 'w') as f:
                         json.dump(token_data, f)
@@ -122,7 +123,8 @@ class RingDownloader:
             self.auth.fetch_token(username, password, code_2fa)
             
             # Save token for future use
-            token_data = self.auth.token
+            # Access token from internal OAuth session
+            token_data = self.auth._oauth.token
             self.token_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.token_file, 'w') as f:
                 json.dump(token_data, f)
