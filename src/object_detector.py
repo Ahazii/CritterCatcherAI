@@ -324,7 +324,7 @@ class ObjectDetector:
             discovered: Dictionary of discovered labels and confidence scores
             video_name: Name of source video
         """
-        discoveries_file = Path("/data/discoveries.json")
+        discoveries_file = Path("/data/objects/discoveries.json")
         discoveries_file.parent.mkdir(parents=True, exist_ok=True)
         
         try:

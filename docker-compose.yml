@@ -30,8 +30,11 @@ services:
       # Sorted videos (organized by class)
       - /mnt/user/Videos/CritterCatcher/sorted:/data/sorted
       
-      # Face encodings database
+      # Face encodings database and unknown faces
       - /mnt/user/appdata/crittercatcher/faces:/data/faces
+      
+      # Detected objects and discoveries (for Review & Label feature)
+      - /mnt/user/appdata/crittercatcher/objects:/data/objects
       
       # Ring authentication token
       - /mnt/user/appdata/crittercatcher/tokens:/data/tokens

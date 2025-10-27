@@ -87,7 +87,7 @@ CONFIG_PATH = Path("/app/config/config.yaml")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
-DISCOVERIES_FILE = Path("/data/discoveries.json")
+DISCOVERIES_FILE = Path("/data/objects/discoveries.json")
 SORTED_PATH = Path("/data/sorted")
 DOWNLOADS_PATH = Path("/data/downloads")
 

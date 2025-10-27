@@ -55,11 +55,12 @@
 **Volume Mappings:**
 | Container Path | Host Path | Mode | Description |
 |----------------|-----------|------|-------------|
-| `/app/config` | `/mnt/user/appdata/crittercatcher/config` | RO | Configuration files |
+| `/app/config` | `/mnt/user/appdata/crittercatcher/config` | RW | Configuration files |
 | `/data/downloads` | `/mnt/user/appdata/crittercatcher/downloads` | RW | Temp video storage |
 | `/data/sorted` | `/mnt/user/Videos/CritterCatcher/sorted` | RW | Organized videos |
-| `/data/faces` | `/mnt/user/appdata/crittercatcher/faces` | RW | Face database |
-| `/data/ring_token.json` | `/mnt/user/appdata/crittercatcher/ring_token.json` | RW | Ring auth token |
+| `/data/faces` | `/mnt/user/appdata/crittercatcher/faces` | RW | Face database & unknown faces |
+| `/data/objects` | `/mnt/user/appdata/crittercatcher/objects` | RW | Detected objects & discoveries |
+| `/data/tokens` | `/mnt/user/appdata/crittercatcher/tokens` | RW | Ring auth tokens |
 
 ## Initial Setup
 
@@ -67,8 +68,9 @@
 
 SSH into your Unraid server and run:
 ```bash
-mkdir -p /mnt/user/appdata/crittercatcher/{config,downloads,faces/training}
+mkdir -p /mnt/user/appdata/crittercatcher/{config,downloads,faces/training,objects,tokens}
 mkdir -p /mnt/user/Videos/CritterCatcher/sorted
+chmod -R 777 /mnt/user/appdata/crittercatcher
 ```
 
 ### 2. Create Configuration File
