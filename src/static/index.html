@@ -1249,9 +1249,9 @@
                     <div class="form-group">
                         <label class="form-label">Blacklist (objects to ignore)</label>
                         <div id="blacklistContainer" style="margin-bottom: 0.5rem;">
-                            ${ignoredLabels.map(label => `
+                            ${ignoredLabels.map((label, index) => `
                                 <span style="display: inline-block; background: var(--danger-color); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin: 0.25rem; font-size: 0.875rem;">
-                                    ${label} <button onclick="removeFromBlacklist('${label}')" style="background: none; border: none; color: white; cursor: pointer; margin-left: 0.25rem;">✕</button>
+                                    ${label} <button onclick="removeFromBlacklistByIndex(${index})" style="background: none; border: none; color: white; cursor: pointer; margin-left: 0.25rem;" title="Remove ${label}">✕</button>
                                 </span>
                             `).join('')}
                         </div>
@@ -1405,9 +1405,9 @@
             }
         }
         
-        async function addToBlacklist() {
+        function addToBlacklist() {
             const input = document.getElementById('newBlacklistItem');
-            const label = input.value.trim();
+            const label = input.value.trim().toLowerCase();
             
             if (!label) return;
             
@@ -1419,13 +1419,35 @@
             
             window.currentIgnoredLabels.push(label);
             input.value = '';
-            loadConfig(); // Reload to show updated blacklist
+            updateBlacklistUI(); // Update UI only, don't reload from server
         }
         
-        async function removeFromBlacklist(label) {
+        function removeFromBlacklist(label) {
             if (!window.currentIgnoredLabels) window.currentIgnoredLabels = [];
             window.currentIgnoredLabels = window.currentIgnoredLabels.filter(l => l !== label);
-            loadConfig(); // Reload to show updated blacklist
+            updateBlacklistUI(); // Update UI only, don't reload from server
+        }
+        
+        function removeFromBlacklistByIndex(index) {
+            if (!window.currentIgnoredLabels) window.currentIgnoredLabels = [];
+            window.currentIgnoredLabels.splice(index, 1);
+            updateBlacklistUI(); // Update UI only, don't reload from server
+        }
+        
+        function updateBlacklistUI() {
+            const container = document.getElementById('blacklistContainer');
+            if (!container) return;
+            
+            if (!window.currentIgnoredLabels || window.currentIgnoredLabels.length === 0) {
+                container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">No items in blacklist</span>';
+                return;
+            }
+            
+            container.innerHTML = window.currentIgnoredLabels.map((label, index) => `
+                <span style="display: inline-block; background: var(--danger-color); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin: 0.25rem; font-size: 0.875rem;">
+                    ${label} <button onclick="removeFromBlacklistByIndex(${index})" style="background: none; border: none; color: white; cursor: pointer; margin-left: 0.25rem;" title="Remove ${label}">✕</button>
+                </span>
+            `).join('');
         }
         
         async function reprocessAllVideos() {
