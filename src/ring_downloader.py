@@ -156,19 +156,33 @@ class RingDownloader:
             self.ring.update_data()
             
             devices = []
-            # Access devices - the ring-doorbell library uses direct properties
-            logger.debug("Getting Ring devices from properties")
-            if hasattr(self.ring, 'doorbots'):
-                devices.extend(self.ring.doorbots)
+            # Access devices - check what's available
+            logger.debug(f"Ring object type: {type(self.ring)}")
+            logger.debug(f"Ring object dir: {[attr for attr in dir(self.ring) if not attr.startswith('_')]}")
+            
+            # Try different access methods
+            if hasattr(self.ring, 'doorbots') and self.ring.doorbots:
                 logger.debug(f"Found {len(self.ring.doorbots)} doorbots")
-            if hasattr(self.ring, 'stickup_cams'):
-                devices.extend(self.ring.stickup_cams)
+                devices.extend(self.ring.doorbots)
+            else:
+                logger.warning("No doorbots found or doorbots is empty")
+                
+            if hasattr(self.ring, 'stickup_cams') and self.ring.stickup_cams:
                 logger.debug(f"Found {len(self.ring.stickup_cams)} stickup_cams")
-            if hasattr(self.ring, 'other'):
-                devices.extend(self.ring.other)
+                devices.extend(self.ring.stickup_cams)
+            else:
+                logger.warning("No stickup_cams found or stickup_cams is empty")
+                
+            if hasattr(self.ring, 'other') and self.ring.other:
                 logger.debug(f"Found {len(self.ring.other)} other devices")
+                devices.extend(self.ring.other)
             
             logger.info(f"Found {len(devices)} Ring devices total")
+            
+            if len(devices) == 0:
+                logger.error("No devices found! Ring API returned data but devices are not accessible.")
+                logger.error("This may be a ring-doorbell library compatibility issue.")
+            
             return devices
         except Exception as e:
             logger.error(f"Error getting Ring devices: {e}", exc_info=True)

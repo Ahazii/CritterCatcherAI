@@ -383,23 +383,32 @@ async def ring_auth_status():
 @app.post("/api/process")
 async def trigger_processing(background_tasks: BackgroundTasks):
     """Manually trigger video processing."""
+    logger.info("=" * 80)
+    logger.info("MANUAL PROCESSING TRIGGERED VIA WEB UI")
+    logger.info("=" * 80)
+    
     if app_state["is_processing"]:
+        logger.warning("Processing already running, rejecting request")
         return {"status": "already_running", "message": "Processing is already in progress"}
     
     def process_task():
         app_state["is_processing"] = True
         try:
+            logger.info("Starting manual processing task...")
             # Import here to avoid issues
             from main import process_videos, load_config
             config = load_config()
+            logger.info("Config loaded, calling process_videos()")
             process_videos(config)
             app_state["last_run"] = datetime.now().isoformat()
+            logger.info("Manual processing completed successfully")
         except Exception as e:
-            logger.error(f"Processing failed: {e}")
+            logger.error(f"Processing failed: {e}", exc_info=True)
         finally:
             app_state["is_processing"] = False
     
     background_tasks.add_task(process_task)
+    logger.info("Processing task added to background queue")
     return {"status": "started", "message": "Processing started"}
 
 

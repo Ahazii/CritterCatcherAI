@@ -91,6 +91,8 @@ def process_videos(config: dict):
     
     # Check if Ring token exists, skip auth if not (force web GUI setup)
     token_file = Path("/data/tokens/ring_token.json")
+    logger.info(f"Checking for Ring token at: {token_file}")
+    logger.info(f"Token file exists: {token_file.exists()}")
     
     if not token_file.exists():
         logger.warning("="*80)
