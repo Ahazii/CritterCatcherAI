@@ -156,32 +156,37 @@ class RingDownloader:
             self.ring.update_data()
             
             devices = []
-            # Access devices - check what's available
-            logger.debug(f"Ring object type: {type(self.ring)}")
-            logger.debug(f"Ring object dir: {[attr for attr in dir(self.ring) if not attr.startswith('_')]}")
             
-            # Try different access methods
-            if hasattr(self.ring, 'doorbots') and self.ring.doorbots:
-                logger.debug(f"Found {len(self.ring.doorbots)} doorbots")
-                devices.extend(self.ring.doorbots)
+            # The ring-doorbell library uses video_devices() or devices() method
+            logger.debug("Getting devices from Ring API")
+            
+            # Try video_devices property first (newer API)
+            if hasattr(self.ring, 'video_devices') and callable(self.ring.video_devices):
+                logger.debug("Using video_devices() method")
+                devices = self.ring.video_devices()
+                logger.debug(f"video_devices() returned: {type(devices)}")
+            elif hasattr(self.ring, 'devices') and callable(self.ring.devices):
+                logger.debug("Using devices() method")
+                devices = self.ring.devices()
+                logger.debug(f"devices() returned: {type(devices)}")
+            elif hasattr(self.ring, 'get_device_list'):
+                logger.debug("Using get_device_list() method")
+                devices = self.ring.get_device_list()
+                logger.debug(f"get_device_list() returned: {type(devices)}")
             else:
-                logger.warning("No doorbots found or doorbots is empty")
-                
-            if hasattr(self.ring, 'stickup_cams') and self.ring.stickup_cams:
-                logger.debug(f"Found {len(self.ring.stickup_cams)} stickup_cams")
-                devices.extend(self.ring.stickup_cams)
-            else:
-                logger.warning("No stickup_cams found or stickup_cams is empty")
-                
-            if hasattr(self.ring, 'other') and self.ring.other:
-                logger.debug(f"Found {len(self.ring.other)} other devices")
-                devices.extend(self.ring.other)
+                logger.error("No device accessor method found!")
+                logger.debug(f"Ring object attributes: {[attr for attr in dir(self.ring) if not attr.startswith('_')]}")
+            
+            # Convert to list if needed
+            if not isinstance(devices, list):
+                try:
+                    devices = list(devices)
+                    logger.debug(f"Converted devices to list: {len(devices)} items")
+                except:
+                    logger.error(f"Could not convert devices to list, type: {type(devices)}")
+                    devices = []
             
             logger.info(f"Found {len(devices)} Ring devices total")
-            
-            if len(devices) == 0:
-                logger.error("No devices found! Ring API returned data but devices are not accessible.")
-                logger.error("This may be a ring-doorbell library compatibility issue.")
             
             return devices
         except Exception as e:
