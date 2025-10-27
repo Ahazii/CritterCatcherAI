@@ -268,8 +268,20 @@ async def train_face(person_name: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def trigger_initial_processing():
+    """Trigger initial video processing after authentication."""
+    try:
+        logger.info("Triggering initial video processing after authentication")
+        from main import process_videos, load_config
+        config = load_config()
+        process_videos(config)
+        logger.info("Initial processing complete")
+    except Exception as e:
+        logger.error(f"Initial processing failed: {e}", exc_info=True)
+
+
 @app.post("/api/ring/auth")
-async def ring_authenticate(credentials: dict):
+async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks):
     """Authenticate with Ring (handles 2FA)."""
     try:
         username = credentials.get('username')
@@ -299,9 +311,11 @@ async def ring_authenticate(credentials: dict):
             # Use 2FA authentication method
             if rd.authenticate_with_2fa(username, password, code_2fa):
                 logger.info("2FA authentication successful")
+                # Trigger processing in background
+                background_tasks.add_task(trigger_initial_processing)
                 return {
                     "status": "success",
-                    "message": "Ring authentication successful. Token saved."
+                    "message": "Ring authentication successful. Token saved. Starting video processing..."
                 }
             else:
                 logger.warning("2FA authentication failed")
@@ -312,9 +326,11 @@ async def ring_authenticate(credentials: dict):
             try:
                 if rd.authenticate(username, password):
                     logger.info("Authentication successful without 2FA")
+                    # Trigger processing in background
+                    background_tasks.add_task(trigger_initial_processing)
                     return {
                         "status": "success",
-                        "message": "Ring authentication successful. Token saved."
+                        "message": "Ring authentication successful. Token saved. Starting video processing..."
                     }
                 else:
                     logger.warning("Authentication failed")
