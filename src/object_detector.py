@@ -1,15 +1,14 @@
 """
-Object detection module using CLIP for open-vocabulary detection.
-Allows detection of arbitrary objects without training.
+Object detection module using YOLOv8 for real-time object detection.
+Provides fast and accurate detection with bounding boxes.
 """
 import logging
 import numpy as np
-import torch
 import cv2
 from PIL import Image
 from pathlib import Path
 from typing import Dict, List, Tuple
-from transformers import CLIPProcessor, CLIPModel
+from ultralytics import YOLO
 import json
 from datetime import datetime
 import fcntl
@@ -36,7 +35,7 @@ DISCOVERY_OBJECTS = [
 
 
 class ObjectDetector:
-    """Open-vocabulary object detector using CLIP."""
+    """Object detector using YOLOv8."""
     
     def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, 
                  detected_objects_path: str = "/data/objects/detected", 
@@ -54,7 +53,7 @@ class ObjectDetector:
             discovery_threshold: Minimum confidence for discovered objects
             ignored_labels: List of labels to ignore in discovery mode
         """
-        self.labels = labels
+        self.labels = [label.lower() for label in labels]
         self.confidence_threshold = confidence_threshold
         self.num_frames = num_frames
         self.detected_objects_path = Path(detected_objects_path)
@@ -63,26 +62,21 @@ class ObjectDetector:
         # Discovery mode settings
         self.discovery_mode = discovery_mode
         self.discovery_threshold = discovery_threshold
-        self.ignored_labels = set(ignored_labels or [])
+        self.ignored_labels = set([label.lower() for label in (ignored_labels or [])])
         
         # Combined labels for detection
         if self.discovery_mode:
             # Add discovery objects that aren't already tracked or ignored
-            discovery_labels = [obj for obj in DISCOVERY_OBJECTS 
-                              if obj not in self.labels and obj not in self.ignored_labels]
+            discovery_labels = [obj.lower() for obj in DISCOVERY_OBJECTS 
+                              if obj.lower() not in self.labels and obj.lower() not in self.ignored_labels]
             self.all_labels = list(self.labels) + discovery_labels
             logger.info(f"Discovery mode enabled: tracking {len(self.labels)} focused + {len(discovery_labels)} discovery labels")
         else:
             self.all_labels = list(self.labels)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        logger.info(f"Initializing CLIP model on device: {self.device}")
-        self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.model.to(self.device)
+        logger.info(f"Initializing YOLOv8 model")
+        self.model = YOLO('yolov8n.pt')  # Using nano model for speed, can use yolov8s/m/l/x for better accuracy
         
-        # Prepare text prompts for each label
-        self.text_prompts = [f"a photo of a {label}" for label in self.all_labels]
         logger.info(f"Initialized ObjectDetector with {len(self.all_labels)} total labels ({len(self.labels)} focused)")
     
     def extract_frames(self, video_path: Path, num_frames: int = 5) -> List[np.ndarray]:
@@ -133,53 +127,43 @@ class ObjectDetector:
         Returns:
             Dictionary mapping label to confidence score
         """
-        # Convert frame to PIL Image
-        image = Image.fromarray(frame)
+        # Run YOLO inference
+        results = self.model(frame, verbose=False)
         
-        # Process inputs
-        inputs = self.processor(
-            text=self.text_prompts,
-            images=image,
-            return_tensors="pt",
-            padding=True
-        )
-        
-        # Move to device
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        
-        # Get predictions
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            logits_per_image = outputs.logits_per_image
-            probs = logits_per_image.softmax(dim=1)
-        
-        # Convert to dictionary and save detections
+        # Process detections
         detections = {}
         discovered = {}  # New discoveries
         
-        for idx, label in enumerate(self.all_labels):
-            confidence = probs[0][idx].item()
-            
-            # Determine if this is a focused or discovery label
-            is_focused = label in self.labels
-            is_discovery = not is_focused and label not in self.ignored_labels
-            
-            # Save ALL detections with confidence scores
-            if save_detections and confidence > 0.01:  # Very low threshold to catch all
-                self._save_detected_object(
-                    frame, label, confidence,
-                    video_name, frame_idx,
-                    is_discovery=is_discovery
-                )
-            
-            # Process focused labels
-            if is_focused and confidence >= self.confidence_threshold:
-                detections[label] = confidence
-            
-            # Process discoveries
-            elif is_discovery and confidence >= self.discovery_threshold:
-                discovered[label] = confidence
-                logger.info(f"🔍 Discovered new object: {label} (confidence: {confidence:.2f})")
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                # Get class name and confidence
+                class_id = int(box.cls[0])
+                confidence = float(box.conf[0])
+                label = result.names[class_id].lower()
+                
+                # Determine if this is a focused or discovery label
+                is_focused = label in self.labels
+                is_discovery = label not in self.labels and label not in self.ignored_labels and self.discovery_mode
+                
+                # Save detections if enabled
+                if save_detections and confidence > 0.01:
+                    self._save_detected_object(
+                        frame, label, confidence,
+                        video_name, frame_idx,
+                        is_discovery=is_discovery
+                    )
+                
+                # Process focused labels - keep highest confidence
+                if is_focused and confidence >= self.confidence_threshold:
+                    if label not in detections or confidence > detections[label]:
+                        detections[label] = confidence
+                
+                # Process discoveries
+                elif is_discovery and confidence >= self.discovery_threshold:
+                    if label not in discovered or confidence > discovered[label]:
+                        discovered[label] = confidence
+                        logger.info(f"🔍 Discovered new object: {label} (confidence: {confidence:.2f})")
         
         # Store discoveries for later retrieval
         if discovered:

@@ -34,7 +34,7 @@ CritterCatcherAI is a pipeline-based system that downloads Ring doorbell videos,
 
 ### Pipeline Flow
 ```
-Ring API → RingDownloader → Video Files → AI Analysis (CLIP + face_recognition) → VideoSorter → Organized Directories
+Ring API → RingDownloader → Video Files → AI Analysis (YOLOv8 + face_recognition) → VideoSorter → Organized Directories
 ```
 
 ### Core Components
@@ -53,12 +53,12 @@ Ring API → RingDownloader → Video Files → AI Analysis (CLIP + face_recogni
    - Downloads videos from last N hours (configurable via `ring.download_hours` in config)
    - Supports both doorbells and stickup cameras
 
-3. **object_detector.py** - Open-Vocabulary Detection
-   - Uses OpenAI's CLIP model (`clip-vit-base-patch32`) for zero-shot object detection
+3. **object_detector.py** - Real-Time Object Detection
+   - Uses YOLOv8 (`yolov8n.pt` - nano model) for fast and accurate detection
    - Extracts 5 frames per video (evenly distributed) for analysis
-   - Labels are fully configurable - no retraining needed for new objects
-   - Returns confidence scores for each detected label
-   - GPU-accelerated when available (detects CUDA automatically)
+   - Detects 80 COCO dataset classes (people, animals, vehicles, objects)
+   - Returns confidence scores and bounding boxes for detected objects
+   - Supports discovery mode to track new object types automatically
 
 4. **face_recognizer.py** - Person Identification
    - Uses `face_recognition` library (built on dlib)
@@ -81,7 +81,7 @@ Ring API → RingDownloader → Video Files → AI Analysis (CLIP + face_recogni
 
 **Processing**:
 1. Frame extraction (5 frames for objects, 10 frames for faces)
-2. Parallel AI inference (CLIP for objects, face_recognition for people)
+2. Parallel AI inference (YOLOv8 for objects, face_recognition for people)
 3. Decision tree based on priority and confidence scores
 
 **Output**: Videos moved to `/data/sorted/<class>/` with original filenames preserved
@@ -111,11 +111,12 @@ The application expects these volumes to be mounted:
 
 ### AI Models
 
-**CLIP (Object Detection)**:
-- Model: `openai/clip-vit-base-patch32` from Hugging Face
-- Downloads automatically on first run (~350MB)
-- Cached in container's torch cache
-- Supports arbitrary object labels without retraining
+**YOLOv8 (Object Detection)**:
+- Model: `yolov8n.pt` (nano model) from Ultralytics
+- Downloads automatically on first run (~6MB)
+- Cached in `~/.cache/ultralytics`
+- Detects 80 COCO classes: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, and more
+- Can upgrade to yolov8s/m/l/x for better accuracy at cost of speed
 
 **face_recognition (Face Recognition)**:
 - Uses dlib's ResNet-based face encoder
