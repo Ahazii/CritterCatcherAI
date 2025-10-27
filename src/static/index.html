@@ -853,6 +853,13 @@
     </div>
 
     <script>
+        // Global variables
+        let currentTab = 'dashboard';
+        const selectedFaces = new Set();
+        const selectedObjects = new Set();
+        const selectedDiscoveries = new Set();
+        window.currentIgnoredLabels = [];
+        
         // Theme Management
         function toggleTheme() {
             const html = document.documentElement;
@@ -863,10 +870,9 @@
             document.getElementById('themeToggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
         }
 
-        // Load saved theme
+        // Load saved theme immediately
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeToggle').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
 
         // Check Ring authentication on page load
         async function checkRingAuthStatus() {
@@ -880,9 +886,6 @@
                 console.error('Failed to check Ring status:', error);
             }
         }
-        
-        // Check on load
-        checkRingAuthStatus();
         
         // Helper function for tab labels
         function getTabLabel(tabName) {
@@ -1405,9 +1408,6 @@ dog">${objectLabels.join('
                 </div>`;
             }
         }
-
-        // Store current blacklist in memory
-        window.currentIgnoredLabels = [];
         
         async function addToBlacklist() {
             const input = document.getElementById('newBlacklistItem');
@@ -1523,9 +1523,6 @@ dog">${objectLabels.join('
         }
 
         // Review & Label Tab Functions
-        const selectedFaces = new Set();
-        const selectedObjects = new Set();
-        const selectedDiscoveries = new Set();
         
         async function loadDiscoveries() {
             try {
@@ -1902,21 +1899,25 @@ dog">${objectLabels.join('
             };
         }
 
-        // Drag and drop
-        const uploadArea = document.getElementById('uploadArea');
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            document.getElementById('fileInput').files = e.dataTransfer.files;
-            uploadFiles();
-        });
+        // Drag and drop - initialize after DOM loads
+        function initUploadArea() {
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) {
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    document.getElementById('fileInput').files = e.dataTransfer.files;
+                    uploadFiles();
+                });
+            }
+        }
 
         // Update checker
         function checkForUpdates() {
@@ -1964,21 +1965,34 @@ dog">${objectLabels.join('
             }
         }
 
-        // Track current active tab
-        let currentTab = 'dashboard';
-
-        // Initialize
-        fetchStatus();
-        fetchStats();
-        checkForUpdates(); // Check for updates on load
-        setInterval(() => {
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set theme toggle button text
+            const themeToggle = document.getElementById('themeToggle');
+            if (themeToggle) {
+                themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            }
+            
+            // Initialize drag and drop
+            initUploadArea();
+            
+            // Check Ring auth status
+            checkRingAuthStatus();
+            
+            // Start fetching status
             fetchStatus();
             fetchStats();
-            // Auto-refresh Videos tab if it's currently active
-            if (currentTab === 'videos') {
-                loadVideos();
-            }
-        }, 5000);
+            checkForUpdates();
+            
+            // Auto-refresh
+            setInterval(() => {
+                fetchStatus();
+                fetchStats();
+                if (currentTab === 'videos') {
+                    loadVideos();
+                }
+            }, 5000);
+        });
     </script>
 </body>
 </html>
