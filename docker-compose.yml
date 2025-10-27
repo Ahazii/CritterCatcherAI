@@ -18,8 +18,8 @@ services:
     
     # Volume mappings for Unraid
     volumes:
-      # Configuration
-      - ./config:/app/config:ro
+      # Configuration (read-write so web UI can update settings)
+      - ./config:/app/config
       
       # Downloaded videos (temporary storage)
       - /mnt/user/appdata/crittercatcher/downloads:/data/downloads
