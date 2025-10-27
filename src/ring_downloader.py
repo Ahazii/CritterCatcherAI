@@ -4,10 +4,12 @@ Downloads videos from Ring doorbells using the ring-doorbell library.
 """
 import os
 import logging
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import json
+from functools import wraps
 
 from ring_doorbell import Ring, Auth
 from ring_doorbell.exceptions import Requires2FAError
@@ -17,6 +19,58 @@ from datetime_utils import parse_timestamp, format_timestamp
 
 
 logger = logging.getLogger(__name__)
+
+# Rate limiting constants
+DELAY_BETWEEN_DOWNLOADS = 2.0  # Seconds between each video download
+MAX_RETRIES = 3  # Maximum number of retry attempts for rate-limited requests
+INITIAL_BACKOFF = 5.0  # Initial backoff delay in seconds for 429 errors
+MAX_BACKOFF = 60.0  # Maximum backoff delay in seconds
+BACKOFF_MULTIPLIER = 2.0  # Exponential backoff multiplier
+
+
+def retry_on_rate_limit(max_retries=MAX_RETRIES, initial_backoff=INITIAL_BACKOFF):
+    """
+    Decorator that implements exponential backoff retry logic for rate-limited requests.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        initial_backoff: Initial delay in seconds before first retry
+    
+    Returns:
+        Decorated function with retry logic
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            backoff_delay = initial_backoff
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    error_str = str(e).lower()
+                    
+                    # Check if this is a rate limit error (HTTP 429)
+                    is_rate_limit = (
+                        '429' in error_str or 
+                        'too many requests' in error_str or
+                        'rate limit' in error_str
+                    )
+                    
+                    if is_rate_limit and attempt < max_retries:
+                        logger.warning(
+                            f"Rate limit hit (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {backoff_delay:.1f}s..."
+                        )
+                        time.sleep(backoff_delay)
+                        backoff_delay = min(backoff_delay * BACKOFF_MULTIPLIER, MAX_BACKOFF)
+                    else:
+                        # Not a rate limit error or out of retries
+                        raise
+            
+            return None
+        return wrapper
+    return decorator
 
 
 class RingDownloader:
@@ -267,11 +321,19 @@ class RingDownloader:
                         downloaded_files.append(filepath)
                         continue
                     
-                    # Download the video
+                    # Download the video with rate limiting
                     logger.info(f"Downloading video: {filename}")
-                    device.recording_download(video_id, filename=str(filepath))
-                    downloaded_files.append(filepath)
-                    logger.info(f"Successfully downloaded: {filename}")
+                    success, error_msg = self._download_video_with_retry(device, video_id, filepath)
+                    
+                    if success:
+                        downloaded_files.append(filepath)
+                        logger.info(f"✓ Downloaded: {filename}")
+                        
+                        # Add delay between downloads to respect rate limits
+                        if DELAY_BETWEEN_DOWNLOADS > 0:
+                            time.sleep(DELAY_BETWEEN_DOWNLOADS)
+                    else:
+                        logger.error(f"Failed to download {filename}: {error_msg}")
                     
                     if limit and len(downloaded_files) >= limit:
                         logger.info(f"Reached download limit of {limit}")
@@ -282,6 +344,49 @@ class RingDownloader:
         
         logger.info(f"Downloaded {len(downloaded_files)} videos")
         return downloaded_files
+    
+    def _download_video_with_retry(self, device, video_id: int, filepath: Path) -> Tuple[bool, str]:
+        """
+        Download a single video with retry logic for rate limiting.
+        
+        Args:
+            device: Ring device object
+            video_id: Video ID to download
+            filepath: Path where video should be saved
+        
+        Returns:
+            Tuple of (success: bool, error_message: str)
+        """
+        backoff_delay = INITIAL_BACKOFF
+        
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                device.recording_download(video_id, filename=str(filepath))
+                return True, ""
+            
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check if this is a rate limit error (HTTP 429)
+                is_rate_limit = (
+                    '429' in error_str or 
+                    'too many requests' in error_str or
+                    'rate limit' in error_str
+                )
+                
+                if is_rate_limit and attempt < MAX_RETRIES:
+                    logger.warning(
+                        f"Rate limit hit on video {video_id} "
+                        f"(attempt {attempt + 1}/{MAX_RETRIES}). "
+                        f"Waiting {backoff_delay:.1f}s before retry..."
+                    )
+                    time.sleep(backoff_delay)
+                    backoff_delay = min(backoff_delay * BACKOFF_MULTIPLIER, MAX_BACKOFF)
+                else:
+                    # Not a rate limit error or out of retries
+                    return False, str(e)
+        
+        return False, "Max retries exceeded"
     
     def download_all_videos(self, hours: Optional[int] = None, skip_existing: bool = True) -> List[Path]:
         """
@@ -301,6 +406,8 @@ class RingDownloader:
         
         downloaded_files = []
         skipped_files = []
+        failed_files = []
+        rate_limited_count = 0
         devices = self.get_devices()
         
         # Calculate cutoff time if hours specified
@@ -357,17 +464,38 @@ class RingDownloader:
                         else:
                             logger.info(f"Re-downloading existing video: {filename}")
                     
-                    # Download the video
+                    # Download the video with rate limiting
                     logger.info(f"Downloading: {filename}")
-                    try:
-                        device.recording_download(video_id, filename=str(filepath))
+                    success, error_msg = self._download_video_with_retry(device, video_id, filepath)
+                    
+                    if success:
                         downloaded_files.append(filepath)
                         logger.info(f"✓ Downloaded: {filename}")
-                    except Exception as dl_error:
-                        logger.error(f"Failed to download {filename}: {dl_error}")
+                        
+                        # Add delay between downloads to respect rate limits
+                        if DELAY_BETWEEN_DOWNLOADS > 0:
+                            time.sleep(DELAY_BETWEEN_DOWNLOADS)
+                    else:
+                        failed_files.append(filename)
+                        # Check if it was a rate limit error
+                        if '429' in error_msg or 'too many requests' in error_msg.lower():
+                            rate_limited_count += 1
+                            logger.error(f"Rate limited downloading {filename}. Consider waiting before trying again.")
+                        else:
+                            logger.error(f"Failed to download {filename}: {error_msg}")
                         
             except Exception as e:
                 logger.error(f"Error processing {device.name}: {e}", exc_info=True)
         
-        logger.info(f"Download All Complete: {len(downloaded_files)} new videos, {len(skipped_files)} already existed")
+        # Provide detailed summary
+        logger.info(f"="*80)
+        logger.info(f"Download All Complete Summary:")
+        logger.info(f"  ✓ Successfully downloaded: {len(downloaded_files)}")
+        logger.info(f"  ⊘ Already existed (skipped): {len(skipped_files)}")
+        logger.info(f"  ✗ Failed downloads: {len(failed_files)}")
+        if rate_limited_count > 0:
+            logger.warning(f"  ⚠ Rate limited: {rate_limited_count} videos")
+            logger.warning(f"  Ring API has rate limits. Consider waiting 10-15 minutes before retrying.")
+        logger.info(f"="*80)
+        
         return downloaded_files
