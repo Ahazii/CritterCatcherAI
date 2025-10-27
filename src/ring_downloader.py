@@ -150,20 +150,38 @@ class RingDownloader:
             logger.error("Not authenticated with Ring")
             return []
         
-        devices = []
-        devices.extend(self.ring.doorbots)
-        devices.extend(self.ring.stickup_cams)
-        
-        logger.info(f"Found {len(devices)} Ring devices")
-        return devices
+        try:
+            # Refresh device data from Ring API
+            logger.debug("Refreshing Ring device data")
+            self.ring.update_data()
+            
+            devices = []
+            # Access devices property - may need to call update_data first
+            if hasattr(self.ring, 'devices'):
+                logger.debug("Using ring.devices() method")
+                devices = self.ring.devices()
+            else:
+                # Fallback to direct property access
+                logger.debug("Using direct property access")
+                if hasattr(self.ring, 'doorbots'):
+                    devices.extend(self.ring.doorbots)
+                if hasattr(self.ring, 'stickup_cams'):
+                    devices.extend(self.ring.stickup_cams)
+            
+            logger.info(f"Found {len(devices)} Ring devices")
+            return devices
+        except Exception as e:
+            logger.error(f"Error getting Ring devices: {e}", exc_info=True)
+            return []
     
-    def download_recent_videos(self, hours: int = 24, limit: Optional[int] = None) -> List[Path]:
+    def download_recent_videos(self, hours: int = 24, limit: Optional[int] = None, device_filter: Optional[List[str]] = None) -> List[Path]:
         """
         Download videos from the last N hours.
         
         Args:
             hours: Number of hours to look back
             limit: Maximum number of videos to download
+            device_filter: Optional list of device names to filter (None = all devices)
             
         Returns:
             List of downloaded video file paths
@@ -174,6 +192,11 @@ class RingDownloader:
         
         downloaded_files = []
         devices = self.get_devices()
+        
+        # Filter devices if specified
+        if device_filter:
+            devices = [d for d in devices if d.name in device_filter]
+            logger.info(f"Filtering to {len(devices)} devices: {device_filter}")
         
         for device in devices:
             logger.info(f"Checking videos for device: {device.name}")
