@@ -13,11 +13,12 @@ import json
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 import uvicorn
 import requests
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,8 @@ app_state = {
 
 CONFIG_PATH = Path("/app/config/config.yaml")
 FACE_TRAINING_PATH = Path("/data/faces/training")
+UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
+DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
 SORTED_PATH = Path("/data/sorted")
 
 
@@ -546,6 +549,251 @@ async def get_version():
         "version": get_app_version(),
         "build_date": get_build_date()
     }
+
+
+@app.get("/api/unknown_faces")
+async def get_unknown_faces():
+    """Get list of unknown faces with grouping by similarity."""
+    try:
+        if not UNKNOWN_FACES_PATH.exists():
+            return {"groups": []}
+        
+        # Load all unknown faces with metadata
+        faces_data = []
+        for img_file in UNKNOWN_FACES_PATH.glob("*.jpg"):
+            metadata_file = UNKNOWN_FACES_PATH / f"{img_file.name}.json"
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    faces_data.append(metadata)
+        
+        # Group similar faces by comparing encodings
+        groups = []
+        used_indices = set()
+        
+        for i, face1 in enumerate(faces_data):
+            if i in used_indices:
+                continue
+            
+            group = [face1]
+            used_indices.add(i)
+            encoding1 = np.array(face1.get('encoding', []))
+            
+            # Find similar faces
+            for j, face2 in enumerate(faces_data):
+                if j <= i or j in used_indices:
+                    continue
+                
+                encoding2 = np.array(face2.get('encoding', []))
+                
+                # Calculate face distance
+                if len(encoding1) > 0 and len(encoding2) > 0:
+                    distance = np.linalg.norm(encoding1 - encoding2)
+                    if distance < 0.6:  # Similar faces
+                        group.append(face2)
+                        used_indices.add(j)
+            
+            groups.append({
+                "id": f"group_{i}",
+                "count": len(group),
+                "faces": group
+            })
+        
+        return {"groups": groups}
+        
+    except Exception as e:
+        logger.error(f"Failed to get unknown faces: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/unknown_faces/image/{filename}")
+async def get_unknown_face_image(filename: str):
+    """Serve an unknown face image."""
+    try:
+        image_path = UNKNOWN_FACES_PATH / filename
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+        return FileResponse(image_path)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/unknown_faces/label")
+async def label_unknown_faces(request: dict, background_tasks: BackgroundTasks):
+    """Label unknown faces with a person name and add to training set."""
+    try:
+        filenames = request.get('filenames', [])
+        person_name = request.get('person_name', '').strip()
+        action = request.get('action', 'label')  # 'label' or 'ignore'
+        
+        if not person_name and action == 'label':
+            raise HTTPException(status_code=400, detail="Person name required")
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No files specified")
+        
+        # Create person directory in training folder
+        if action == 'label':
+            person_dir = FACE_TRAINING_PATH / person_name
+            person_dir.mkdir(parents=True, exist_ok=True)
+        
+        moved_count = 0
+        for filename in filenames:
+            image_path = UNKNOWN_FACES_PATH / filename
+            metadata_path = UNKNOWN_FACES_PATH / f"{filename}.json"
+            
+            if image_path.exists():
+                if action == 'label':
+                    # Move to training folder
+                    dest_path = person_dir / filename
+                    image_path.rename(dest_path)
+                    moved_count += 1
+                elif action == 'ignore':
+                    # Delete the file
+                    image_path.unlink()
+                    moved_count += 1
+                
+                # Remove metadata
+                if metadata_path.exists():
+                    metadata_path.unlink()
+        
+        # Retrain face recognition if labeled
+        if action == 'label' and moved_count > 0:
+            def retrain_task():
+                try:
+                    from face_recognizer import FaceRecognizer
+                    fr = FaceRecognizer()
+                    images = list((FACE_TRAINING_PATH / person_name).glob("*.jpg"))
+                    fr.add_person(person_name, images)
+                    logger.info(f"Retrained face recognition with {len(images)} images for {person_name}")
+                except Exception as e:
+                    logger.error(f"Failed to retrain: {e}")
+            
+            background_tasks.add_task(retrain_task)
+        
+        message = f"{moved_count} face(s) {'labeled as ' + person_name if action == 'label' else 'ignored'}"
+        return {"status": "success", "message": message}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to label faces: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/detected_objects")
+async def get_detected_objects():
+    """Get list of detected objects organized by label."""
+    try:
+        if not DETECTED_OBJECTS_PATH.exists():
+            return {"objects": []}
+        
+        objects = []
+        
+        # Iterate through label directories
+        for label_dir in DETECTED_OBJECTS_PATH.iterdir():
+            if label_dir.is_dir():
+                label_objects = []
+                
+                for img_file in label_dir.glob("*.jpg"):
+                    metadata_file = label_dir / f"{img_file.name}.json"
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r') as f:
+                            metadata = json.load(f)
+                            metadata['path'] = f"{label_dir.name}/{img_file.name}"
+                            label_objects.append(metadata)
+                
+                if label_objects:
+                    # Sort by confidence descending
+                    label_objects.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+                    
+                    objects.append({
+                        "label": label_dir.name.replace("_", " "),
+                        "count": len(label_objects),
+                        "detections": label_objects[:50]  # Limit to 50 per label
+                    })
+        
+        return {"objects": objects}
+        
+    except Exception as e:
+        logger.error(f"Failed to get detected objects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/detected_objects/image/{label}/{filename}")
+async def get_detected_object_image(label: str, filename: str):
+    """Serve a detected object image."""
+    try:
+        image_path = DETECTED_OBJECTS_PATH / label / filename
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+        return FileResponse(image_path)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/detected_objects/relabel")
+async def relabel_detected_object(request: dict):
+    """Relabel a detected object (correct misclassification or add new label)."""
+    try:
+        old_label = request.get('old_label', '').replace(" ", "_")
+        new_label = request.get('new_label', '').strip()
+        filename = request.get('filename', '')
+        action = request.get('action', 'relabel')  # 'relabel' or 'delete'
+        
+        if not old_label or not filename:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        old_path = DETECTED_OBJECTS_PATH / old_label / filename
+        old_metadata_path = DETECTED_OBJECTS_PATH / old_label / f"{filename}.json"
+        
+        if not old_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        if action == 'delete':
+            old_path.unlink()
+            if old_metadata_path.exists():
+                old_metadata_path.unlink()
+            return {"status": "success", "message": "Detection deleted"}
+        
+        if not new_label:
+            raise HTTPException(status_code=400, detail="New label required for relabeling")
+        
+        # Create new label directory
+        new_label_dir = DETECTED_OBJECTS_PATH / new_label.replace(" ", "_")
+        new_label_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Move files
+        new_path = new_label_dir / filename
+        new_metadata_path = new_label_dir / f"{filename}.json"
+        
+        old_path.rename(new_path)
+        
+        # Update metadata
+        if old_metadata_path.exists():
+            with open(old_metadata_path, 'r') as f:
+                metadata = json.load(f)
+            metadata['label'] = new_label
+            with open(new_metadata_path, 'w') as f:
+                json.dump(metadata, f)
+            old_metadata_path.unlink()
+        
+        return {
+            "status": "success",
+            "message": f"Relabeled from '{old_label}' to '{new_label}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to relabel object: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/check_update")

@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
+import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ObjectDetector:
     """Open-vocabulary object detector using CLIP."""
     
-    def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5):
+    def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, detected_objects_path: str = "/data/objects/detected"):
         """
         Initialize the object detector.
         
@@ -25,10 +27,13 @@ class ObjectDetector:
             labels: List of object labels to detect (e.g., ["hedgehog", "fox", "bird"])
             confidence_threshold: Minimum confidence score to consider a detection valid
             num_frames: Number of frames to extract and analyze from each video
+            detected_objects_path: Path to save detected object images
         """
         self.labels = labels
         self.confidence_threshold = confidence_threshold
         self.num_frames = num_frames
+        self.detected_objects_path = Path(detected_objects_path)
+        self.detected_objects_path.mkdir(parents=True, exist_ok=True)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         logger.info(f"Initializing CLIP model on device: {self.device}")
@@ -75,12 +80,15 @@ class ObjectDetector:
         logger.debug(f"Extracted {len(frames)} frames from {video_path.name}")
         return frames
     
-    def detect_objects_in_frame(self, frame: np.ndarray) -> Dict[str, float]:
+    def detect_objects_in_frame(self, frame: np.ndarray, video_name: str = None, frame_idx: int = None, save_detections: bool = True) -> Dict[str, float]:
         """
         Detect objects in a single frame.
         
         Args:
             frame: Image frame as numpy array (RGB)
+            video_name: Name of the video being processed
+            frame_idx: Frame index in the video
+            save_detections: Whether to save detected object images
             
         Returns:
             Dictionary mapping label to confidence score
@@ -105,10 +113,17 @@ class ObjectDetector:
             logits_per_image = outputs.logits_per_image
             probs = logits_per_image.softmax(dim=1)
         
-        # Convert to dictionary
+        # Convert to dictionary and save detections
         detections = {}
         for idx, label in enumerate(self.labels):
             confidence = probs[0][idx].item()
+            # Save ALL detections with confidence scores
+            if save_detections and confidence > 0.01:  # Very low threshold to catch all
+                self._save_detected_object(
+                    frame, label, confidence,
+                    video_name, frame_idx
+                )
+            # Only return detections above threshold
             if confidence >= self.confidence_threshold:
                 detections[label] = confidence
         
@@ -140,7 +155,12 @@ class ObjectDetector:
         # Detect objects in each frame
         all_detections = {}
         for i, frame in enumerate(frames):
-            frame_detections = self.detect_objects_in_frame(frame)
+            frame_detections = self.detect_objects_in_frame(
+                frame,
+                video_name=video_path.name,
+                frame_idx=i,
+                save_detections=True
+            )
             logger.debug(f"Frame {i+1}/{len(frames)}: {frame_detections}")
             
             # Keep the maximum confidence for each label
@@ -186,3 +206,54 @@ class ObjectDetector:
         else:
             logger.info(f"No confident detection for {video_path.name}, classifying as 'unknown'")
             return "unknown"
+    
+    def _save_detected_object(self, frame: np.ndarray, label: str, confidence: float,
+                             video_name: str, frame_idx: int) -> bool:
+        """
+        Save a detected object image and metadata.
+        
+        Args:
+            frame: Frame image with detected object
+            label: Detected object label
+            confidence: Detection confidence score
+            video_name: Name of source video
+            frame_idx: Frame index
+            
+        Returns:
+            True if saved, False if skipped
+        """
+        try:
+            # Create label directory
+            label_dir = self.detected_objects_path / label.replace(" ", "_")
+            label_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate unique filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            video_base = Path(video_name).stem if video_name else "unknown"
+            filename = f"{timestamp}_{video_base}_f{frame_idx}_{label.replace(' ', '_')}.jpg"
+            
+            # Save image
+            image_path = label_dir / filename
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(str(image_path), frame_bgr)
+            
+            # Save metadata
+            metadata = {
+                "filename": filename,
+                "video_name": video_name,
+                "frame_idx": frame_idx,
+                "label": label,
+                "confidence": confidence,
+                "timestamp": timestamp
+            }
+            
+            metadata_path = label_dir / f"{filename}.json"
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f)
+            
+            logger.debug(f"Saved detected object: {label} (confidence: {confidence:.2f})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to save detected object: {e}")
+            return False
