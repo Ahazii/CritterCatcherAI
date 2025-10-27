@@ -233,15 +233,20 @@ class RingDownloader:
                 for event in history:
                     # Parse the ISO format timestamp from Ring API
                     # Example: "2025-10-25T18:23:19.683Z"
-                    created_at_str = event.get('created_at')
-                    if isinstance(created_at_str, str):
+                    created_at = event.get('created_at')
+                    
+                    # Handle different types: string, datetime, or Unix timestamp
+                    if isinstance(created_at, datetime):
+                        # Already a datetime object
+                        event_time = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
+                    elif isinstance(created_at, str):
                         # Parse ISO format string
-                        event_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                        event_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                         # Convert to local time (naive datetime for comparison)
                         event_time = event_time.replace(tzinfo=None)
                     else:
-                        # Fallback: assume it's a timestamp
-                        event_time = datetime.fromtimestamp(created_at_str)
+                        # Fallback: assume it's a Unix timestamp (int or float)
+                        event_time = datetime.fromtimestamp(created_at)
                     
                     logger.debug(f"Event {event['id']} created at {event_time}")
                     
@@ -323,12 +328,20 @@ class RingDownloader:
                 
                 for event in history:
                     # Parse the ISO format timestamp from Ring API
-                    created_at_str = event.get('created_at')
-                    if isinstance(created_at_str, str):
-                        event_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                    created_at = event.get('created_at')
+                    
+                    # Handle different types: string, datetime, or Unix timestamp
+                    if isinstance(created_at, datetime):
+                        # Already a datetime object
+                        event_time = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
+                    elif isinstance(created_at, str):
+                        # Parse ISO format string
+                        event_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        # Convert to local time (naive datetime for comparison)
                         event_time = event_time.replace(tzinfo=None)
                     else:
-                        event_time = datetime.fromtimestamp(created_at_str)
+                        # Fallback: assume it's a Unix timestamp (int or float)
+                        event_time = datetime.fromtimestamp(created_at)
                     
                     # Check time filter if specified
                     if cutoff_time and event_time < cutoff_time:
