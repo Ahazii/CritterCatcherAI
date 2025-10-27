@@ -1184,7 +1184,11 @@
                     
                     <div class="form-group">
                         <label class="form-label">Objects to Detect (one per line)</label>
-                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog\\nfox\\ncat\\ndog">${objectLabels.join('\\n')}</textarea>
+                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog
+fox
+cat
+dog">${objectLabels.join('
+')}</textarea>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Common options: hedgehog, fox, cat, dog, squirrel, bird, crow, robin, person, car, bicycle
                         </p>
