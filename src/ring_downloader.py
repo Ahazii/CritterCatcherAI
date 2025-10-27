@@ -156,19 +156,19 @@ class RingDownloader:
             self.ring.update_data()
             
             devices = []
-            # Access devices property - may need to call update_data first
-            if hasattr(self.ring, 'devices'):
-                logger.debug("Using ring.devices() method")
-                devices = self.ring.devices()
-            else:
-                # Fallback to direct property access
-                logger.debug("Using direct property access")
-                if hasattr(self.ring, 'doorbots'):
-                    devices.extend(self.ring.doorbots)
-                if hasattr(self.ring, 'stickup_cams'):
-                    devices.extend(self.ring.stickup_cams)
+            # Access devices - the ring-doorbell library uses direct properties
+            logger.debug("Getting Ring devices from properties")
+            if hasattr(self.ring, 'doorbots'):
+                devices.extend(self.ring.doorbots)
+                logger.debug(f"Found {len(self.ring.doorbots)} doorbots")
+            if hasattr(self.ring, 'stickup_cams'):
+                devices.extend(self.ring.stickup_cams)
+                logger.debug(f"Found {len(self.ring.stickup_cams)} stickup_cams")
+            if hasattr(self.ring, 'other'):
+                devices.extend(self.ring.other)
+                logger.debug(f"Found {len(self.ring.other)} other devices")
             
-            logger.info(f"Found {len(devices)} Ring devices")
+            logger.info(f"Found {len(devices)} Ring devices total")
             return devices
         except Exception as e:
             logger.error(f"Error getting Ring devices: {e}", exc_info=True)
