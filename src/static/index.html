@@ -995,22 +995,123 @@
                 
                 const form = document.getElementById('configForm');
                 form.innerHTML = `
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">🎯 Object Detection</h3>
+                    
                     <div class="form-group">
-                        <label class="form-label">Detection Labels (one per line)</label>
-                        <textarea class="form-input" rows="8">${data.config.detection.object_labels.join('\n')}</textarea>
+                        <label class="form-label">
+                            Confidence Threshold: <strong id="confidenceValue">${data.config.detection.confidence_threshold}</strong>
+                        </label>
+                        <input type="range" id="confidenceThreshold" class="form-input" 
+                               value="${data.config.detection.confidence_threshold}" 
+                               step="0.05" min="0.1" max="0.9" 
+                               oninput="document.getElementById('confidenceValue').textContent = this.value"
+                               style="width: 100%;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Lower (0.1) = More detections, less accurate. Higher (0.9) = Fewer detections, more accurate. Recommended: 0.25-0.4
+                        </p>
                     </div>
+                    
                     <div class="form-group">
-                        <label class="form-label">Confidence Threshold</label>
-                        <input type="number" class="form-input" value="${data.config.detection.confidence_threshold}" step="0.05" min="0" max="1">
+                        <label class="form-label">Objects to Detect (one per line)</label>
+                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog\nfox\ncat\ndog">${data.config.detection.object_labels.join('\n')}</textarea>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Common options: hedgehog, fox, cat, dog, squirrel, bird, crow, robin, person, car, bicycle
+                        </p>
                     </div>
+                    
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">👤 Face Recognition</h3>
+                    
                     <div class="form-group">
-                        <label class="form-label">Face Tolerance</label>
-                        <input type="number" class="form-input" value="${data.config.detection.face_tolerance}" step="0.05" min="0" max="1">
+                        <label class="form-label">
+                            Face Tolerance: <strong id="faceToleranceValue">${data.config.detection.face_tolerance}</strong>
+                        </label>
+                        <input type="range" id="faceTolerance" class="form-input" 
+                               value="${data.config.detection.face_tolerance}" 
+                               step="0.05" min="0.3" max="0.9" 
+                               oninput="document.getElementById('faceToleranceValue').textContent = this.value"
+                               style="width: 100%;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Lower (0.3) = Strict matching. Higher (0.9) = Lenient matching. Recommended: 0.5-0.7
+                        </p>
                     </div>
-                    <button class="btn">Save Configuration</button>
+                    
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">⚙️ Sorting Priority</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">When both people and objects are detected:</label>
+                        <select id="detectionPriority" class="form-select" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
+                            <option value="people" ${data.config.detection.priority === 'people' ? 'selected' : ''}>Prioritize People</option>
+                            <option value="objects" ${data.config.detection.priority === 'objects' ? 'selected' : ''}>Prioritize Objects</option>
+                        </select>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            "People" = Sort by recognized person first. "Objects" = Sort by detected object first.
+                        </p>
+                    </div>
+                    
+                    <div style="margin-top: 2rem;">
+                        <button class="btn" onclick="saveConfig()" style="width: 100%; padding: 1rem; font-size: 1rem;">💾 Save Configuration</button>
+                    </div>
+                    <div id="configMessage" style="margin-top: 1rem;"></div>
                 `;
             } catch (error) {
                 console.error('Failed to load config:', error);
+                document.getElementById('configForm').innerHTML = '<p style="color: var(--danger-color);">Failed to load configuration</p>';
+            }
+        }
+        
+        async function saveConfig() {
+            try {
+                const labels = document.getElementById('objectLabels').value
+                    .split('\n')
+                    .map(l => l.trim())
+                    .filter(l => l.length > 0);
+                
+                const config = {
+                    config: {
+                        paths: {
+                            downloads: '/data/downloads',
+                            sorted: '/data/sorted',
+                            face_encodings: '/data/faces/encodings.pkl'
+                        },
+                        ring: {
+                            download_hours: 24,
+                            download_limit: null
+                        },
+                        detection: {
+                            object_labels: labels,
+                            confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
+                            face_tolerance: parseFloat(document.getElementById('faceTolerance').value),
+                            priority: document.getElementById('detectionPriority').value
+                        },
+                        run_once: false,
+                        interval_minutes: 60
+                    }
+                };
+                
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                
+                const msgDiv = document.getElementById('configMessage');
+                msgDiv.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
+                    ✓ ${result.message}<br>
+                    <span style="font-size: 0.875rem; margin-top: 0.5rem; display: block;">Changes will take effect on the next processing run.</span>
+                </div>`;
+                
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                const msgDiv = document.getElementById('configMessage');
+                msgDiv.innerHTML = `<div style="color: var(--danger-color); padding: 1rem; background: rgba(245, 101, 101, 0.1); border-radius: 6px;">
+                    ✗ Failed to save configuration: ${error.message}
+                </div>`;
             }
         }
 
