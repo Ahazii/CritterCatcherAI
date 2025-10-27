@@ -16,21 +16,18 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Broad detection list for discovery mode
-DISCOVERY_OBJECTS = [
-    # Wildlife
-    "hedgehog", "fox", "badger", "deer", "rabbit", "squirrel", "mouse", "rat",
-    "bird", "crow", "robin", "pigeon", "owl", "hawk", "duck", "goose",
-    # Pets
-    "cat", "dog", "kitten", "puppy",
-    # People & Activities  
-    "person", "delivery person", "mail carrier", "child", "adult",
-    # Vehicles
-    "car", "truck", "van", "bicycle", "motorcycle", "scooter",
-    # Objects
-    "package", "box", "bag", "bottle", "umbrella",
-    # Nature (often false positives, consider blacklisting)
-    "tree", "bush", "flower", "leaf",
+# YOLOv8 COCO dataset classes (80 classes)
+YOLO_COCO_CLASSES = [
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
+    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
+    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
+    "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
+    "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
 ]
 
 
@@ -40,20 +37,32 @@ class ObjectDetector:
     def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, 
                  detected_objects_path: str = "/data/objects/detected", 
                  discovery_mode: bool = False, discovery_threshold: float = 0.30,
-                 ignored_labels: List[str] = None):
+                 ignored_labels: List[str] = None, model_name: str = "yolov8n.pt"):
         """
         Initialize the object detector.
         
         Args:
-            labels: List of object labels to detect (e.g., ["hedgehog", "fox", "bird"])
+            labels: List of object labels to detect (must be YOLO COCO classes)
             confidence_threshold: Minimum confidence score to consider a detection valid
             num_frames: Number of frames to extract and analyze from each video
             detected_objects_path: Path to save detected object images
             discovery_mode: Enable automatic discovery of new objects
             discovery_threshold: Minimum confidence for discovered objects
             ignored_labels: List of labels to ignore in discovery mode
+            model_name: YOLO model to use (yolov8n/s/m/l/x.pt)
         """
         self.labels = [label.lower() for label in labels]
+        self.model_name = model_name
+        
+        # Validate labels against YOLO COCO classes
+        yolo_classes_lower = [c.lower() for c in YOLO_COCO_CLASSES]
+        invalid_labels = [label for label in self.labels if label not in yolo_classes_lower]
+        
+        if invalid_labels:
+            logger.warning(f"Invalid YOLO labels detected and will be ignored: {invalid_labels}")
+            logger.warning(f"Valid YOLO COCO classes: {', '.join(YOLO_COCO_CLASSES[:20])}...")
+            # Filter out invalid labels
+            self.labels = [label for label in self.labels if label in yolo_classes_lower]
         self.confidence_threshold = confidence_threshold
         self.num_frames = num_frames
         self.detected_objects_path = Path(detected_objects_path)
@@ -65,19 +74,23 @@ class ObjectDetector:
         self.ignored_labels = set([label.lower() for label in (ignored_labels or [])])
         
         # Combined labels for detection
+        yolo_classes_lower = [c.lower() for c in YOLO_COCO_CLASSES]
         if self.discovery_mode:
-            # Add discovery objects that aren't already tracked or ignored
-            discovery_labels = [obj.lower() for obj in DISCOVERY_OBJECTS 
-                              if obj.lower() not in self.labels and obj.lower() not in self.ignored_labels]
+            # Add YOLO COCO classes that aren't already tracked or ignored
+            discovery_labels = [obj for obj in yolo_classes_lower
+                              if obj not in self.labels and obj not in self.ignored_labels]
             self.all_labels = list(self.labels) + discovery_labels
             logger.info(f"Discovery mode enabled: tracking {len(self.labels)} focused + {len(discovery_labels)} discovery labels")
         else:
             self.all_labels = list(self.labels)
         
-        logger.info(f"Initializing YOLOv8 model")
-        self.model = YOLO('yolov8n.pt')  # Using nano model for speed, can use yolov8s/m/l/x for better accuracy
+        logger.info(f"Initializing YOLOv8 model: {self.model_name}")
+        self.model = YOLO(self.model_name)
+        logger.info(f"Model loaded: {self.model_name} - {len(YOLO_COCO_CLASSES)} COCO classes available")
         
-        logger.info(f"Initialized ObjectDetector with {len(self.all_labels)} total labels ({len(self.labels)} focused)")
+        logger.info(f"Initialized ObjectDetector with {len(self.labels)} tracked labels")
+        if not self.labels:
+            logger.error("No valid labels configured! Please check your config.yaml")
     
     def extract_frames(self, video_path: Path, num_frames: int = 5) -> List[np.ndarray]:
         """

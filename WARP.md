@@ -54,11 +54,12 @@ Ring API → RingDownloader → Video Files → AI Analysis (YOLOv8 + face_recog
    - Supports both doorbells and stickup cameras
 
 3. **object_detector.py** - Real-Time Object Detection
-   - Uses YOLOv8 (`yolov8n.pt` - nano model) for fast and accurate detection
+   - Uses YOLOv8 with configurable model size (nano/small/medium/large/xlarge)
    - Extracts 5 frames per video (evenly distributed) for analysis
-   - Detects 80 COCO dataset classes (people, animals, vehicles, objects)
+   - Detects 80 COCO dataset classes ONLY - cannot detect objects outside this set
    - Returns confidence scores and bounding boxes for detected objects
-   - Supports discovery mode to track new object types automatically
+   - Discovery mode alerts to COCO classes not in your tracking list
+   - Validates configured labels against YOLO COCO classes on startup
 
 4. **face_recognizer.py** - Person Identification
    - Uses `face_recognition` library (built on dlib)
@@ -112,11 +113,16 @@ The application expects these volumes to be mounted:
 ### AI Models
 
 **YOLOv8 (Object Detection)**:
-- Model: `yolov8n.pt` (nano model) from Ultralytics
-- Downloads automatically on first run (~6MB)
-- Cached in `~/.cache/ultralytics`
-- Detects 80 COCO classes: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, and more
-- Can upgrade to yolov8s/m/l/x for better accuracy at cost of speed
+- Model: Configurable via `detection.yolo_model` in config.yaml
+  - `yolov8n` (nano): ~6MB, fastest, good for real-time
+  - `yolov8s` (small): ~22MB, balanced speed/accuracy
+  - `yolov8m` (medium): ~52MB, better accuracy
+  - `yolov8l` (large): ~87MB, high accuracy
+  - `yolov8x` (xlarge): ~136MB, best accuracy, slowest
+- Downloads automatically on first run, cached in `~/.cache/ultralytics`
+- **IMPORTANT**: Only detects 80 COCO classes - cannot detect arbitrary objects like CLIP
+- Available classes: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, couch, potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair drier, toothbrush
+- Configure labels in config.yaml - invalid labels are filtered out with warnings
 
 **face_recognition (Face Recognition)**:
 - Uses dlib's ResNet-based face encoder
@@ -145,7 +151,16 @@ When making changes, maintain this logging level consistency.
 ## Development Guidelines
 
 ### Adding New Object Labels
-Edit `config/config.yaml` and add to `detection.object_labels` list. No code changes or retraining required.
+**IMPORTANT**: YOLOv8 only detects the 80 COCO classes listed above. You cannot add arbitrary labels.
+
+To track new objects:
+1. Check if the object matches a COCO class (see list in AI Models section)
+2. Edit `config/config.yaml` and add the COCO class name to `detection.object_labels`
+3. Restart the container - invalid labels will be filtered out with warnings
+
+For objects not in COCO (e.g., hedgehog, fox):
+- Use the closest available class (e.g., "cat" for small mammals, "bird" for all birds)
+- Consider contributing to custom YOLO training (advanced - not covered here)
 
 ### Adding New Person Recognition
 1. Create directory: `/mnt/user/appdata/crittercatcher/faces/training/<PersonName>`
@@ -177,11 +192,14 @@ When adding Python dependencies:
 3. Be mindful of ARM compatibility (Unraid may run on ARM systems)
 
 ### Common Pitfalls
+- **Invalid YOLO labels**: Check logs for warnings about invalid labels. Only COCO classes work.
+- **Specific animals not detected**: YOLO only has "bird", "cat", "dog" for wildlife - cannot detect hedgehogs, foxes, etc. specifically
 - Ring token expires: Delete token file and restart container
-- Low detection confidence: Lower `confidence_threshold` in config
+- Low detection confidence: Lower `confidence_threshold` in config (try 0.25-0.35 for YOLO)
 - Face recognition fails: Add more training photos or increase `face_tolerance`
 - Videos not downloading: Check Ring credentials and subscription status
 - Path errors on Windows: Use forward slashes or raw strings for paths
+- Model download fails: Check internet connection and disk space in `~/.cache/ultralytics`
 
 ### Windows Development Notes
 This repository is currently on Windows (`C:\Coding\CritterCatcherAI`). When working with Docker:

@@ -77,10 +77,15 @@ def process_videos(config: dict):
     video_sorter = VideoSorter(sorted_path)
     
     # Initialize object detector with configured labels
-    object_labels = detection_config.get('object_labels', ['hedgehog', 'fox', 'bird', 'cat', 'dog'])
+    object_labels = detection_config.get('object_labels', ['bird', 'cat', 'dog', 'person'])
     discovery_mode = detection_config.get('discovery_mode', False)
     discovery_threshold = detection_config.get('discovery_threshold', 0.30)
     ignored_labels = detection_config.get('ignored_labels', [])
+    yolo_model = detection_config.get('yolo_model', 'yolov8n')  # Default to nano model
+    
+    # Add .pt extension if not present
+    if not yolo_model.endswith('.pt'):
+        yolo_model = f"{yolo_model}.pt"
     
     object_detector = ObjectDetector(
         labels=object_labels,
@@ -88,7 +93,8 @@ def process_videos(config: dict):
         num_frames=detection_config.get('object_frames', 5),
         discovery_mode=discovery_mode,
         discovery_threshold=discovery_threshold,
-        ignored_labels=ignored_labels
+        ignored_labels=ignored_labels,
+        model_name=yolo_model
     )
     
     if discovery_mode:
