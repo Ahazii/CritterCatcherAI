@@ -85,6 +85,30 @@
             gap: 1rem;
             align-items: center;
         }
+        
+        .download-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .form-select {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        
+        .btn-warning {
+            background: var(--warning-color);
+        }
+        
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
 
         .theme-toggle {
             background: var(--bg-secondary);
@@ -493,6 +517,17 @@
             <div class="logo">🦔 CritterCatcherAI</div>
             <div class="header-actions">
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
+                <div class="download-controls">
+                    <select id="timeRange" class="form-select">
+                        <option value="1hour">Last Hour</option>
+                        <option value="6hours">Last 6 Hours</option>
+                        <option value="24hours" selected>Last 24 Hours</option>
+                        <option value="7days">Last 7 Days</option>
+                        <option value="30days">Last 30 Days</option>
+                        <option value="all">All Available</option>
+                    </select>
+                    <button class="btn btn-warning" onclick="downloadAllVideos()">⬇ Download All</button>
+                </div>
                 <button class="btn btn-success" onclick="triggerProcessing()">▶ Process Now</button>
             </div>
         </div>
@@ -915,6 +950,29 @@
             }
         }
 
+        async function downloadAllVideos() {
+            const timeRange = document.getElementById('timeRange').value;
+            const timeRangeText = document.getElementById('timeRange').selectedOptions[0].text;
+            
+            if (!confirm(`Download all videos from ${timeRangeText}?\n\nThis will download any videos not already on your system. Existing videos will be skipped.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/download-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ time_range: timeRange })
+                });
+                const data = await response.json();
+                alert(data.message);
+                fetchStatus();
+            } catch (error) {
+                console.error('Failed to trigger download:', error);
+                alert('Failed to start download');
+            }
+        }
+        
         async function triggerProcessing() {
             try {
                 const response = await fetch('/api/process', { method: 'POST' });

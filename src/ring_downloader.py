@@ -223,14 +223,29 @@ class RingDownloader:
             try:
                 # Get video history
                 history = device.history(limit=limit or 100, kind='ding')
+                logger.info(f"Found {len(history)} events in history for {device.name}")
                 
                 # Filter by time
                 cutoff_time = datetime.now() - timedelta(hours=hours)
+                logger.info(f"Filtering for videos after {cutoff_time}")
                 
                 for event in history:
-                    event_time = datetime.fromtimestamp(event['created_at'])
+                    # Parse the ISO format timestamp from Ring API
+                    # Example: "2025-10-25T18:23:19.683Z"
+                    created_at_str = event.get('created_at')
+                    if isinstance(created_at_str, str):
+                        # Parse ISO format string
+                        event_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                        # Convert to local time (naive datetime for comparison)
+                        event_time = event_time.replace(tzinfo=None)
+                    else:
+                        # Fallback: assume it's a timestamp
+                        event_time = datetime.fromtimestamp(created_at_str)
+                    
+                    logger.debug(f"Event {event['id']} created at {event_time}")
                     
                     if event_time < cutoff_time:
+                        logger.debug(f"Skipping event {event['id']} - too old")
                         continue
                     
                     # Download video
@@ -256,6 +271,7 @@ class RingDownloader:
                     logger.info(f"Downloading video: {filename}")
                     device.recording_download(video_id, filename=str(filepath))
                     downloaded_files.append(filepath)
+                    logger.info(f"Successfully downloaded: {filename}")
                     
                     if limit and len(downloaded_files) >= limit:
                         logger.info(f"Reached download limit of {limit}")
@@ -265,4 +281,91 @@ class RingDownloader:
                 logger.error(f"Error downloading videos from {device.name}: {e}", exc_info=True)
         
         logger.info(f"Downloaded {len(downloaded_files)} videos")
+        return downloaded_files
+    
+    def download_all_videos(self, hours: Optional[int] = None, skip_existing: bool = True) -> List[Path]:
+        """
+        Download all available videos from Ring, optionally filtered by time.
+        This ignores the last_processed.json tracking.
+        
+        Args:
+            hours: Number of hours to look back (None = all available)
+            skip_existing: If True, skip videos that already exist on disk
+            
+        Returns:
+            List of downloaded video file paths
+        """
+        if not self.ring:
+            logger.error("Not authenticated with Ring")
+            return []
+        
+        downloaded_files = []
+        skipped_files = []
+        devices = self.get_devices()
+        
+        # Calculate cutoff time if hours specified
+        cutoff_time = None
+        if hours is not None:
+            cutoff_time = datetime.now() - timedelta(hours=hours)
+            logger.info(f"Download All: Filtering for videos after {cutoff_time}")
+        else:
+            logger.info("Download All: No time filter - downloading ALL available videos")
+        
+        for device in devices:
+            logger.info(f"Download All: Processing device: {device.name}")
+            
+            try:
+                # Get video history (100 is the API limit per request)
+                history = device.history(limit=100, kind='ding')
+                logger.info(f"Download All: Found {len(history)} events for {device.name}")
+                
+                for event in history:
+                    # Parse the ISO format timestamp from Ring API
+                    created_at_str = event.get('created_at')
+                    if isinstance(created_at_str, str):
+                        event_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                        event_time = event_time.replace(tzinfo=None)
+                    else:
+                        event_time = datetime.fromtimestamp(created_at_str)
+                    
+                    # Check time filter if specified
+                    if cutoff_time and event_time < cutoff_time:
+                        logger.debug(f"Skipping event {event['id']} - before cutoff time")
+                        continue
+                    
+                    # Get video info
+                    video_id = event['id']
+                    video_url = device.recording_url(video_id)
+                    
+                    if not video_url:
+                        logger.warning(f"No video URL for event {video_id}")
+                        continue
+                    
+                    # Create filename
+                    timestamp_str = event_time.strftime("%Y%m%d_%H%M%S")
+                    filename = f"{device.name}_{timestamp_str}_{video_id}.mp4"
+                    filepath = self.download_path / filename
+                    
+                    # Check if already exists
+                    if filepath.exists():
+                        if skip_existing:
+                            logger.debug(f"Skipping existing video: {filename}")
+                            skipped_files.append(filepath)
+                            continue
+                        else:
+                            logger.info(f"Re-downloading existing video: {filename}")
+                    
+                    # Download the video
+                    logger.info(f"Downloading: {filename}")
+                    try:
+                        device.recording_download(video_id, filename=str(filepath))
+                        downloaded_files.append(filepath)
+                        logger.info(f"✓ Downloaded: {filename}")
+                    except Exception as dl_error:
+                        logger.error(f"Failed to download {filename}: {dl_error}")
+                        
+            except Exception as e:
+                logger.error(f"Error processing {device.name}: {e}", exc_info=True)
+        
+        logger.info(f"Download All Complete: {len(downloaded_files)} new videos, {len(skipped_files)} already existed")
         return downloaded_files

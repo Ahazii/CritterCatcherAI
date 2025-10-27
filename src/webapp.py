@@ -412,6 +412,66 @@ async def trigger_processing(background_tasks: BackgroundTasks):
     return {"status": "started", "message": "Processing started"}
 
 
+@app.post("/api/download-all")
+async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
+    """Download all videos from Ring with optional time filter."""
+    logger.info("=" * 80)
+    logger.info("DOWNLOAD ALL TRIGGERED VIA WEB UI")
+    logger.info("=" * 80)
+    
+    if app_state["is_processing"]:
+        logger.warning("Processing already running, rejecting download request")
+        return {"status": "already_running", "message": "A task is already in progress"}
+    
+    # Parse time range
+    time_range = request.get('time_range', 'all')
+    hours_map = {
+        '1hour': 1,
+        '6hours': 6,
+        '24hours': 24,
+        '7days': 24 * 7,
+        '30days': 24 * 30,
+        'all': None
+    }
+    
+    hours = hours_map.get(time_range)
+    if time_range not in hours_map:
+        raise HTTPException(status_code=400, detail=f"Invalid time_range: {time_range}")
+    
+    logger.info(f"Download All: time_range={time_range}, hours={hours}")
+    
+    def download_task():
+        app_state["is_processing"] = True
+        try:
+            logger.info(f"Starting download all task (time_range: {time_range})...")
+            from ring_downloader import RingDownloader
+            
+            rd = RingDownloader(
+                download_path="/data/downloads",
+                token_file="/data/tokens/ring_token.json"
+            )
+            
+            # Authenticate
+            if not rd.authenticate():
+                logger.error("Failed to authenticate with Ring")
+                return
+            
+            # Download all videos
+            downloaded = rd.download_all_videos(hours=hours, skip_existing=True)
+            logger.info(f"Download All Complete: {len(downloaded)} new videos downloaded")
+            
+        except Exception as e:
+            logger.error(f"Download all failed: {e}", exc_info=True)
+        finally:
+            app_state["is_processing"] = False
+    
+    background_tasks.add_task(download_task)
+    logger.info("Download all task added to background queue")
+    
+    time_desc = f"last {time_range}" if time_range != 'all' else "all available videos"
+    return {"status": "started", "message": f"Downloading {time_desc}..."}
+
+
 @app.get("/api/logs/stream")
 async def stream_logs():
     """Stream logs - Note: Real-time streaming not available from inside container."""
