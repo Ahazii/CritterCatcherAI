@@ -4,7 +4,7 @@ oauthlib==3.2.2
 
 # AI/ML libraries
 # torch and torchvision installed separately in Dockerfile (CPU version)
-ultralytics==8.0.200
+ultralytics==8.3.41
 pillow==10.1.0
 
 # Face recognition
