@@ -1819,19 +1819,24 @@
                 let html = '';
                 
                 for (const obj of data.objects) {
+                    const groupId = `obj-${obj.label.replace(/[^a-z0-9]/gi, '-')}`;
+                    const detectionFilenames = obj.detections.map(d => `${obj.label}:${d.filename}`);
+                    
                     html += `
                         <div class="group-header">
                             <div>
                                 <strong>${obj.label}</strong> - ${obj.count} detection(s)
                             </div>
+                            <button class="btn btn-small" onclick="selectAllObjects('${groupId}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})">Select All</button>
                         </div>
                         <div class="image-grid">
                     `;
                     
                     for (const detection of obj.detections) {
                         const confidence = (detection.confidence * 100).toFixed(1);
+                        const detectionId = `${obj.label}:${detection.filename}`;
                         html += `
-                            <div class="image-item" onclick="relabelObject('${obj.label}', '${detection.filename}')">
+                            <div class="image-item" id="object-${detectionId.replace(/[^a-z0-9]/gi, '-')}" onclick="toggleObjectSelection('${detectionId}', event)">
                                 <img src="/api/detected_objects/image/${detection.path}" alt="${obj.label}">
                                 <div class="confidence-badge">${confidence}% ${obj.label}</div>
                             </div>
@@ -1841,41 +1846,160 @@
                     html += '</div>';
                 }
                 
+                // Add bulk action controls
+                html += `
+                    <div class="label-controls" style="margin-top: 1.5rem;">
+                        <button class="btn" onclick="confirmSelectedObjects()" style="background: var(--success-color);">✓ Confirm Selected as Correct</button>
+                        <button class="btn" onclick="deleteSelectedObjects()" style="background: var(--danger-color);">✗ Delete Selected (Incorrect)</button>
+                        <button class="btn" onclick="relabelSelectedObjects()" style="background: var(--warning-color); color: white;">🏷️ Relabel Selected</button>
+                    </div>
+                `;
+                
                 container.innerHTML = html;
+                selectedObjects.clear();
                 
             } catch (error) {
                 console.error('Failed to load detected objects:', error);
             }
         }
         
-        async function relabelObject(oldLabel, filename) {
-            const newLabel = prompt(`Relabel this detection (currently: ${oldLabel})\n\nEnter new label, or leave blank to delete:`, oldLabel);
-            
-            if (newLabel === null) return; // Cancelled
-            
-            const action = newLabel.trim() === '' ? 'delete' : 'relabel';
-            
-            try {
-                const response = await fetch('/api/detected_objects/relabel', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        old_label: oldLabel,
-                        new_label: newLabel.trim(),
-                        filename: filename,
-                        action: action
-                    })
-                });
-                
-                const data = await response.json();
-                alert(data.message);
-                loadDetectedObjects(); // Reload
-                
-            } catch (error) {
-                console.error('Failed to relabel object:', error);
-                alert('Failed to relabel object');
+        function toggleObjectSelection(detectionId, event) {
+            if (event) event.stopPropagation();
+            const saferId = detectionId.replace(/[^a-z0-9]/gi, '-');
+            const element = document.getElementById(`object-${saferId}`);
+            if (selectedObjects.has(detectionId)) {
+                selectedObjects.delete(detectionId);
+                element.classList.remove('selected');
+            } else {
+                selectedObjects.add(detectionId);
+                element.classList.add('selected');
             }
         }
+        
+        function selectAllObjects(groupId, detectionIds) {
+            for (const detectionId of detectionIds) {
+                if (!selectedObjects.has(detectionId)) {
+                    selectedObjects.add(detectionId);
+                    const saferId = detectionId.replace(/[^a-z0-9]/gi, '-');
+                    const element = document.getElementById(`object-${saferId}`);
+                    if (element) element.classList.add('selected');
+                }
+            }
+        }
+        
+        async function confirmSelectedObjects() {
+            if (selectedObjects.size === 0) {
+                alert('Please select at least one object detection');
+                return;
+            }
+            
+            if (!confirm(`Confirm ${selectedObjects.size} detection(s) as correct?\n\nThese will be kept and used for AI training.`)) {
+                return;
+            }
+            
+            // For confirmed objects, we just need to keep them - no API call needed unless you want to log confirmations
+            alert(`${selectedObjects.size} detection(s) confirmed as correct!`);
+            selectedObjects.clear();
+            loadDetectedObjects();
+        }
+        
+        async function deleteSelectedObjects() {
+            if (selectedObjects.size === 0) {
+                alert('Please select at least one object detection');
+                return;
+            }
+            
+            if (!confirm(`Delete ${selectedObjects.size} detection(s)?\n\nThese are incorrectly identified and will be removed.`)) {
+                return;
+            }
+            
+            try {
+                // Parse label:filename format and group by label
+                const byLabel = {};
+                for (const detectionId of selectedObjects) {
+                    const [label, filename] = detectionId.split(':');
+                    if (!byLabel[label]) byLabel[label] = [];
+                    byLabel[label].push(filename);
+                }
+                
+                // Delete each group
+                let deleted = 0;
+                for (const [label, filenames] of Object.entries(byLabel)) {
+                    for (const filename of filenames) {
+                        const response = await fetch('/api/detected_objects/relabel', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                old_label: label,
+                                new_label: '',
+                                filename: filename,
+                                action: 'delete'
+                            })
+                        });
+                        if (response.ok) deleted++;
+                    }
+                }
+                
+                alert(`Deleted ${deleted} detection(s)`);
+                selectedObjects.clear();
+                loadDetectedObjects();
+                
+            } catch (error) {
+                console.error('Failed to delete objects:', error);
+                alert('Failed to delete some objects');
+            }
+        }
+        
+        async function relabelSelectedObjects() {
+            if (selectedObjects.size === 0) {
+                alert('Please select at least one object detection');
+                return;
+            }
+            
+            const newLabel = prompt(`Relabel ${selectedObjects.size} detection(s)\n\nEnter the CORRECT label for these objects:`);
+            
+            if (newLabel === null || newLabel.trim() === '') {
+                return; // Cancelled or empty
+            }
+            
+            const correctedLabel = newLabel.trim().toLowerCase();
+            
+            try {
+                // Parse label:filename format and relabel each
+                const byLabel = {};
+                for (const detectionId of selectedObjects) {
+                    const [label, filename] = detectionId.split(':');
+                    if (!byLabel[label]) byLabel[label] = [];
+                    byLabel[label].push(filename);
+                }
+                
+                let relabeled = 0;
+                for (const [oldLabel, filenames] of Object.entries(byLabel)) {
+                    for (const filename of filenames) {
+                        const response = await fetch('/api/detected_objects/relabel', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                old_label: oldLabel,
+                                new_label: correctedLabel,
+                                filename: filename,
+                                action: 'relabel'
+                            })
+                        });
+                        if (response.ok) relabeled++;
+                    }
+                }
+                
+                alert(`Relabeled ${relabeled} detection(s) to "${correctedLabel}"`);
+                selectedObjects.clear();
+                loadDetectedObjects();
+                
+            } catch (error) {
+                console.error('Failed to relabel objects:', error);
+                alert('Failed to relabel some objects');
+            }
+        }
+        
         
         function startLogStream() {
             const logViewer = document.getElementById('logViewer');
