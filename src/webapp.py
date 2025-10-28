@@ -1551,6 +1551,256 @@ async def retrain_all_faces(background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# SPECIES TRAINING API ENDPOINTS
+# ============================================================================
+
+@app.get("/api/species/list")
+async def list_species():
+    """Get list of all configured species and their training status."""
+    try:
+        if not CONFIG_PATH.exists():
+            raise HTTPException(status_code=404, detail="Config file not found")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        species_config = config.get('specialized_detection', {}).get('species', [])
+        
+        # Get training data status for each species
+        training_data_path = Path("/data/training_data")
+        models_path = Path("/data/models")
+        
+        species_list = []
+        for species_cfg in species_config:
+            species_name = species_cfg['name']
+            species_dir = training_data_path / species_name.replace(" ", "_")
+            model_file = models_path / f"{species_name.replace(' ', '_')}_classifier.pt"
+            
+            # Count training images
+            train_count = 0
+            if (species_dir / "train").exists():
+                train_count = len(list((species_dir / "train").glob("*.jpg"))) + \
+                             len(list((species_dir / "train").glob("*.png")))
+            
+            species_info = {
+                "name": species_name,
+                "parent_yolo_class": species_cfg.get('parent_yolo_class', []),
+                "confidence_threshold": species_cfg.get('confidence_threshold', 0.75),
+                "has_model": model_file.exists(),
+                "training_images": train_count,
+                "model_path": str(model_file) if model_file.exists() else None
+            }
+            
+            species_list.append(species_info)
+        
+        return {"species": species_list}
+    
+    except Exception as e:
+        logger.error(f"Failed to list species: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/species/add")
+async def add_species(request: dict):
+    """Add a new species to the configuration."""
+    try:
+        species_name = request.get('name', '').strip()
+        parent_classes = request.get('parent_yolo_class', [])
+        confidence_threshold = request.get('confidence_threshold', 0.75)
+        
+        if not species_name:
+            raise HTTPException(status_code=400, detail="Species name required")
+        
+        if not parent_classes:
+            raise HTTPException(status_code=400, detail="At least one parent YOLO class required")
+        
+        # Load config
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Check if species already exists
+        species_list = config.get('specialized_detection', {}).get('species', [])
+        if any(s['name'] == species_name for s in species_list):
+            raise HTTPException(status_code=400, detail=f"Species '{species_name}' already exists")
+        
+        # Add new species
+        new_species = {
+            "name": species_name,
+            "parent_yolo_class": parent_classes,
+            "model_path": f"/data/models/{species_name.replace(' ', '_')}_classifier.pt",
+            "confidence_threshold": confidence_threshold
+        }
+        
+        if 'specialized_detection' not in config:
+            config['specialized_detection'] = {}
+        if 'species' not in config['specialized_detection']:
+            config['specialized_detection']['species'] = []
+        
+        config['specialized_detection']['species'].append(new_species)
+        
+        # Save config
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        # Create training data directory
+        training_dir = Path("/data/training_data") / species_name.replace(" ", "_") / "train"
+        training_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Added new species: {species_name}")
+        return {"status": "success", "message": f"Added species '{species_name}'"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add species: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/species/upload_training_data")
+async def upload_species_training_data(
+    species_name: str,
+    files: List[UploadFile] = File(...)
+):
+    """Upload training images for a species."""
+    try:
+        if not species_name:
+            raise HTTPException(status_code=400, detail="Species name required")
+        
+        training_dir = Path("/data/training_data") / species_name.replace(" ", "_") / "train"
+        training_dir.mkdir(parents=True, exist_ok=True)
+        
+        uploaded_count = 0
+        for file in files:
+            if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                continue
+            
+            file_path = training_dir / file.filename
+            content = await file.read()
+            file_path.write_bytes(content)
+            uploaded_count += 1
+        
+        logger.info(f"Uploaded {uploaded_count} training images for {species_name}")
+        return {
+            "status": "success",
+            "message": f"Uploaded {uploaded_count} image(s) for {species_name}"
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to upload training data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/species/train")
+async def train_species(request: dict, background_tasks: BackgroundTasks):
+    """Start training a species classifier."""
+    try:
+        species_name = request.get('species_name', '').strip()
+        
+        if not species_name:
+            raise HTTPException(status_code=400, detail="Species name required")
+        
+        # Check if training data exists
+        training_dir = Path("/data/training_data") / species_name.replace(" ", "_") / "train"
+        if not training_dir.exists():
+            raise HTTPException(status_code=404, detail=f"No training data found for {species_name}")
+        
+        image_count = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png")))
+        if image_count < 10:
+            raise HTTPException(status_code=400, 
+                              detail=f"Insufficient training images ({image_count}/10 minimum)")
+        
+        logger.info(f"Starting training for {species_name} with {image_count} images")
+        
+        def training_task():
+            try:
+                from training_manager import TrainingManager
+                from main import load_config
+                
+                config = load_config()
+                trainer = TrainingManager(config)
+                
+                result = trainer.train_species_classifier(species_name)
+                
+                if result["success"]:
+                    logger.info(f"Training complete for {species_name}: {result['best_val_acc']:.2f}% accuracy")
+                else:
+                    logger.error(f"Training failed for {species_name}: {result.get('error')}")
+            
+            except Exception as e:
+                logger.error(f"Training task failed: {e}", exc_info=True)
+        
+        background_tasks.add_task(training_task)
+        
+        return {
+            "status": "started",
+            "message": f"Training started for {species_name} with {image_count} images"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start training: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/species/training_status")
+async def get_species_training_status():
+    """Get current training status and available models."""
+    try:
+        from training_manager import TrainingManager
+        from main import load_config
+        
+        config = load_config()
+        trainer = TrainingManager(config)
+        
+        status = trainer.get_training_status()
+        return status
+    
+    except Exception as e:
+        logger.error(f"Failed to get training status: {e}")
+        return {
+            "is_training": False,
+            "current_species": None,
+            "device": "unknown",
+            "available_models": []
+        }
+
+
+@app.get("/api/species/models")
+async def list_trained_models():
+    """List all trained species models."""
+    try:
+        models_path = Path("/data/models")
+        models = []
+        
+        for model_file in models_path.glob("*_classifier.pt"):
+            species_name = model_file.stem.replace("_classifier", "").replace("_", " ")
+            metadata_file = models_path / f"{model_file.stem.replace('_classifier', '')}_metadata.json"
+            
+            model_info = {
+                "species": species_name,
+                "model_path": str(model_file),
+                "size_mb": model_file.stat().st_size / (1024 * 1024),
+                "created": datetime.fromtimestamp(model_file.stat().st_mtime).isoformat()
+            }
+            
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    model_info["accuracy"] = metadata.get("best_val_acc", 0)
+                    model_info["epochs"] = metadata.get("epochs", 0)
+                    model_info["training_time"] = metadata.get("training_time_seconds", 0)
+            
+            models.append(model_info)
+        
+        return {"models": models}
+    
+    except Exception as e:
+        logger.error(f"Failed to list models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def start_web_server(host: str = "0.0.0.0", port: int = None):
     """Start the web server."""
     if port is None:

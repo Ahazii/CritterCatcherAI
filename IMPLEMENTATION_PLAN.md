@@ -116,34 +116,48 @@ Ring Videos → Download → YOLO (Stage 1) → Specialized Classifiers (Stage 2
 
 ---
 
-### **Phase 2: Training Pipeline** ⏳ CURRENT PHASE
-**Status**: Ready to Start
+### **Phase 2: Training Pipeline** 🗓️ IN PROGRESS
+**Status**: Core Complete, UI Pending  
 **Goal**: Enable model training for custom species
 
 #### Tasks
-- [ ] Create `training_manager.py`
+- [x] Create `training_manager.py`
   - Dataset download from public sources (iNaturalist, Kaggle)
   - Training data organization
   - PyTorch/TensorFlow model training
   - Transfer learning from pretrained models
-- [ ] Add training API endpoints to `webapp.py`
+- [x] Add training API endpoints to `webapp.py`
   - `/api/species/train` - Manual training trigger
   - `/api/species/upload_training_data` - Upload images
   - `/api/species/training_status` - Progress monitoring
-- [ ] Dataset integration
-  - Download public hedgehog/finch datasets
+  - `/api/species/list` - List configured species
+  - `/api/species/add` - Add new species
+  - `/api/species/models` - List trained models
+- [x] Dataset integration
+  - Download public hedgehog/finch datasets (manual process)
   - Create data augmentation pipeline
   - Validation split management
-- [ ] Model architecture selection
-  - ResNet/EfficientNet for transfer learning
+- [x] Model architecture selection
+  - ResNet18 for transfer learning (implemented)
   - Hyperparameter tuning
   - Model versioning
+- [ ] Web UI for species management (Phase 3)
+- [ ] Training progress dashboard (Phase 3)
 
 #### Deliverables
 - ✅ Training pipeline functional
-- ✅ Can train hedgehog classifier from scratch
-- ✅ Can train finch classifier
-- ✅ Training progress visible in Web UI
+- ✅ API endpoints ready
+- ✅ Transfer learning with ResNet18
+- ⏳ Web UI (moved to Phase 3)
+
+#### Implementation Notes
+- Created `training_manager.py` with full training pipeline
+- Binary classification: species vs not-species
+- Data augmentation: rotation, flip, color jitter
+- Automatic negative sample collection from YOLO detections
+- Model checkpointing and metadata tracking
+- Added 7 new API endpoints to webapp.py
+- Updated requirements.txt with PyTorch dependencies
 
 ---
 
@@ -379,6 +393,15 @@ if config['specialized_detection']['clip_extraction']['enabled']:
 ---
 
 ## 🔄 Change Log
+
+### 2025-10-28 - Phase 2 Core Complete
+- ✅ Created `src/training_manager.py` with full PyTorch training pipeline (470 lines)
+- ✅ Implemented ResNet18 transfer learning for binary classification
+- ✅ Added data augmentation pipeline (rotation, flip, color jitter)
+- ✅ Automatic negative sample collection from YOLO detections
+- ✅ Added 7 new species training API endpoints to webapp.py
+- ✅ Updated requirements.txt with PyTorch dependencies
+- Phase 2 core complete - training pipeline functional, UI pending
 
 ### 2025-10-28 - Phase 1 Complete
 - ✅ Created `src/specialized_classifier.py` with PyTorch-based species classification

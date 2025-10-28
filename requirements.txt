@@ -6,6 +6,8 @@ oauthlib==3.2.2
 # torch and torchvision installed separately in Dockerfile (CPU version)
 # ultralytics will bring in compatible numpy, pillow, opencv versions
 ultralytics>=8.2.0
+torch>=2.0.0
+torchvision>=0.15.0
 
 # Face recognition
 face-recognition==1.3.0
