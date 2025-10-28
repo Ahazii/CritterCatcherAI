@@ -124,7 +124,7 @@ class TaxonomyTree:
         self.roots: Dict[str, TaxonomyNode] = {}
         self._node_index: Dict[str, TaxonomyNode] = {}
         
-        # Create root nodes for each YOLO class
+        # Create root nodes for each YOLO class (disabled by default)
         for yolo_class in yolo_classes:
             node = TaxonomyNode(
                 id=f"yolo_{yolo_class}",
@@ -133,7 +133,7 @@ class TaxonomyTree:
                 parent_id=None,
                 model_path=None,  # YOLO doesn't need custom model
                 confidence_threshold=0.0,  # Inherited from main config
-                enabled=True
+                enabled=False  # Default to OFF - user must enable
             )
             self.roots[node.id] = node
             self._node_index[node.id] = node
