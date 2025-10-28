@@ -1810,7 +1810,7 @@
                     
                     <div class="form-group">
                         <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="checkbox" id="autoRun" ${config.scheduler?.auto_run !== false ? 'checked' : ''} style="width: auto;" onchange="toggleIntervalDropdown()">
+                            <input type="checkbox" id="autoRun" ${config.scheduler?.auto_run === true ? 'checked' : ''} style="width: auto;" onchange="toggleIntervalDropdown()">
                             Enable Auto Run
                         </label>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
