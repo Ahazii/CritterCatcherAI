@@ -742,7 +742,8 @@
                     </select>
                     <button class="btn btn-warning" onclick="downloadAllVideos()">⬇ Download All</button>
                 </div>
-                <button class="btn btn-success" onclick="triggerProcessing()">▶ Process Now</button>
+                <button class="btn btn-success" onclick="triggerProcessing()" id="processNowBtn">▶ Process Now</button>
+                <button class="btn btn-danger" onclick="stopProcessing()" id="stopProcessingBtn" style="display: none;">⏹ Stop</button>
             </div>
         </div>
     </header>
@@ -817,7 +818,7 @@
         <!-- Review & Label Tab -->
         <div id="review" class="tab-content">
             <!-- Discoveries Section -->
-            <div class="card">
+            <div class="card" style="background: rgba(66, 153, 225, 0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <div class="card-title" style="margin-bottom: 0;">🔍 Discovered Objects <span id="discoveryBadge" class="status-badge" style="margin-left: 0.5rem; display: none;"></span></div>
                     <button class="btn btn-small" onclick="loadDiscoveries()">🔄 Refresh</button>
@@ -844,7 +845,7 @@
             </div>
             
             <!-- Detected Objects Section -->
-            <div class="card" style="margin-top: 1.5rem;">
+            <div class="card" style="margin-top: 1.5rem; background: rgba(72, 187, 120, 0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <div class="card-title" style="margin-bottom: 0;">Detected Objects</div>
                     <button class="btn btn-small" onclick="loadDetectedObjects()">🔄 Refresh</button>
@@ -1050,9 +1051,11 @@
                         Math.round((prog.videos_processed / prog.videos_total) * 100) : 0;
                     
                     // Update status badge with progress
-                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span><br>
-                        <button onclick="stopProcessing()" style="margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: var(--danger-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">⏹ Stop</button>`;
+                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span>`;
                     statusBadge.className = 'status-badge processing';
+                    
+                    // Show/hide buttons in header
+                    document.getElementById('stopProcessingBtn').style.display = 'inline-block';
                     
                     // Update detailed dashboard view
                     if (dashboardProgress) {
@@ -1077,6 +1080,7 @@
                 } else {
                     statusBadge.textContent = 'Idle';
                     statusBadge.className = 'status-badge idle';
+                    document.getElementById('stopProcessingBtn').style.display = 'none';
                     if (dashboardProgress) {
                         dashboardProgress.innerHTML = '';
                     }
@@ -1755,7 +1759,14 @@
                         `;
                     }
                     
-                    html += '</div>';
+                    html += `
+                        </div>
+                        <div class="label-controls" style="margin-top: 0.75rem; margin-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+                            <button class="btn btn-small" onclick="trackSingleDiscovery('${discovery.label}')" style="background: var(--success-color);" title="Add '${discovery.label}' to tracking list">✓ Track This</button>
+                            <button class="btn btn-small" onclick="blacklistSingleDiscovery('${discovery.label}')" style="background: var(--warning-color); color: white;" title="Blacklist '${discovery.label}'">✗ Blacklist</button>
+                            <button class="btn btn-small" onclick="relabelSingleDiscovery('${discovery.label}')" style="background: var(--danger-color);" title="Correct the label for '${discovery.label}'">🏷 Relabel</button>
+                        </div>
+                    `;
                 }
                 
 // Add action buttons
@@ -2020,7 +2031,7 @@
                             <div>
                                 <strong>${obj.label}</strong> - ${obj.count} detection(s)
                             </div>
-                            <button class="btn btn-small" onclick="selectAllObjects('${groupId}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})">Select All</button>
+                            <button class="btn btn-small" onclick="selectAllObjects('${groupId}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" title="Select all ${obj.label} detections">Select All</button>
                         </div>
                         <div class="image-grid">
                     `;
@@ -2042,7 +2053,14 @@
                         `;
                     }
                     
-                    html += '</div>';
+                    html += `
+                        </div>
+                        <div class="label-controls" style="margin-top: 0.75rem; margin-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+                            <button class="btn btn-small" onclick="confirmCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--success-color);" title="Confirm all ${obj.label} detections as correct">✓ Confirm All</button>
+                            <button class="btn btn-small" onclick="deleteCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--danger-color);" title="Delete all ${obj.label} detections">✗ Delete All</button>
+                            <button class="btn btn-small" onclick="relabelCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--warning-color); color: white;" title="Relabel all ${obj.label} detections">🏷 Relabel All</button>
+                        </div>
+                    `;
                 }
                 
                 // Add bulk action controls
@@ -2231,6 +2249,130 @@
             } catch (error) {
                 console.error('Failed to relabel objects:', error);
                 alert('Failed to relabel some objects');
+            }
+        }
+        
+        // Per-category actions for discoveries
+        async function trackSingleDiscovery(label) {
+            try {
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: [label] })
+                });
+                const data = await response.json();
+                alert(data.message);
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to track discovery:', error);
+                alert('Failed to track discovery');
+            }
+        }
+        
+        async function blacklistSingleDiscovery(label) {
+            if (!confirm(`Blacklist "${label}"?\n\nThis object won't be suggested again.`)) return;
+            try {
+                const response = await fetch('/api/discoveries/ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: [label] })
+                });
+                const data = await response.json();
+                alert(data.message);
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to blacklist discovery:', error);
+                alert('Failed to blacklist discovery');
+            }
+        }
+        
+        async function relabelSingleDiscovery(label) {
+            const newLabel = prompt(
+                `The AI thinks this is "${label}" but you disagree.\n\n` +
+                `What is the CORRECT label?`,
+                label
+            );
+            if (newLabel === null || newLabel.trim() === '' || newLabel.trim().toLowerCase() === label) return;
+            
+            try {
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        labels: [newLabel.trim().toLowerCase()],
+                        relabel_from: label
+                    })
+                });
+                const data = await response.json();
+                alert(`Corrected: "${label}" → "${newLabel.trim().toLowerCase()}"\n\n${data.message}`);
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to relabel discovery:', error);
+                alert('Failed to relabel discovery');
+            }
+        }
+        
+        // Per-category actions for detected objects
+        async function confirmCategoryObjects(label, detectionIds) {
+            if (!confirm(`Confirm all ${label} detections as correct?`)) return;
+            alert(`All ${label} detections confirmed!`);
+            loadDetectedObjects();
+        }
+        
+        async function deleteCategoryObjects(label, detectionIds) {
+            if (!confirm(`Delete all ${label} detections?\n\nThese will be marked as incorrect.`)) return;
+            
+            try {
+                let deleted = 0;
+                for (const detectionId of detectionIds) {
+                    const [lbl, filename] = detectionId.split(':');
+                    const response = await fetch('/api/detected_objects/relabel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            old_label: lbl,
+                            new_label: '',
+                            filename: filename,
+                            action: 'delete'
+                        })
+                    });
+                    if (response.ok) deleted++;
+                }
+                alert(`Deleted ${deleted} ${label} detection(s)`);
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to delete category:', error);
+                alert('Failed to delete some detections');
+            }
+        }
+        
+        async function relabelCategoryObjects(label, detectionIds) {
+            const newLabel = prompt(`Relabel all ${label} detections\n\nEnter the CORRECT label:`);
+            if (newLabel === null || newLabel.trim() === '') return;
+            
+            const correctedLabel = newLabel.trim().toLowerCase();
+            
+            try {
+                let relabeled = 0;
+                for (const detectionId of detectionIds) {
+                    const [lbl, filename] = detectionId.split(':');
+                    const response = await fetch('/api/detected_objects/relabel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            old_label: lbl,
+                            new_label: correctedLabel,
+                            filename: filename,
+                            action: 'relabel'
+                        })
+                    });
+                    if (response.ok) relabeled++;
+                }
+                alert(`Relabeled ${relabeled} ${label} detection(s) to "${correctedLabel}"`);
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to relabel category:', error);
+                alert('Failed to relabel some detections');
             }
         }
         
