@@ -726,6 +726,11 @@
             </div>
             <div class="header-actions">
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
+                <select id="refreshRate" class="form-select" onchange="updateRefreshRate()" title="Status refresh rate">
+                    <option value="2000">Refresh: 2s</option>
+                    <option value="5000" selected>Refresh: 5s</option>
+                    <option value="10000">Refresh: 10s</option>
+                </select>
                 <div class="download-controls">
                     <select id="timeRange" class="form-select">
                         <option value="1hour">Last Hour</option>
@@ -791,6 +796,7 @@
 
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab-content active">
+            <div id="dashboardProgress"></div>
             <div class="card">
                 <div class="card-title">Video Statistics by Category</div>
                 <div id="statsChart"></div>
@@ -1010,24 +1016,102 @@
         }
 
         // API Calls
+        let refreshInterval = null;
+        let currentRefreshRate = 5000;
+        
+        function updateRefreshRate() {
+            const select = document.getElementById('refreshRate');
+            currentRefreshRate = parseInt(select.value);
+            
+            // Restart interval with new rate
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = setInterval(() => {
+                    fetchStatus();
+                    fetchStats();
+                    if (currentTab === 'videos') {
+                        loadVideos();
+                    }
+                }, currentRefreshRate);
+            }
+        }
+        
         async function fetchStatus() {
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
                 
                 const statusBadge = document.getElementById('statusBadge');
-                if (data.is_processing) {
-                    statusBadge.textContent = 'Processing';
+                const dashboardProgress = document.getElementById('dashboardProgress');
+                
+                if (data.is_processing && data.processing_progress) {
+                    const prog = data.processing_progress;
+                    const percent = prog.videos_total > 0 ? 
+                        Math.round((prog.videos_processed / prog.videos_total) * 100) : 0;
+                    
+                    // Update status badge with progress
+                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span><br>
+                        <button onclick="stopProcessing()" style="margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: var(--danger-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">⏹ Stop</button>`;
                     statusBadge.className = 'status-badge processing';
+                    
+                    // Update detailed dashboard view
+                    if (dashboardProgress) {
+                        const elapsed = prog.time_elapsed ? formatTime(prog.time_elapsed) : '0s';
+                        const remaining = prog.time_remaining ? formatTime(prog.time_remaining) : '---';
+                        
+                        dashboardProgress.innerHTML = `
+                            <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem;">
+                                <div style="margin-bottom: 0.5rem;"><strong>Current Video:</strong> ${prog.current_video || 'Starting...'}</div>
+                                <div style="margin-bottom: 0.5rem;"><strong>Operation:</strong> ${prog.current_step || 'Initializing...'}</div>
+                                <div style="margin-bottom: 0.5rem;"><strong>Progress:</strong> ${prog.videos_processed}/${prog.videos_total} videos (${percent}%)</div>
+                                <div style="background: var(--bg-card); border-radius: 4px; height: 20px; overflow: hidden; margin-bottom: 0.5rem;">
+                                    <div style="background: var(--accent-color); height: 100%; width: ${percent}%; transition: width 0.3s ease;"></div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.875rem; color: var(--text-secondary);">
+                                    <span>⏱ Elapsed: ${elapsed}</span>
+                                    <span>⏳ Est. Remaining: ${remaining}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
                 } else {
                     statusBadge.textContent = 'Idle';
                     statusBadge.className = 'status-badge idle';
+                    if (dashboardProgress) {
+                        dashboardProgress.innerHTML = '';
+                    }
                 }
                 
                 document.getElementById('lastRun').textContent = data.last_run ? 
                     new Date(data.last_run).toLocaleString() : 'Never';
             } catch (error) {
                 console.error('Failed to fetch status:', error);
+            }
+        }
+        
+        function formatTime(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            if (mins < 60) return `${mins}m ${secs}s`;
+            const hours = Math.floor(mins / 60);
+            const remainMins = mins % 60;
+            return `${hours}h ${remainMins}m`;
+        }
+        
+        async function stopProcessing() {
+            if (!confirm('Stop processing?\n\nWill finish current video and stop gracefully.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/stop', { method: 'POST' });
+                const data = await response.json();
+                alert(data.message);
+                fetchStatus();
+            } catch (error) {
+                console.error('Failed to stop processing:', error);
+                alert('Failed to stop processing');
             }
         }
 
@@ -2254,14 +2338,14 @@
             fetchStats();
             checkForUpdates();
             
-            // Auto-refresh
-            setInterval(() => {
+            // Auto-refresh with configurable rate
+            refreshInterval = setInterval(() => {
                 fetchStatus();
                 fetchStats();
                 if (currentTab === 'videos') {
                     loadVideos();
                 }
-            }, 5000);
+            }, currentRefreshRate);
         });
     </script>
 </body>
