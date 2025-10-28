@@ -610,6 +610,142 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
     return {"status": "started", "message": f"Downloading {time_desc}..."}
 
 
+@app.post("/api/cleanup-downloads")
+async def cleanup_downloads(background_tasks: BackgroundTasks):
+    """Process all videos in downloads folder regardless of age."""
+    logger.info("=" * 80)
+    logger.info("CLEANUP DOWNLOADS TRIGGERED VIA WEB UI")
+    logger.info("=" * 80)
+    
+    if app_state["is_processing"]:
+        logger.warning("Processing already running, rejecting cleanup request")
+        return {"status": "already_running", "message": "A task is already in progress"}
+    
+    def cleanup_task():
+        app_state["is_processing"] = True
+        app_state["stop_requested"] = False
+        app_state["processing_progress"] = {
+            "current_video": None,
+            "current_step": "Starting cleanup...",
+            "videos_processed": 0,
+            "videos_total": 0,
+            "start_time": datetime.now()
+        }
+        
+        try:
+            logger.info("Starting cleanup task - processing ALL videos in downloads folder...")
+            from main import load_config
+            from object_detector import ObjectDetector
+            from face_recognizer import FaceRecognizer
+            from video_sorter import VideoSorter
+            
+            config = load_config()
+            detection_config = config.get('detection', {})
+            
+            # Get all video files in downloads
+            downloads_path = Path("/data/downloads")
+            video_files = list(downloads_path.glob("*.mp4"))
+            
+            logger.info(f"Found {len(video_files)} videos in downloads folder")
+            
+            if not video_files:
+                logger.info("No videos to process")
+                return
+            
+            # Update progress total
+            app_state["processing_progress"]["videos_total"] = len(video_files)
+            
+            # Initialize components
+            video_sorter = VideoSorter("/data/sorted")
+            
+            object_labels = detection_config.get('object_labels', [])
+            discovery_mode = detection_config.get('discovery_mode', False)
+            discovery_threshold = detection_config.get('discovery_threshold', 0.30)
+            ignored_labels = detection_config.get('ignored_labels', [])
+            yolo_model = detection_config.get('yolo_model', 'yolov8n')
+            
+            if not yolo_model.endswith('.pt'):
+                yolo_model = f"{yolo_model}.pt"
+            
+            object_detector = ObjectDetector(
+                labels=object_labels,
+                confidence_threshold=detection_config.get('confidence_threshold', 0.25),
+                num_frames=detection_config.get('object_frames', 5),
+                discovery_mode=discovery_mode,
+                discovery_threshold=discovery_threshold,
+                ignored_labels=ignored_labels,
+                model_name=yolo_model
+            )
+            
+            face_recognizer = FaceRecognizer(
+                encodings_path=config.get('paths', {}).get('face_encodings', '/data/faces/encodings.pkl'),
+                tolerance=detection_config.get('face_tolerance', 0.6),
+                num_frames=detection_config.get('face_frames', 10),
+                model=detection_config.get('face_model', 'hog')
+            )
+            
+            # Process each video
+            for idx, video_path in enumerate(video_files, 1):
+                # Check stop flag
+                if app_state.get("stop_requested", False):
+                    logger.info("Stop requested - ending cleanup gracefully")
+                    break
+                
+                try:
+                    # Check if video still exists
+                    if not video_path.exists():
+                        logger.debug(f"Skipping {video_path.name}: already processed")
+                        continue
+                    
+                    # Update progress
+                    app_state["processing_progress"]["current_video"] = video_path.name
+                    app_state["processing_progress"]["videos_processed"] = idx
+                    app_state["processing_progress"]["current_step"] = "Running YOLO detection..."
+                    
+                    logger.info(f"Processing video: {video_path.name}")
+                    
+                    # Run object detection
+                    detected_objects = object_detector.detect_objects_in_video(video_path)
+                    
+                    # Update progress
+                    app_state["processing_progress"]["current_step"] = "Recognizing faces..."
+                    
+                    # Run face recognition
+                    recognized_people = face_recognizer.recognize_faces_in_video(video_path)
+                    
+                    # Update progress
+                    app_state["processing_progress"]["current_step"] = "Sorting video..."
+                    
+                    # Sort video
+                    priority = detection_config.get('priority', 'people')
+                    sorted_path = video_sorter.sort_video(
+                        video_path,
+                        detected_objects=detected_objects,
+                        recognized_people=recognized_people,
+                        priority=priority
+                    )
+                    
+                    logger.info(f"Video processed and sorted to: {sorted_path}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to process video {video_path.name}: {e}", exc_info=True)
+            
+            # Log statistics
+            stats = video_sorter.get_stats()
+            logger.info(f"Cleanup complete. Sorting statistics: {stats}")
+            app_state["last_run"] = datetime.now().isoformat()
+            
+        except Exception as e:
+            logger.error(f"Cleanup task failed: {e}", exc_info=True)
+        finally:
+            app_state["is_processing"] = False
+            app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
+    
+    background_tasks.add_task(cleanup_task)
+    logger.info("Cleanup task added to background queue")
+    return {"status": "started", "message": f"Processing all videos in downloads folder..."}
+
+
 @app.get("/api/logs/stream")
 async def stream_logs():
     """Stream logs - Note: Real-time streaming not available from inside container."""

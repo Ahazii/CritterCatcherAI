@@ -1011,14 +1011,24 @@
             </div>
         </div>
         
-        <!-- Reprocess Button -->
-        <div style="margin-top: 1rem; text-align: center;">
-            <button class="btn" onclick="reprocessAllVideos()" style="background: var(--warning-color); padding: 0.75rem 2rem;">
-                🔄 Reprocess All Videos
-            </button>
-            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                Move all videos back to downloads and reanalyze with current settings
-            </p>
+        <!-- Reprocess & Cleanup Buttons -->
+        <div style="margin-top: 1rem; text-align: center; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <div style="flex: 0 1 auto;">
+                <button class="btn" onclick="cleanupDownloads()" style="background: var(--accent-color); padding: 0.75rem 2rem;">
+                    🧹 Cleanup Downloads
+                </button>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem; max-width: 300px;">
+                    Process ALL videos in downloads folder (ignores age)
+                </p>
+            </div>
+            <div style="flex: 0 1 auto;">
+                <button class="btn" onclick="reprocessAllVideos()" style="background: var(--warning-color); padding: 0.75rem 2rem;">
+                    🔄 Reprocess All Videos
+                </button>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem; max-width: 300px;">
+                    Move all videos back to downloads and reanalyze with current settings
+                </p>
+            </div>
         </div>
 
         <!-- Tabs -->
@@ -2141,8 +2151,24 @@
             }
         }
         
+        async function cleanupDownloads() {
+            if (!confirm('Cleanup Downloads Folder?\\n\\nThis will process ALL videos currently in the downloads folder, regardless of age.\\n\\nVideos will be sorted based on current detection settings.\\n\\nContinue?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/cleanup-downloads', { method: 'POST' });
+                const data = await response.json();
+                alert(data.message);
+                fetchStatus();
+            } catch (error) {
+                console.error('Failed to trigger cleanup:', error);
+                alert('Failed to start cleanup');
+            }
+        }
+
         async function reprocessAllVideos() {
-            if (!confirm('Reprocess ALL videos?\n\nThis will:\n- Move all sorted videos back to downloads\n- Delete sorted directories\n- Reanalyze with current settings\n\nThis may take a while. Continue?')) {
+            if (!confirm('Reprocess ALL videos?\\n\\nThis will:\\n- Move all sorted videos back to downloads\\n- Delete sorted directories\\n- Reanalyze with current settings\\n\\nThis may take a while. Continue?')) {
                 return;
             }
             
