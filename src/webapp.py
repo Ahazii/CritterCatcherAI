@@ -1276,11 +1276,11 @@ async def remove_from_blacklist(request: dict):
 
 
 @app.post("/api/reprocess")
-async def reprocess_all_videos(background_tasks: BackgroundTasks):
-    """Move all sorted videos back to downloads and trigger reprocessing."""
+async def return_videos_to_downloads(background_tasks: BackgroundTasks):
+    """Move all sorted videos back to downloads folder (does not trigger processing)."""
     try:
         if app_state["is_processing"]:
-            return {"status": "already_running", "message": "Processing is already in progress"}
+            return {"status": "already_running", "message": "A task is already in progress"}
         
         if not SORTED_PATH.exists():
             return {"status": "no_videos", "message": "No sorted videos found"}
@@ -1293,9 +1293,9 @@ async def reprocess_all_videos(background_tasks: BackgroundTasks):
         if video_count == 0:
             return {"status": "no_videos", "message": "No videos found in sorted directories"}
         
-        logger.info(f"Reprocessing: moving {video_count} videos back to downloads")
+        logger.info(f"Returning {video_count} videos back to downloads")
         
-        def reprocess_task():
+        def return_task():
             app_state["is_processing"] = True
             try:
                 import shutil
@@ -1333,27 +1333,22 @@ async def reprocess_all_videos(background_tasks: BackgroundTasks):
                             shutil.rmtree(item)
                     logger.info("Deleted sorted directories")
                 
-                # Trigger processing
-                from main import process_videos, load_config
-                config = load_config()
-                logger.info("Starting reprocessing...")
-                process_videos(config)
-                logger.info("Reprocessing complete")
+                logger.info("Videos returned to downloads. Use 'Cleanup Downloads' or 'Process Now' to reprocess them.")
                 
             except Exception as e:
-                logger.error(f"Reprocessing failed: {e}", exc_info=True)
+                logger.error(f"Failed to return videos to downloads: {e}", exc_info=True)
             finally:
                 app_state["is_processing"] = False
         
-        background_tasks.add_task(reprocess_task)
+        background_tasks.add_task(return_task)
         
         return {
             "status": "started",
-            "message": f"Reprocessing {video_count} videos..."
+            "message": f"Moving {video_count} videos back to downloads..."
         }
     
     except Exception as e:
-        logger.error(f"Failed to start reprocessing: {e}")
+        logger.error(f"Failed to return videos to downloads: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

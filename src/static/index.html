@@ -1022,11 +1022,11 @@
                 </p>
             </div>
             <div style="flex: 0 1 auto;">
-                <button class="btn" onclick="reprocessAllVideos()" style="background: var(--warning-color); padding: 0.75rem 2rem;">
-                    🔄 Reprocess All Videos
+                <button class="btn" onclick="returnVideosToDownloads()" style="background: var(--warning-color); padding: 0.75rem 2rem;">
+                    ↩️ Return Vids to Downloads
                 </button>
                 <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem; max-width: 300px;">
-                    Move all videos back to downloads and reanalyze with current settings
+                    Move all sorted videos back to downloads folder (does not auto-process)
                 </p>
             </div>
         </div>
@@ -2167,8 +2167,8 @@
             }
         }
 
-        async function reprocessAllVideos() {
-            if (!confirm('Reprocess ALL videos?\\n\\nThis will:\\n- Move all sorted videos back to downloads\\n- Delete sorted directories\\n- Reanalyze with current settings\\n\\nThis may take a while. Continue?')) {
+        async function returnVideosToDownloads() {
+            if (!confirm('Return all videos to downloads?\\n\\nThis will:\\n- Move all sorted videos back to downloads\\n- Delete sorted directories\\n- NOT trigger automatic processing\\n\\nUse "Cleanup Downloads" or "Process Now" afterwards to reprocess them.\\n\\nContinue?')) {
                 return;
             }
             
@@ -2178,8 +2178,8 @@
                 alert(data.message);
                 fetchStatus();
             } catch (error) {
-                console.error('Failed to trigger reprocessing:', error);
-                alert('Failed to start reprocessing');
+                console.error('Failed to return videos:', error);
+                alert('Failed to return videos to downloads');
             }
         }
 
