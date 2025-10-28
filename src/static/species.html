@@ -1037,40 +1037,34 @@
             }
         }
 
-        function openAddSpeciesModal() {
-            selectedParentClasses = [];
-            updateDisplayTags();
-            renderMultiSelectOptions();
-            document.getElementById('validationWarning').innerHTML = '';
-            document.getElementById('addSpeciesModal').classList.add('active');
-        }
-
         function closeAddSpeciesModal() {
             document.getElementById('addSpeciesModal').classList.remove('active');
             document.getElementById('addSpeciesForm').reset();
-            selectedParentClasses = [];
-            updateDisplayTags();
-            document.getElementById('validationWarning').innerHTML = '';
+            document.getElementById('modalBreadcrumb').innerHTML = '';
+            currentNodeId = null;
         }
 
         async function addSpecies(event) {
             event.preventDefault();
             
             const name = document.getElementById('speciesName').value.trim();
+            const parentId = document.getElementById('parentNodeId').value;
+            const level = document.getElementById('taxonomyLevel').value;
             const threshold = parseFloat(document.getElementById('confidenceThreshold').value);
             
-            if (selectedParentClasses.length === 0) {
-                showAlert('Please select at least one parent YOLO class', 'error');
+            if (!name || !parentId) {
+                showAlert('Species name and parent are required', 'error');
                 return;
             }
             
             try {
-                const response = await fetch('/api/species/add', {
+                const response = await fetch('/api/taxonomy/node', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         name: name,
-                        parent_yolo_class: selectedParentClasses,
+                        parent_id: parentId,
+                        level: level,
                         confidence_threshold: threshold
                     })
                 });
@@ -1078,27 +1072,25 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    let alertMessage = `Species "${name}" added successfully!`;
-                    
-                    // Show warning if backend returned missing labels warning
-                    if (data.warning) {
-                        alertMessage += ` Warning: ${data.warning.message}`;
-                    }
-                    
-                    showAlert(alertMessage, data.warning ? 'error' : 'success');
+                    showAlert(`Added ${level} "${name}" to taxonomy tree!`, 'success');
                     closeAddSpeciesModal();
-                    loadSpecies();
+                    loadTaxonomyTree();
                 } else {
-                    showAlert('Failed to add species: ' + data.detail, 'error');
+                    showAlert('Failed to add node: ' + data.detail, 'error');
                 }
             } catch (error) {
-                showAlert('Failed to add species: ' + error.message, 'error');
+                showAlert('Failed to add node: ' + error.message, 'error');
             }
         }
 
-        function openUploadModal(speciesName) {
-            currentSpecies = speciesName;
-            document.getElementById('uploadSpeciesName').textContent = speciesName;
+        function openUploadModalForNode(nodeId, event) {
+            event.stopPropagation();
+            const node = findNodeById(taxonomyTree.roots, nodeId);
+            if (!node) return;
+            
+            currentNodeId = nodeId;
+            const path = getNodePath(node);
+            document.getElementById('uploadSpeciesName').textContent = path.join(' > ');
             document.getElementById('uploadModal').classList.add('active');
             selectedFiles = [];
             document.getElementById('fileList').innerHTML = '';
@@ -1106,7 +1098,7 @@
 
         function closeUploadModal() {
             document.getElementById('uploadModal').classList.remove('active');
-            currentSpecies = null;
+            currentNodeId = null;
             selectedFiles = [];
         }
 
@@ -1122,11 +1114,16 @@
                 return;
             }
             
+            if (!currentNodeId) {
+                showAlert('Node ID not found', 'error');
+                return;
+            }
+            
             const formData = new FormData();
             selectedFiles.forEach(file => formData.append('files', file));
             
             try {
-                const response = await fetch(`/api/species/upload_training_data?species_name=${encodeURIComponent(currentSpecies)}`, {
+                const response = await fetch(`/api/taxonomy/node/${encodeURIComponent(currentNodeId)}/upload_training_data`, {
                     method: 'POST',
                     body: formData
                 });
@@ -1136,7 +1133,7 @@
                 if (response.ok) {
                     showAlert(data.message, 'success');
                     closeUploadModal();
-                    loadSpecies();
+                    loadTaxonomyTree();
                 } else {
                     showAlert('Upload failed: ' + data.detail, 'error');
                 }
@@ -1145,28 +1142,64 @@
             }
         }
 
-        async function trainSpecies(speciesName) {
-            if (!confirm(`Start training for ${speciesName}? This may take 30-60 minutes.`)) {
+        async function trainNode(nodeId, event) {
+            event.stopPropagation();
+            const node = findNodeById(taxonomyTree.roots, nodeId);
+            if (!node) return;
+            
+            const path = getNodePath(node).join('/');
+            
+            if (!confirm(`Start training for ${path}? This may take 30-60 minutes.`)) {
                 return;
             }
             
             try {
+                // Use the node path as species_name for training
                 const response = await fetch('/api/species/train', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({species_name: speciesName})
+                    body: JSON.stringify({species_name: path})
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(`Training started for ${speciesName}`, 'success');
+                    showAlert(`Training started for ${path}`, 'success');
                     loadTrainingStatus();
                 } else {
                     showAlert('Training failed: ' + data.detail, 'error');
                 }
             } catch (error) {
                 showAlert('Training failed: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteNode(nodeId, event) {
+            event.stopPropagation();
+            const node = findNodeById(taxonomyTree.roots, nodeId);
+            if (!node) return;
+            
+            const path = getNodePath(node).join(' > ');
+            
+            if (!confirm(`Delete "${path}" and all its children?\n\nThis will remove the taxonomy node but NOT delete training data or models.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/taxonomy/node/${encodeURIComponent(nodeId)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(data.message, 'success');
+                    loadTaxonomyTree();
+                } else {
+                    showAlert('Delete failed: ' + data.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Delete failed: ' + error.message, 'error');
             }
         }
 
