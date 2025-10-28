@@ -147,6 +147,9 @@ class ObjectDetector:
         detections = {}
         discovered = {}  # New discoveries
         
+        # Create a copy of frame for drawing bounding boxes
+        annotated_frame = frame.copy()
+        
         for result in results:
             boxes = result.boxes
             for box in boxes:
@@ -155,16 +158,43 @@ class ObjectDetector:
                 confidence = float(box.conf[0])
                 label = result.names[class_id].lower()
                 
+                # Get bounding box coordinates (xyxy format)
+                bbox = box.xyxy[0].cpu().numpy()  # [x1, y1, x2, y2]
+                x1, y1, x2, y2 = map(int, bbox)
+                
                 # Determine if this is a focused or discovery label
                 is_focused = label in self.labels
                 is_discovery = label not in self.labels and label not in self.ignored_labels and self.discovery_mode
                 
+                # Draw bounding box on the annotated frame
+                if confidence > 0.01:  # Only draw if we're going to save it
+                    # Choose color: green for focused, yellow for discoveries, gray for ignored
+                    if is_focused:
+                        color = (0, 255, 0)  # Green
+                    elif is_discovery:
+                        color = (255, 255, 0)  # Yellow
+                    else:
+                        color = (128, 128, 128)  # Gray
+                    
+                    # Draw rectangle
+                    cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+                    
+                    # Draw label background
+                    label_text = f"{label} {confidence:.2f}"
+                    (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
+                    
+                    # Draw label text
+                    cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+                
                 # Save detections if enabled
                 if save_detections and confidence > 0.01:
                     self._save_detected_object(
-                        frame, label, confidence,
+                        annotated_frame, label, confidence,
                         video_name, frame_idx,
-                        is_discovery=is_discovery
+                        is_discovery=is_discovery,
+                        bbox=(x1, y1, x2, y2)
                     )
                 
                 # Process focused labels - keep highest confidence
@@ -263,7 +293,8 @@ class ObjectDetector:
             return "unknown"
     
     def _save_detected_object(self, frame: np.ndarray, label: str, confidence: float,
-                             video_name: str, frame_idx: int, is_discovery: bool = False) -> bool:
+                             video_name: str, frame_idx: int, is_discovery: bool = False,
+                             bbox: tuple = None) -> bool:
         """
         Save a detected object image and metadata.
         
@@ -301,7 +332,8 @@ class ObjectDetector:
                 "label": label,
                 "confidence": confidence,
                 "timestamp": timestamp,
-                "is_discovery": is_discovery
+                "is_discovery": is_discovery,
+                "bbox": {"x1": bbox[0], "y1": bbox[1], "x2": bbox[2], "y2": bbox[3]} if bbox else None
             }
             
             metadata_path = label_dir / f"{filename}.json"
