@@ -2032,10 +2032,14 @@ async def delete_taxonomy_node(node_id: str):
         if taxonomy_tree is None:
             raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
         
+        logger.info(f"Delete request for node: {node_id}")
+        logger.info(f"Available nodes: {list(taxonomy_tree._node_index.keys())}")
+        
         # Get node info before deletion
         node = taxonomy_tree.get_node(node_id)
         if not node:
-            raise HTTPException(status_code=404, detail="Node not found")
+            logger.error(f"Node '{node_id}' not found in tree. Available: {list(taxonomy_tree._node_index.keys())}")
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
         
         node_name = node.name
         
@@ -2043,12 +2047,13 @@ async def delete_taxonomy_node(node_id: str):
         success = taxonomy_tree.remove_node(node_id)
         
         if not success:
+            logger.error(f"Failed to remove node '{node_id}'. Is YOLO root: {node_id.startswith('yolo_')}")
             raise HTTPException(status_code=400, detail="Cannot remove YOLO root nodes or node not found")
         
         # Save updated tree
         taxonomy_tree.save_to_file(TAXONOMY_FILE)
         
-        logger.info(f"Removed taxonomy node: {node_name} ({node_id})")
+        logger.info(f"Successfully removed taxonomy node: {node_name} ({node_id})")
         
         return {
             "status": "success",
@@ -2058,7 +2063,7 @@ async def delete_taxonomy_node(node_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to delete taxonomy node: {e}")
+        logger.error(f"Failed to delete taxonomy node: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
