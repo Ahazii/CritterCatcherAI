@@ -1273,6 +1273,284 @@ async def check_update():
         }
 
 
+@app.get("/api/analytics/stats")
+async def get_analytics_stats():
+    """Get comprehensive analytics statistics."""
+    try:
+        stats = {
+            "total_videos": 0,
+            "total_detections": 0,
+            "categories": {},
+            "daily_stats": [],
+            "top_detections": [],
+            "face_recognition_stats": {}
+        }
+        
+        # Count videos by category
+        if SORTED_PATH.exists():
+            for category_dir in SORTED_PATH.iterdir():
+                if category_dir.is_dir():
+                    if category_dir.name == "people":
+                        for person_dir in category_dir.iterdir():
+                            if person_dir.is_dir():
+                                video_count = len(list(person_dir.glob("*.mp4")))
+                                stats["categories"][f"people/{person_dir.name}"] = video_count
+                                stats["total_videos"] += video_count
+                    else:
+                        video_count = len(list(category_dir.glob("*.mp4")))
+                        stats["categories"][category_dir.name] = video_count
+                        stats["total_videos"] += video_count
+        
+        # Count detections
+        if DETECTED_OBJECTS_PATH.exists():
+            for label_dir in DETECTED_OBJECTS_PATH.iterdir():
+                if label_dir.is_dir():
+                    count = len(list(label_dir.glob("*.jpg")))
+                    stats["total_detections"] += count
+        
+        # Top detections
+        sorted_categories = sorted(stats["categories"].items(), key=lambda x: x[1], reverse=True)
+        stats["top_detections"] = [{"label": k, "count": v} for k, v in sorted_categories[:10]]
+        
+        # Face recognition stats
+        if FACE_TRAINING_PATH.exists():
+            for person_dir in FACE_TRAINING_PATH.iterdir():
+                if person_dir.is_dir():
+                    image_count = len(list(person_dir.glob("*.jpg"))) + len(list(person_dir.glob("*.png")))
+                    stats["face_recognition_stats"][person_dir.name] = {
+                        "training_images": image_count,
+                        "videos": stats["categories"].get(f"people/{person_dir.name}", 0)
+                    }
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get analytics stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analytics/timeline")
+async def get_analytics_timeline(days: int = 30):
+    """Get timeline data for analytics charts."""
+    try:
+        from datetime import timedelta
+        
+        timeline = []
+        now = datetime.now()
+        
+        # Generate daily stats for the last N days
+        for i in range(days, -1, -1):
+            date = now - timedelta(days=i)
+            date_str = date.strftime("%Y-%m-%d")
+            
+            day_stats = {
+                "date": date_str,
+                "videos": 0,
+                "detections": 0,
+                "categories": {}
+            }
+            
+            # Count videos for this day
+            if SORTED_PATH.exists():
+                for video_file in SORTED_PATH.rglob("*.mp4"):
+                    file_date = datetime.fromtimestamp(video_file.stat().st_mtime)
+                    if file_date.strftime("%Y-%m-%d") == date_str:
+                        day_stats["videos"] += 1
+            
+            timeline.append(day_stats)
+        
+        return {"timeline": timeline}
+    except Exception as e:
+        logger.error(f"Failed to get timeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/metrics")
+async def get_metrics():
+    """Get system metrics."""
+    try:
+        import psutil
+        from pathlib import Path
+        
+        metrics = {
+            "processing": {
+                "is_active": app_state["is_processing"],
+                "last_run": app_state["last_run"],
+                "videos_processed": app_state["processing_progress"]["videos_processed"],
+                "videos_total": app_state["processing_progress"]["videos_total"]
+            },
+            "storage": {
+                "downloads": 0,
+                "sorted": 0,
+                "faces": 0,
+                "objects": 0
+            },
+            "system": {
+                "cpu_percent": psutil.cpu_percent(interval=1),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage('/data').percent if Path('/data').exists() else 0
+            }
+        }
+        
+        # Calculate storage sizes
+        def get_dir_size(path: Path) -> int:
+            total = 0
+            if path.exists():
+                for item in path.rglob('*'):
+                    if item.is_file():
+                        total += item.stat().st_size
+            return total
+        
+        metrics["storage"]["downloads"] = get_dir_size(DOWNLOADS_PATH) // (1024 * 1024)  # MB
+        metrics["storage"]["sorted"] = get_dir_size(SORTED_PATH) // (1024 * 1024)
+        metrics["storage"]["faces"] = get_dir_size(FACE_TRAINING_PATH) // (1024 * 1024)
+        metrics["storage"]["objects"] = get_dir_size(DETECTED_OBJECTS_PATH) // (1024 * 1024)
+        
+        return metrics
+    except Exception as e:
+        logger.error(f"Failed to get metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/export/detections")
+async def export_detections(format: str = "json"):
+    """Export detection data in JSON or CSV format."""
+    try:
+        detections = []
+        
+        # Collect all detection data
+        if DETECTED_OBJECTS_PATH.exists():
+            for label_dir in DETECTED_OBJECTS_PATH.iterdir():
+                if label_dir.is_dir():
+                    for img_file in label_dir.glob("*.jpg"):
+                        metadata_file = label_dir / f"{img_file.name}.json"
+                        if metadata_file.exists():
+                            with open(metadata_file, 'r') as f:
+                                metadata = json.load(f)
+                                detections.append({
+                                    "label": metadata.get('label', label_dir.name),
+                                    "confidence": metadata.get('confidence', 0),
+                                    "filename": metadata.get('filename', ''),
+                                    "timestamp": metadata.get('timestamp', ''),
+                                    "video": metadata.get('video', '')
+                                })
+        
+        if format == "csv":
+            import csv
+            import io
+            
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=["label", "confidence", "filename", "timestamp", "video"])
+            writer.writeheader()
+            writer.writerows(detections)
+            
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=detections.csv"}
+            )
+        else:
+            # JSON format
+            return JSONResponse(content={"detections": detections})
+    
+    except Exception as e:
+        logger.error(f"Failed to export detections: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/export/analytics")
+async def export_analytics(format: str = "json"):
+    """Export analytics data."""
+    try:
+        # Get comprehensive stats
+        stats_response = await get_analytics_stats()
+        
+        if format == "csv":
+            import csv
+            import io
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Category", "Count"])
+            
+            for category, count in stats_response["categories"].items():
+                writer.writerow([category, count])
+            
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=analytics.csv"}
+            )
+        else:
+            return JSONResponse(content=stats_response)
+    
+    except Exception as e:
+        logger.error(f"Failed to export analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/faces/{person_name}")
+async def delete_person(person_name: str):
+    """Delete a person's training data."""
+    try:
+        person_dir = FACE_TRAINING_PATH / person_name
+        if not person_dir.exists():
+            raise HTTPException(status_code=404, detail="Person not found")
+        
+        import shutil
+        shutil.rmtree(person_dir)
+        
+        logger.info(f"Deleted training data for {person_name}")
+        return {"status": "success", "message": f"Deleted {person_name}"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete person: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/faces/retrain_all")
+async def retrain_all_faces(background_tasks: BackgroundTasks):
+    """Retrain all face recognition models."""
+    try:
+        if not FACE_TRAINING_PATH.exists():
+            raise HTTPException(status_code=404, detail="No training data found")
+        
+        people = [d.name for d in FACE_TRAINING_PATH.iterdir() if d.is_dir()]
+        
+        if not people:
+            raise HTTPException(status_code=404, detail="No people to train")
+        
+        def retrain_task():
+            try:
+                from face_recognizer import FaceRecognizer
+                fr = FaceRecognizer()
+                
+                for person in people:
+                    person_dir = FACE_TRAINING_PATH / person
+                    images = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+                    if images:
+                        fr.add_person(person, images)
+                        logger.info(f"Retrained {person} with {len(images)} images")
+                
+                logger.info(f"Completed retraining for {len(people)} people")
+            except Exception as e:
+                logger.error(f"Retraining failed: {e}")
+        
+        background_tasks.add_task(retrain_task)
+        
+        return {
+            "status": "success",
+            "message": f"Started retraining for {len(people)} people"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start retraining: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def start_web_server(host: str = "0.0.0.0", port: int = None):
     """Start the web server."""
     if port is None:

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CritterCatcherAI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg-primary: #ffffff;
@@ -919,6 +920,8 @@
         <!-- Tabs -->
         <div class="tabs">
             <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+            <button class="tab" onclick="switchTab('analytics')">📈 Analytics</button>
+            <button class="tab" onclick="switchTab('metrics')">📊 Metrics</button>
             <button class="tab" onclick="switchTab('videos')">🎥 Videos</button>
             <button class="tab" onclick="switchTab('review')">🏷️ Review & Label</button>
             <button class="tab" onclick="switchTab('ring')">🔔 Ring Setup</button>
@@ -933,6 +936,91 @@
             <div class="card">
                 <div class="card-title">Video Statistics by Category</div>
                 <div id="statsChart"></div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics" class="tab-content">
+            <div class="dashboard-grid">
+                <div class="card stat-card">
+                    <div class="stat-label">Total Videos</div>
+                    <div class="stat-value" id="analyticsVideos">0</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Total Detections</div>
+                    <div class="stat-value" id="analyticsDetections">0</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Unique Categories</div>
+                    <div class="stat-value" id="analyticsCategories">0</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Trained Faces</div>
+                    <div class="stat-value" id="analyticsTrainedFaces">0</div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;">
+                <button class="btn" onclick="exportData('detections', 'json')" style="background: var(--success-color);">📥 Export Detections (JSON)</button>
+                <button class="btn" onclick="exportData('detections', 'csv')" style="background: var(--success-color);">📥 Export Detections (CSV)</button>
+                <button class="btn" onclick="exportData('analytics', 'json')" style="background: var(--accent-color);">📥 Export Analytics (JSON)</button>
+                <button class="btn" onclick="exportData('analytics', 'csv')" style="background: var(--accent-color);">📥 Export Analytics (CSV)</button>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Detection Statistics</div>
+                <canvas id="analyticsChart" style="max-height: 400px;"></canvas>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Timeline (Last 30 Days)</div>
+                <canvas id="timelineChart" style="max-height: 300px;"></canvas>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Top 10 Detections</div>
+                <div id="topDetections"></div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Face Recognition Statistics</div>
+                <div id="faceRecognitionStats"></div>
+            </div>
+        </div>
+
+        <!-- Metrics Tab -->
+        <div id="metrics" class="tab-content">
+            <div class="dashboard-grid">
+                <div class="card stat-card">
+                    <div class="stat-label">CPU Usage</div>
+                    <div class="stat-value" id="metricsCPU">0%</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Memory Usage</div>
+                    <div class="stat-value" id="metricsMemory">0%</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Disk Usage</div>
+                    <div class="stat-value" id="metricsDisk">0%</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-label">Processing Status</div>
+                    <div class="stat-value" style="font-size: 1rem;" id="metricsProcessing">Idle</div>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Storage Breakdown</div>
+                <canvas id="storageChart" style="max-height: 300px;"></canvas>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">System Metrics</div>
+                <div id="systemMetricsDetails"></div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 1rem;">
+                <button class="btn" onclick="loadMetrics()" style="padding: 0.75rem 2rem;">🔄 Refresh Metrics</button>
             </div>
         </div>
 
@@ -1046,11 +1134,17 @@
         <!-- Face Training Tab -->
         <div id="faces" class="tab-content">
             <div class="card">
-                <div class="card-title">Trained People</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">Trained People</div>
+                    <button class="btn" onclick="retrainAllFaces()" style="background: var(--accent-color); padding: 0.5rem 1rem;">🔄 Retrain All</button>
+                </div>
                 <div class="face-list" id="faceList"></div>
             </div>
             <div class="card" style="margin-top: 1.5rem;">
                 <div class="card-title">Add Training Photos</div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Upload clear photos of a person's face for training. Upload 3-5 photos for best results.
+                </p>
                 <div class="form-group">
                     <label class="form-label">Person Name</label>
                     <input type="text" class="form-input" id="personName" placeholder="Enter person's name">
@@ -1058,7 +1152,7 @@
                 <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
                     <div style="font-size: 3rem; margin-bottom: 1rem;">📤</div>
                     <div>Click or drag files here to upload</div>
-                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">JPG or PNG images</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">JPG or PNG images (3-5 photos recommended)</div>
                 </div>
                 <input type="file" id="fileInput" accept="image/jpeg,image/png" multiple style="display: none;" onchange="uploadFiles()">
             </div>
@@ -1140,6 +1234,8 @@
         function getTabLabel(tabName) {
             const labels = {
                 'dashboard': '📊 Dashboard',
+                'analytics': '📈 Analytics',
+                'metrics': '📊 Metrics',
                 'videos': '🎥 Videos',
                 'review': '🏷️ Review & Label',
                 'ring': '🔔 Ring Setup',
@@ -2791,6 +2887,384 @@
         }
         
         // ===== END PHASE 2 =====
+        
+        // ===== PHASE 3: Analytics, Metrics, Export, Training Management =====
+        
+        let analyticsChart = null;
+        let timelineChart = null;
+        let storageChart = null;
+        
+        // Load Analytics
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/api/analytics/stats');
+                const data = await response.json();
+                
+                // Update stat cards
+                document.getElementById('analyticsVideos').textContent = data.total_videos;
+                document.getElementById('analyticsDetections').textContent = data.total_detections;
+                document.getElementById('analyticsCategories').textContent = Object.keys(data.categories).length;
+                document.getElementById('analyticsTrainedFaces').textContent = Object.keys(data.face_recognition_stats).length;
+                
+                // Render analytics chart
+                renderAnalyticsChart(data.categories);
+                
+                // Render top detections
+                renderTopDetections(data.top_detections);
+                
+                // Render face recognition stats
+                renderFaceRecognitionStats(data.face_recognition_stats);
+                
+                // Load timeline
+                loadTimeline();
+            } catch (error) {
+                console.error('Failed to load analytics:', error);
+            }
+        }
+        
+        async function loadTimeline() {
+            try {
+                const response = await fetch('/api/analytics/timeline?days=30');
+                const data = await response.json();
+                renderTimelineChart(data.timeline);
+            } catch (error) {
+                console.error('Failed to load timeline:', error);
+            }
+        }
+        
+        function renderAnalyticsChart(categories) {
+            const ctx = document.getElementById('analyticsChart');
+            if (!ctx) return;
+            
+            const labels = Object.keys(categories);
+            const values = Object.values(categories);
+            
+            if (analyticsChart) {
+                analyticsChart.destroy();
+            }
+            
+            analyticsChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Videos',
+                        data: values,
+                        backgroundColor: 'rgba(66, 153, 225, 0.5)',
+                        borderColor: 'rgba(66, 153, 225, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderTimelineChart(timeline) {
+            const ctx = document.getElementById('timelineChart');
+            if (!ctx) return;
+            
+            const labels = timeline.map(d => d.date);
+            const values = timeline.map(d => d.videos);
+            
+            if (timelineChart) {
+                timelineChart.destroy();
+            }
+            
+            timelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Videos Processed',
+                        data: values,
+                        borderColor: 'rgba(72, 187, 120, 1)',
+                        backgroundColor: 'rgba(72, 187, 120, 0.2)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderTopDetections(topDetections) {
+            const container = document.getElementById('topDetections');
+            if (!container) return;
+            
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr><th style="text-align: left; padding: 0.5rem; border-bottom: 2px solid var(--border-color);">Label</th>';
+            html += '<th style="text-align: right; padding: 0.5rem; border-bottom: 2px solid var(--border-color);">Count</th></tr></thead>';
+            html += '<tbody>';
+            
+            topDetections.forEach((item, index) => {
+                html += `<tr style="${index % 2 === 0 ? 'background: var(--bg-secondary);' : ''}">`;
+                html += `<td style="padding: 0.5rem;">${item.label}</td>`;
+                html += `<td style="text-align: right; padding: 0.5rem; font-weight: bold; color: var(--accent-color);">${item.count}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        
+        function renderFaceRecognitionStats(stats) {
+            const container = document.getElementById('faceRecognitionStats');
+            if (!container) return;
+            
+            if (Object.keys(stats).length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No trained faces yet</p>';
+                return;
+            }
+            
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr><th style="text-align: left; padding: 0.5rem; border-bottom: 2px solid var(--border-color);">Person</th>';
+            html += '<th style="text-align: right; padding: 0.5rem; border-bottom: 2px solid var(--border-color);">Training Images</th>';
+            html += '<th style="text-align: right; padding: 0.5rem; border-bottom: 2px solid var(--border-color);">Videos</th></tr></thead>';
+            html += '<tbody>';
+            
+            Object.entries(stats).forEach(([person, data], index) => {
+                html += `<tr style="${index % 2 === 0 ? 'background: var(--bg-secondary);' : ''}">`;
+                html += `<td style="padding: 0.5rem;">${person}</td>`;
+                html += `<td style="text-align: right; padding: 0.5rem;">${data.training_images}</td>`;
+                html += `<td style="text-align: right; padding: 0.5rem; font-weight: bold; color: var(--accent-color);">${data.videos}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        
+        // Load Metrics
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+                
+                // Update stat cards
+                document.getElementById('metricsCPU').textContent = data.system.cpu_percent.toFixed(1) + '%';
+                document.getElementById('metricsMemory').textContent = data.system.memory_percent.toFixed(1) + '%';
+                document.getElementById('metricsDisk').textContent = data.system.disk_percent.toFixed(1) + '%';
+                document.getElementById('metricsProcessing').textContent = data.processing.is_active ? 'Active' : 'Idle';
+                
+                // Render storage chart
+                renderStorageChart(data.storage);
+                
+                // Render system metrics details
+                renderSystemMetricsDetails(data);
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+            }
+        }
+        
+        function renderStorageChart(storage) {
+            const ctx = document.getElementById('storageChart');
+            if (!ctx) return;
+            
+            const labels = ['Downloads', 'Sorted', 'Faces', 'Objects'];
+            const values = [storage.downloads, storage.sorted, storage.faces, storage.objects];
+            
+            if (storageChart) {
+                storageChart.destroy();
+            }
+            
+            storageChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: [
+                            'rgba(66, 153, 225, 0.7)',
+                            'rgba(72, 187, 120, 0.7)',
+                            'rgba(237, 137, 54, 0.7)',
+                            'rgba(245, 101, 101, 0.7)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed + ' MB';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderSystemMetricsDetails(data) {
+            const container = document.getElementById('systemMetricsDetails');
+            if (!container) return;
+            
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">';
+            
+            html += `
+                <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Videos Processed</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color); margin-top: 0.5rem;">
+                        ${data.processing.videos_processed} / ${data.processing.videos_total}
+                    </div>
+                </div>
+                <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Storage Total</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color); margin-top: 0.5rem;">
+                        ${(data.storage.downloads + data.storage.sorted + data.storage.faces + data.storage.objects)} MB
+                    </div>
+                </div>
+                <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Last Run</div>
+                    <div style="font-size: 1rem; font-weight: bold; margin-top: 0.5rem;">
+                        ${data.processing.last_run || 'Never'}
+                    </div>
+                </div>
+            `;
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        // Export Data
+        async function exportData(type, format) {
+            try {
+                const response = await fetch(`/api/export/${type}?format=${format}`);
+                
+                if (format === 'csv') {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${type}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('Export successful!', 'success');
+                } else {
+                    const data = await response.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${type}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('Export successful!', 'success');
+                }
+            } catch (error) {
+                console.error('Export failed:', error);
+                showToast('Export failed', 'error');
+            }
+        }
+        
+        // Enhanced Face Training Management
+        async function loadFaces() {
+            const response = await fetch('/api/faces');
+            const faces = await response.json();
+            const list = document.getElementById('faceList');
+            
+            if (faces.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No trained faces yet. Upload training photos below.</p>';
+                return;
+            }
+            
+            let html = '';
+            faces.forEach(face => {
+                html += `
+                    <div class="face-item">
+                        <div>
+                            <div class="face-name">${face.name}</div>
+                            <div class="face-count">${face.image_count} training image(s)</div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-small" onclick="retrainPerson('${face.name}')" style="background: var(--accent-color);">🔄 Retrain</button>
+                            <button class="btn btn-small" onclick="deletePerson('${face.name}')" style="background: var(--danger-color);">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            list.innerHTML = html;
+        }
+        
+        async function retrainPerson(name) {
+            if (!confirm(`Retrain face recognition for ${name}?`)) return;
+            
+            try {
+                const response = await fetch(`/api/faces/train?person_name=${encodeURIComponent(name)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showToast(data.message || 'Retraining started', 'success');
+            } catch (error) {
+                showToast('Failed to start retraining', 'error');
+            }
+        }
+        
+        async function retrainAllFaces() {
+            if (!confirm('Retrain all face recognition models? This may take a few minutes.')) return;
+            
+            try {
+                const response = await fetch('/api/faces/retrain_all', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showToast(data.message || 'Retraining started for all faces', 'success');
+            } catch (error) {
+                showToast('Failed to start retraining', 'error');
+            }
+        }
+        
+        async function deletePerson(name) {
+            if (!confirm(`Delete all training data for ${name}? This cannot be undone.`)) return;
+            
+            try {
+                const response = await fetch(`/api/faces/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                showToast(data.message || `Deleted ${name}`, 'success');
+                loadFaces();
+            } catch (error) {
+                showToast('Failed to delete person', 'error');
+            }
+        }
+        
+        // Update tab switching to include new tabs
+        const originalSwitchTab = switchTab;
+        switchTab = function(tabName) {
+            originalSwitchTab(tabName);
+            
+            if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'metrics') loadMetrics();
+        };
+        
+        // ===== END PHASE 3 =====
         
         
         function startLogStream() {
