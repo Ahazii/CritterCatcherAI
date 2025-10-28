@@ -442,6 +442,129 @@
         .btn-warning:hover {
             background: #dd6b20;
         }
+
+        /* Hierarchical Tree View Styles */
+        .tree-view {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .tree-node {
+            margin: 0.5rem 0;
+        }
+
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-card);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tree-node-content:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent-color);
+        }
+
+        .tree-node-content.yolo-class {
+            background: var(--bg-secondary);
+            font-weight: 600;
+        }
+
+        .tree-node-content.has-model {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .tree-toggle {
+            cursor: pointer;
+            font-size: 0.875rem;
+            width: 20px;
+            text-align: center;
+            user-select: none;
+        }
+
+        .tree-toggle:hover {
+            color: var(--accent-color);
+        }
+
+        .tree-icon {
+            font-size: 1.25rem;
+        }
+
+        .tree-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .tree-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .tree-path {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .tree-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .tree-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .tree-actions button {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .tree-children {
+            list-style: none;
+            padding-left: 2rem;
+            margin-top: 0.5rem;
+            border-left: 2px solid var(--border-color);
+        }
+
+        .tree-children.collapsed {
+            display: none;
+        }
+
+        .tree-empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .breadcrumb-separator {
+            color: var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -458,16 +581,19 @@
     <div class="container">
         <div id="alert-container"></div>
 
-        <!-- Add Species Button -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h1>Species Classifiers</h1>
-            <button class="btn" onclick="openAddSpeciesModal()">+ Add Species</button>
+        <!-- Header with Controls -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h1>Hierarchical Species Taxonomy</h1>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn" onclick="expandAll()" style="background: var(--text-secondary);">▼ Expand All</button>
+                <button class="btn" onclick="collapseAll()" style="background: var(--text-secondary);">▲ Collapse All</button>
+            </div>
         </div>
 
-        <!-- Species Grid -->
-        <div class="species-grid" id="speciesGrid">
-            <div class="card" style="display: flex; align-items: center; justify-content: center; min-height: 200px; color: var(--text-secondary);">
-                Loading species...
+        <!-- Tree View -->
+        <div class="card">
+            <div id="taxonomyTree" class="tree-view">
+                <div class="tree-empty">Loading taxonomy tree...</div>
             </div>
         </div>
 
@@ -492,31 +618,20 @@
     <div class="modal" id="addSpeciesModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title">Add New Species</h2>
+                <h2 class="modal-title">Add Species/Subspecies</h2>
                 <button class="close-btn" onclick="closeAddSpeciesModal()">&times;</button>
             </div>
+            <div id="modalBreadcrumb" class="breadcrumb"></div>
             <form id="addSpeciesForm" onsubmit="addSpecies(event)">
                 <div class="form-group">
                     <label>Species Name</label>
-                    <input type="text" class="form-control" id="speciesName" required placeholder="e.g., hedgehog">
-                </div>
-                <div class="form-group">
-                    <label>Parent YOLO Classes</label>
-                    <div class="multi-select-container" id="parentClassesContainer">
-                        <div class="multi-select-display" id="parentClassesDisplay" onclick="toggleMultiSelect()">
-                            <span class="placeholder-text">Select YOLO classes...</span>
-                        </div>
-                        <div class="multi-select-dropdown" id="parentClassesDropdown">
-                            <input type="text" class="multi-select-search" id="parentClassesSearch" 
-                                   placeholder="Search classes..." onkeyup="filterMultiSelect()" onclick="event.stopPropagation()">
-                            <div id="parentClassesOptions"></div>
-                        </div>
-                    </div>
+                    <input type="text" class="form-control" id="speciesName" required placeholder="e.g., finch, goldfinch">
                     <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
-                        Select which YOLO classes this species can be detected within.
+                        Enter the name of the species or subspecies to add
                     </small>
                 </div>
-                <div id="validationWarning"></div>
+                <input type="hidden" id="parentNodeId">
+                <input type="hidden" id="taxonomyLevel">
                 <div class="form-group">
                     <label>Confidence Threshold</label>
                     <input type="number" class="form-control" id="confidenceThreshold" min="0" max="1" step="0.05" value="0.75">
@@ -553,42 +668,164 @@
         let selectedParentClasses = [];
         let currentObjectLabels = [];
 
+        // Global taxonomy state
+        let taxonomyTree = null;
+        let expandedNodes = new Set();
+        let currentNodeId = null;
+
         // Load data on page load
         document.addEventListener('DOMContentLoaded', () => {
-            loadYoloClasses();
-            loadSpecies();
+            loadTaxonomyTree();
             loadTrainingStatus();
             loadModels();
             setInterval(loadTrainingStatus, 5000); // Update every 5 seconds
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!document.getElementById('parentClassesContainer').contains(e.target)) {
-                    document.getElementById('parentClassesDropdown').classList.remove('active');
-                }
-            });
         });
 
-        async function loadYoloClasses() {
+        async function loadTaxonomyTree() {
             try {
-                const response = await fetch('/api/yolo_classes');
+                const response = await fetch('/api/taxonomy/tree');
                 const data = await response.json();
-                allYoloClasses = data.classes;
-                renderMultiSelectOptions();
+                taxonomyTree = data.tree;
+                renderTaxonomyTree();
             } catch (error) {
-                console.error('Failed to load YOLO classes:', error);
-                showAlert('Failed to load YOLO classes', 'error');
+                console.error('Failed to load taxonomy tree:', error);
+                showAlert('Failed to load taxonomy tree', 'error');
             }
         }
 
-        function renderMultiSelectOptions() {
-            const optionsDiv = document.getElementById('parentClassesOptions');
-            optionsDiv.innerHTML = allYoloClasses.map(cls => `
-                <div class="multi-select-option" onclick="toggleClassSelection('${cls}', event)">
-                    <input type="checkbox" id="class_${cls}" ${selectedParentClasses.includes(cls) ? 'checked' : ''}>
-                    <label for="class_${cls}" style="cursor: pointer; user-select: none;">${cls}</label>
-                </div>
-            `).join('');
+        function renderTaxonomyTree() {
+            const container = document.getElementById('taxonomyTree');
+            if (!taxonomyTree || !taxonomyTree.roots) {
+                container.innerHTML = '<div class="tree-empty">No taxonomy data available</div>';
+                return;
+            }
+
+            // Render only YOLO classes that are in detection list or have children
+            const rootNodes = Object.values(taxonomyTree.roots)
+                .filter(node => node.children && node.children.length > 0)
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            if (rootNodes.length === 0) {
+                container.innerHTML = '<div class="tree-empty">Click on a YOLO class below to add species</div>';
+                return;
+            }
+
+            container.innerHTML = rootNodes.map(node => renderTreeNode(node)).join('');
+        }
+
+        function renderTreeNode(node, depth = 0) {
+            const hasChildren = node.children && node.children.length > 0;
+            const isExpanded = expandedNodes.has(node.id);
+            const isYolo = node.level === 'yolo';
+            const icon = isYolo ? '🎯' : (node.has_model ? '🎓' : '⚠️');
+            const pathStr = node.path ? node.path.join(' > ') : node.name;
+
+            let html = `
+                <li class="tree-node" data-node-id="${node.id}">
+                    <div class="tree-node-content ${isYolo ? 'yolo-class' : ''} ${node.has_model ? 'has-model' : ''}">
+                        ${hasChildren ? `
+                            <span class="tree-toggle" onclick="toggleNode('${node.id}', event)">
+                                ${isExpanded ? '▼' : '▶'}
+                            </span>
+                        ` : '<span class="tree-toggle"></span>'}
+                        <span class="tree-icon">${icon}</span>
+                        <div class="tree-info">
+                            <div class="tree-name">${node.name}</div>
+                            <div class="tree-stats">
+                                ${!isYolo ? `<span>📊 Images: ${node.metadata?.training_images || 0}</span>` : ''}
+                                ${!isYolo ? `<span>🎯 Threshold: ${(node.confidence_threshold * 100).toFixed(0)}%</span>` : ''}
+                                ${node.has_model ? '<span style="color: var(--success-color);">✓ Trained</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="tree-actions">
+                            <button class="btn btn-success" onclick="openAddChildModal('${node.id}', event)">+ Add Child</button>
+                            ${!isYolo ? `<button class="btn" onclick="openUploadModalForNode('${node.id}', event)">📤 Upload</button>` : ''}
+                            ${!isYolo && node.metadata?.training_images >= 10 ? `<button class="btn" onclick="trainNode('${node.id}', event)">🎓 Train</button>` : ''}
+                            ${!isYolo ? `<button class="btn btn-danger" onclick="deleteNode('${node.id}', event)" style="padding: 0.25rem 0.5rem;">✕</button>` : ''}
+                        </div>
+                    </div>
+            `;
+
+            if (hasChildren) {
+                const childrenClass = isExpanded ? '' : 'collapsed';
+                html += `<ul class="tree-children ${childrenClass}" id="children-${node.id}">`;
+                node.children.forEach(child => {
+                    html += renderTreeNode(child, depth + 1);
+                });
+                html += '</ul>';
+            }
+
+            html += '</li>';
+            return html;
+        }
+
+        function toggleNode(nodeId, event) {
+            event.stopPropagation();
+            if (expandedNodes.has(nodeId)) {
+                expandedNodes.delete(nodeId);
+            } else {
+                expandedNodes.add(nodeId);
+            }
+            renderTaxonomyTree();
+        }
+
+        function expandAll() {
+            function addAllNodes(node) {
+                expandedNodes.add(node.id);
+                if (node.children) {
+                    node.children.forEach(addAllNodes);
+                }
+            }
+            Object.values(taxonomyTree.roots).forEach(addAllNodes);
+            renderTaxonomyTree();
+        }
+
+        function collapseAll() {
+            expandedNodes.clear();
+            renderTaxonomyTree();
+        }
+
+        function openAddChildModal(nodeId, event) {
+            event.stopPropagation();
+            currentNodeId = nodeId;
+            
+            // Find node and get path
+            const node = findNodeById(taxonomyTree.roots, nodeId);
+            if (!node) return;
+            
+            const path = getNodePath(node);
+            const breadcrumb = document.getElementById('modalBreadcrumb');
+            breadcrumb.innerHTML = `
+                <span>Adding child under:</span>
+                ${path.map(name => `<span class="breadcrumb-item">${name}</span>`).join('<span class="breadcrumb-separator">></span>')}
+            `;
+            
+            document.getElementById('parentNodeId').value = nodeId;
+            document.getElementById('taxonomyLevel').value = node.level === 'yolo' ? 'species' : 'subspecies';
+            document.getElementById('addSpeciesModal').classList.add('active');
+        }
+
+        function findNodeById(roots, nodeId) {
+            function search(node) {
+                if (node.id === nodeId) return node;
+                if (node.children) {
+                    for (const child of node.children) {
+                        const found = search(child);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            }
+            for (const root of Object.values(roots)) {
+                const found = search(root);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        function getNodePath(node) {
+            // This should be provided by the API but we'll construct it
+            return node.path || [node.name];
         }
 
         function toggleMultiSelect() {
