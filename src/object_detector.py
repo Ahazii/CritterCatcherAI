@@ -299,6 +299,49 @@ class ObjectDetector:
         logger.info(f"Detections for {video_path.name}: {all_detections}")
         return all_detections
     
+    def detect_objects_with_specialization(self, video_path: Path, config: dict, 
+                                          num_frames: int = None) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """
+        Detect objects with YOLO (Stage 1) and specialized classifiers (Stage 2).
+        
+        Args:
+            video_path: Path to video file
+            config: Full configuration dictionary
+            num_frames: Number of frames to analyze
+            
+        Returns:
+            Tuple of (yolo_detections, species_results)
+        """
+        # Stage 1: YOLO detection
+        yolo_detections = self.detect_objects_in_video(video_path, num_frames)
+        
+        # Stage 2: Specialized classification (if enabled)
+        species_results = {}
+        if config.get('specialized_detection', {}).get('enabled', False):
+            try:
+                from specialized_classifier import SpecializedClassifier
+                
+                logger.info(f"Running Stage 2 specialized classification for {video_path.name}")
+                classifier = SpecializedClassifier(config)
+                
+                species_results = classifier.classify_detections(
+                    video_path,
+                    yolo_detections,
+                    self.detected_objects_path
+                )
+                
+                if species_results:
+                    logger.info(f"Specialized detections: {species_results}")
+                else:
+                    logger.debug("No specialized species detected")
+                    
+            except ImportError:
+                logger.warning("SpecializedClassifier not available - skipping Stage 2")
+            except Exception as e:
+                logger.error(f"Error in specialized classification: {e}", exc_info=True)
+        
+        return yolo_detections, species_results
+    
     def get_best_detection(self, detections: Dict[str, float]) -> Tuple[str, float]:
         """
         Get the label with highest confidence.

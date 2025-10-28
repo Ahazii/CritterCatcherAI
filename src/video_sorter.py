@@ -1,11 +1,12 @@
 """
 Video sorter module for organizing videos by detected class.
 Moves videos to class-specific directories.
+Supports clip extraction mode for specialized species detection.
 """
 import logging
 import shutil
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, Set, List
 
 logger = logging.getLogger(__name__)
 
@@ -181,3 +182,127 @@ class VideoSorter:
         
         logger.debug(f"Video sorting statistics: {stats}")
         return stats
+    
+    def sort_with_specialization(
+        self,
+        video_path: Path,
+        yolo_detections: Dict[str, float],
+        species_results: Dict[str, float],
+        config: dict,
+        detected_objects_path: Path,
+        recognized_people: Set[str] = None
+    ) -> Dict[str, any]:
+        """
+        Sort video with specialized species detection and optional clip extraction.
+        
+        Args:
+            video_path: Path to the video file
+            yolo_detections: YOLO Stage 1 detection results
+            species_results: Specialized Stage 2 detection results
+            config: Full configuration dictionary
+            detected_objects_path: Path to detection metadata
+            recognized_people: Set of recognized person names
+            
+        Returns:
+            Dictionary with sorting results and actions taken
+        """
+        result = {
+            "video_path": video_path,
+            "action": None,  # "sorted", "clip_extracted", "deleted"
+            "target": None,  # class name or species name
+            "clips": []  # extracted clip paths
+        }
+        
+        clip_config = config.get('specialized_detection', {}).get('clip_extraction', {})
+        clip_mode_enabled = clip_config.get('enabled', False)
+        auto_delete = clip_config.get('auto_delete_non_matches', False)
+        
+        # Check if clip extraction mode is enabled and we have species detections
+        if clip_mode_enabled and species_results:
+            logger.info(f"Clip extraction mode enabled for {video_path.name}")
+            
+            # Get species confidence thresholds
+            species_config = config.get('specialized_detection', {}).get('species', [])
+            thresholds = {s['name']: s.get('confidence_threshold', 0.75) 
+                         for s in species_config}
+            
+            # Check which species meet the threshold
+            matching_species = {name: conf for name, conf in species_results.items()
+                              if conf >= thresholds.get(name, 0.75)}
+            
+            if matching_species:
+                # Extract clips for matching species
+                logger.info(f"Extracting clips for species: {list(matching_species.keys())}")
+                
+                try:
+                    from clip_extractor import ClipExtractor
+                    
+                    extractor = ClipExtractor(
+                        padding_seconds=clip_config.get('padding_seconds', 10),
+                        output_path=clip_config.get('output_path', '/data/clips'),
+                        merge_overlapping=clip_config.get('merge_overlapping', True)
+                    )
+                    
+                    extracted_clips = extractor.extract_clips_from_detections(
+                        video_path,
+                        matching_species,
+                        detected_objects_path,
+                        thresholds
+                    )
+                    
+                    if extracted_clips:
+                        result["action"] = "clip_extracted"
+                        result["target"] = list(matching_species.keys())
+                        result["clips"] = [clip for clips in extracted_clips.values() 
+                                          for clip in clips]
+                        logger.info(f"✓ Extracted {len(result['clips'])} clip(s) from {video_path.name}")
+                        
+                        # Delete original video after successful clip extraction
+                        try:
+                            video_path.unlink()
+                            logger.info(f"Deleted original video: {video_path.name}")
+                        except Exception as e:
+                            logger.error(f"Failed to delete original video: {e}")
+                        
+                        return result
+                    
+                except ImportError:
+                    logger.warning("ClipExtractor not available")
+                except Exception as e:
+                    logger.error(f"Error extracting clips: {e}", exc_info=True)
+            
+            elif auto_delete:
+                # No matching species and auto-delete is enabled
+                logger.info(f"No target species detected in {video_path.name}, deleting (auto_delete=true)")
+                try:
+                    video_path.unlink()
+                    result["action"] = "deleted"
+                    result["target"] = "no_match"
+                    logger.info(f"✗ Deleted non-matching video: {video_path.name}")
+                    return result
+                except Exception as e:
+                    logger.error(f"Failed to delete video: {e}")
+        
+        # Fallback: Standard sorting (original behavior)
+        logger.debug(f"Using standard sorting for {video_path.name}")
+        
+        # Prioritize specialized species results over YOLO for sorting
+        if species_results:
+            best_species = max(species_results, key=species_results.get)
+            sorted_path = self.sort_by_object(video_path, best_species)
+            result["action"] = "sorted"
+            result["target"] = best_species
+            return result
+        
+        # Use original sorting logic
+        priority = config.get('detection', {}).get('priority', 'people')
+        sorted_path = self.sort_video(
+            video_path,
+            detected_objects=yolo_detections,
+            recognized_people=recognized_people,
+            priority=priority
+        )
+        
+        result["action"] = "sorted"
+        result["target"] = sorted_path.parent.name
+        return result
