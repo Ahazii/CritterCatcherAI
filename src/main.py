@@ -258,28 +258,42 @@ def main():
     # Load configuration
     config = load_config()
     
-    # Get run mode
+    # Get run mode (new scheduler block)
+    scheduler = config.get('scheduler', {})
+    auto_run = scheduler.get('auto_run', True)
+    interval_minutes = scheduler.get('interval_minutes', config.get('interval_minutes', 60))
     run_once = config.get('run_once', False) or os.environ.get('RUN_ONCE', '').lower() == 'true'
-    interval_minutes = config.get('interval_minutes', 60)
     
     if run_once:
         logger.info("Running in single-run mode")
         process_videos(config)
         logger.info("Processing complete")
-    else:
-        logger.info(f"Running in continuous mode with {interval_minutes} minute interval")
+        return
+    
+    if not auto_run:
+        logger.info("Auto Run is DISABLED. Waiting for manual trigger from the web UI.")
+        # Keep the web server running but do not process automatically
         while True:
             try:
-                process_videos(config)
-                logger.info(f"Sleeping for {interval_minutes} minutes")
-                time.sleep(interval_minutes * 60)
+                time.sleep(60)
             except KeyboardInterrupt:
                 logger.info("Shutting down")
                 break
-            except Exception as e:
-                logger.error(f"Error in main loop: {e}", exc_info=True)
-                logger.info("Waiting 5 minutes before retry")
-                time.sleep(300)
+        return
+    
+    logger.info(f"Auto Run is ENABLED - Running in continuous mode with {interval_minutes} minute interval")
+    while True:
+        try:
+            process_videos(config)
+            logger.info(f"Sleeping for {interval_minutes} minutes")
+            time.sleep(interval_minutes * 60)
+        except KeyboardInterrupt:
+            logger.info("Shutting down")
+            break
+        except Exception as e:
+            logger.error(f"Error in main loop: {e}", exc_info=True)
+            logger.info("Waiting 5 minutes before retry")
+            time.sleep(300)
 
 
 if __name__ == "__main__":

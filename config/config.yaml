@@ -119,9 +119,19 @@ specialized_detection:
     batch_size: 32
     learning_rate: 0.001
 
+# Scheduler settings
+scheduler:
+  # Enable automatic processing on a schedule
+  # If false, processing only runs when manually triggered via the web UI
+  auto_run: true
+  
+  # How often to download and process videos (in minutes)
+  # Options: 15, 30, 60, 120, 240, 360, 720, 1440
+  interval_minutes: 60
+
 # Application settings
 # Run once and exit, or run continuously
 run_once: false
 
-# Interval between processing runs (in minutes)
+# Legacy interval setting (kept for backward compatibility)
 interval_minutes: 60
