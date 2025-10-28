@@ -700,13 +700,12 @@
                 return;
             }
 
-            // Render only YOLO classes that are in detection list or have children
+            // Show all YOLO root classes, sorted alphabetically
             const rootNodes = Object.values(taxonomyTree.roots)
-                .filter(node => node.children && node.children.length > 0)
                 .sort((a, b) => a.name.localeCompare(b.name));
 
             if (rootNodes.length === 0) {
-                container.innerHTML = '<div class="tree-empty">Click on a YOLO class below to add species</div>';
+                container.innerHTML = '<div class="tree-empty">No YOLO classes available. Check configuration.</div>';
                 return;
             }
 
