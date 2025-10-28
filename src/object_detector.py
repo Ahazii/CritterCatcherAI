@@ -147,74 +147,109 @@ class ObjectDetector:
         detections = {}
         discovered = {}  # New discoveries
         
-        # Create a copy of frame for drawing bounding boxes
-        annotated_frame = frame.copy()
-        
+        # Collect all detections first
+        all_boxes = []
         for result in results:
             boxes = result.boxes
             for box in boxes:
-                # Get class name and confidence
                 class_id = int(box.cls[0])
                 confidence = float(box.conf[0])
                 label = result.names[class_id].lower()
-                
-                # Get bounding box coordinates (xyxy format)
-                bbox = box.xyxy[0].cpu().numpy()  # [x1, y1, x2, y2]
+                bbox = box.xyxy[0].cpu().numpy()
                 x1, y1, x2, y2 = map(int, bbox)
                 
-                # Determine if this is a focused or discovery label
-                is_focused = label in self.labels
-                is_discovery = label not in self.labels and label not in self.ignored_labels and self.discovery_mode
+                if confidence > 0.01:
+                    is_focused = label in self.labels
+                    is_discovery = label not in self.labels and label not in self.ignored_labels and self.discovery_mode
+                    all_boxes.append({
+                        'label': label,
+                        'confidence': confidence,
+                        'bbox': (x1, y1, x2, y2),
+                        'is_focused': is_focused,
+                        'is_discovery': is_discovery
+                    })
+        
+        # Save a separate annotated image for each detected object
+        for box_info in all_boxes:
+            label = box_info['label']
+            confidence = box_info['confidence']
+            bbox = box_info['bbox']
+            is_focused = box_info['is_focused']
+            is_discovery = box_info['is_discovery']
+            
+            # Create a fresh copy for this specific detection
+            annotated_frame = frame.copy()
+            
+            # First pass: Draw all boxes faded (context)
+            for other_box in all_boxes:
+                ox1, oy1, ox2, oy2 = other_box['bbox']
+                other_label = other_box['label']
+                other_conf = other_box['confidence']
                 
-                # Draw bounding box on the annotated frame
-                if confidence > 0.01:  # Only draw if we're going to save it
-                    # Choose color: green for focused, yellow for discoveries, gray for ignored
-                    if is_focused:
-                        color = (0, 255, 0)  # Green
-                    elif is_discovery:
-                        color = (255, 255, 0)  # Yellow
-                    else:
-                        color = (128, 128, 128)  # Gray
-                    
-                    # Draw rectangle
-                    cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-                    
-                    # Prepare label text
-                    label_text = f"{label} {confidence:.2f}"
-                    (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    
-                    # Position label: if box is near top of image, put label inside box, otherwise above
-                    if y1 < text_height + baseline + 10:  # Too close to top
-                        # Draw label inside box at top
-                        label_y = y1 + text_height + baseline + 5
-                        cv2.rectangle(annotated_frame, (x1, y1), (x1 + text_width + 4, label_y), color, -1)
-                        cv2.putText(annotated_frame, label_text, (x1 + 2, y1 + text_height + 2), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-                    else:
-                        # Draw label above box (original behavior)
-                        cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
-                        cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+                # Faded gray color for context boxes
+                faded_color = (180, 180, 180)
+                cv2.rectangle(annotated_frame, (ox1, oy1), (ox2, oy2), faded_color, 1)
                 
-                # Save detections if enabled
-                if save_detections and confidence > 0.01:
-                    self._save_detected_object(
-                        annotated_frame, label, confidence,
-                        video_name, frame_idx,
-                        is_discovery=is_discovery,
-                        bbox=(x1, y1, x2, y2)
-                    )
-                
-                # Process focused labels - keep highest confidence
-                if is_focused and confidence >= self.confidence_threshold:
-                    if label not in detections or confidence > detections[label]:
-                        detections[label] = confidence
-                
-                # Process discoveries
-                elif is_discovery and confidence >= self.discovery_threshold:
-                    if label not in discovered or confidence > discovered[label]:
-                        discovered[label] = confidence
-                        logger.info(f"🔍 Discovered new object: {label} (confidence: {confidence:.2f})")
+                # Small faded label
+                label_text = f"{other_label} {other_conf:.2f}"
+                (tw, th), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+                if oy1 < th + baseline + 10:
+                    ly = oy1 + th + baseline + 3
+                    cv2.rectangle(annotated_frame, (ox1, oy1), (ox1 + tw + 2, ly), faded_color, -1)
+                    cv2.putText(annotated_frame, label_text, (ox1 + 1, oy1 + th + 1),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 80, 80), 1)
+                else:
+                    cv2.rectangle(annotated_frame, (ox1, oy1 - th - baseline - 3), (ox1 + tw, oy1), faded_color, -1)
+                    cv2.putText(annotated_frame, label_text, (ox1, oy1 - baseline - 1),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 80, 80), 1)
+            
+            # Second pass: Highlight THIS detection (the one we're saving for)
+            x1, y1, x2, y2 = bbox
+            
+            # Choose bright color for the relevant detection
+            if is_focused:
+                color = (0, 255, 0)  # Bright green
+            elif is_discovery:
+                color = (255, 255, 0)  # Bright yellow
+            else:
+                color = (128, 128, 128)  # Gray
+            
+            # Draw thick highlighted rectangle
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 3)
+            
+            # Draw bold label for highlighted detection
+            label_text = f"{label} {confidence:.2f}"
+            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            
+            if y1 < text_height + baseline + 10:
+                label_y = y1 + text_height + baseline + 5
+                cv2.rectangle(annotated_frame, (x1, y1), (x1 + text_width + 4, label_y), color, -1)
+                cv2.putText(annotated_frame, label_text, (x1 + 2, y1 + text_height + 2),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            else:
+                cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
+                cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            
+            # Save this annotated image
+            if save_detections:
+                self._save_detected_object(
+                    annotated_frame, label, confidence,
+                    video_name, frame_idx,
+                    is_discovery=is_discovery,
+                    bbox=bbox
+                )
+            
+            # Process focused labels - keep highest confidence
+            if is_focused and confidence >= self.confidence_threshold:
+                if label not in detections or confidence > detections[label]:
+                    detections[label] = confidence
+            
+            # Process discoveries
+            elif is_discovery and confidence >= self.discovery_threshold:
+                if label not in discovered or confidence > discovered[label]:
+                    discovered[label] = confidence
+                    logger.info(f"🔍 Discovered new object: {label} (confidence: {confidence:.2f})")
         
         # Store discoveries for later retrieval
         if discovered:
