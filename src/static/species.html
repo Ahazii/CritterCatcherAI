@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Species Training - CritterCatcherAI</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --danger-color: #f56565;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: var(--bg-secondary);
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .species-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .species-card {
+            border: 2px solid var(--border-color);
+            position: relative;
+        }
+
+        .species-card.has-model {
+            border-color: var(--success-color);
+        }
+
+        .species-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .species-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-warning {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .species-info {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin: 0.5rem 0;
+        }
+
+        .species-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .species-actions button {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .file-upload {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: var(--accent-color);
+            background: var(--bg-secondary);
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .training-status {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-color);
+            transition: width 0.3s;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .model-list {
+            list-style: none;
+        }
+
+        .model-item {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .model-item strong {
+            color: var(--accent-color);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">🦔 CritterCatcherAI - Species Training</div>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/species.html" style="background: var(--bg-secondary);">Species Training</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- Add Species Button -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>Species Classifiers</h1>
+            <button class="btn" onclick="openAddSpeciesModal()">+ Add Species</button>
+        </div>
+
+        <!-- Species Grid -->
+        <div class="species-grid" id="speciesGrid">
+            <div class="card" style="display: flex; align-items: center; justify-content: center; min-height: 200px; color: var(--text-secondary);">
+                Loading species...
+            </div>
+        </div>
+
+        <!-- Training Status -->
+        <div class="card">
+            <h2 class="card-title">Training Status</h2>
+            <div id="trainingStatus">
+                <p style="color: var(--text-secondary);">No training in progress</p>
+            </div>
+        </div>
+
+        <!-- Trained Models -->
+        <div class="card">
+            <h2 class="card-title">Trained Models</h2>
+            <ul class="model-list" id="modelsList">
+                <li style="color: var(--text-secondary);">Loading models...</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Add Species Modal -->
+    <div class="modal" id="addSpeciesModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Add New Species</h2>
+                <button class="close-btn" onclick="closeAddSpeciesModal()">&times;</button>
+            </div>
+            <form id="addSpeciesForm" onsubmit="addSpecies(event)">
+                <div class="form-group">
+                    <label>Species Name</label>
+                    <input type="text" class="form-control" id="speciesName" required placeholder="e.g., hedgehog">
+                </div>
+                <div class="form-group">
+                    <label>Parent YOLO Classes (comma-separated)</label>
+                    <input type="text" class="form-control" id="parentClasses" required placeholder="e.g., cat, dog">
+                    <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                        Available: bird, cat, dog, person, car, bicycle, etc.
+                    </small>
+                </div>
+                <div class="form-group">
+                    <label>Confidence Threshold</label>
+                    <input type="number" class="form-control" id="confidenceThreshold" min="0" max="1" step="0.05" value="0.75">
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%;">Add Species</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Training Data Modal -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Upload Training Images</h2>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Upload images of <strong id="uploadSpeciesName"></strong>. Minimum 10 images recommended.
+            </p>
+            <div class="file-upload" onclick="document.getElementById('trainingImages').click()">
+                <input type="file" id="trainingImages" accept="image/*" multiple onchange="handleFileSelect(event)">
+                <p>📁 Click to select images or drag and drop</p>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">JPG, PNG supported</p>
+            </div>
+            <div id="fileList" style="margin-top: 1rem;"></div>
+            <button class="btn btn-success" style="width: 100%; margin-top: 1rem;" onclick="uploadTrainingData()">Upload Images</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSpecies = null;
+        let selectedFiles = [];
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSpecies();
+            loadTrainingStatus();
+            loadModels();
+            setInterval(loadTrainingStatus, 5000); // Update every 5 seconds
+        });
+
+        async function loadSpecies() {
+            try {
+                const response = await fetch('/api/species/list');
+                const data = await response.json();
+                
+                const grid = document.getElementById('speciesGrid');
+                if (data.species.length === 0) {
+                    grid.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">No species configured. Click "Add Species" to get started.</p></div>';
+                    return;
+                }
+                
+                grid.innerHTML = data.species.map(species => `
+                    <div class="card species-card ${species.has_model ? 'has-model' : ''}">
+                        <div class="species-header">
+                            <div class="species-name">${species.name}</div>
+                            <span class="badge ${species.has_model ? 'badge-success' : 'badge-warning'}">
+                                ${species.has_model ? 'Trained' : 'No Model'}
+                            </span>
+                        </div>
+                        <div class="species-info">
+                            <div>📊 Training Images: ${species.training_images}</div>
+                            <div>🎯 Threshold: ${(species.confidence_threshold * 100).toFixed(0)}%</div>
+                            <div>🏷️ YOLO Classes: ${species.parent_yolo_class.join(', ')}</div>
+                        </div>
+                        <div class="species-actions">
+                            <button class="btn btn-success" onclick="openUploadModal('${species.name}')">
+                                📤 Upload
+                            </button>
+                            <button class="btn" onclick="trainSpecies('${species.name}')" 
+                                    ${species.training_images < 10 ? 'disabled title="Need 10+ images"' : ''}>
+                                🎓 Train
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showAlert('Failed to load species: ' + error.message, 'error');
+            }
+        }
+
+        async function loadTrainingStatus() {
+            try {
+                const response = await fetch('/api/species/training_status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('trainingStatus');
+                if (data.is_training) {
+                    statusDiv.innerHTML = `
+                        <div class="training-status">
+                            <strong>Training: ${data.current_species}</strong>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 50%"></div>
+                            </div>
+                            <p style="margin-top: 0.5rem; font-size: 0.875rem;">Training in progress... Check logs for details.</p>
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<p style="color: var(--text-secondary);">No training in progress</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load training status:', error);
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/species/models');
+                const data = await response.json();
+                
+                const list = document.getElementById('modelsList');
+                if (data.models.length === 0) {
+                    list.innerHTML = '<li style="color: var(--text-secondary);">No trained models yet</li>';
+                    return;
+                }
+                
+                list.innerHTML = data.models.map(model => `
+                    <li class="model-item">
+                        <strong>${model.species}</strong><br>
+                        <small style="color: var(--text-secondary);">
+                            Accuracy: ${model.accuracy ? model.accuracy.toFixed(2) + '%' : 'N/A'} | 
+                            Size: ${model.size_mb.toFixed(2)} MB | 
+                            Created: ${new Date(model.created).toLocaleDateString()}
+                        </small>
+                    </li>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        function openAddSpeciesModal() {
+            document.getElementById('addSpeciesModal').classList.add('active');
+        }
+
+        function closeAddSpeciesModal() {
+            document.getElementById('addSpeciesModal').classList.remove('active');
+            document.getElementById('addSpeciesForm').reset();
+        }
+
+        async function addSpecies(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('speciesName').value.trim();
+            const parentClassesStr = document.getElementById('parentClasses').value;
+            const threshold = parseFloat(document.getElementById('confidenceThreshold').value);
+            
+            const parentClasses = parentClassesStr.split(',').map(c => c.trim()).filter(c => c);
+            
+            try {
+                const response = await fetch('/api/species/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: name,
+                        parent_yolo_class: parentClasses,
+                        confidence_threshold: threshold
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`Species "${name}" added successfully!`, 'success');
+                    closeAddSpeciesModal();
+                    loadSpecies();
+                } else {
+                    showAlert('Failed to add species: ' + data.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to add species: ' + error.message, 'error');
+            }
+        }
+
+        function openUploadModal(speciesName) {
+            currentSpecies = speciesName;
+            document.getElementById('uploadSpeciesName').textContent = speciesName;
+            document.getElementById('uploadModal').classList.add('active');
+            selectedFiles = [];
+            document.getElementById('fileList').innerHTML = '';
+        }
+
+        function closeUploadModal() {
+            document.getElementById('uploadModal').classList.remove('active');
+            currentSpecies = null;
+            selectedFiles = [];
+        }
+
+        function handleFileSelect(event) {
+            selectedFiles = Array.from(event.target.files);
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = `<p><strong>${selectedFiles.length} file(s) selected</strong></p>`;
+        }
+
+        async function uploadTrainingData() {
+            if (selectedFiles.length === 0) {
+                showAlert('Please select at least one image', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            selectedFiles.forEach(file => formData.append('files', file));
+            
+            try {
+                const response = await fetch(`/api/species/upload_training_data?species_name=${encodeURIComponent(currentSpecies)}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(data.message, 'success');
+                    closeUploadModal();
+                    loadSpecies();
+                } else {
+                    showAlert('Upload failed: ' + data.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Upload failed: ' + error.message, 'error');
+            }
+        }
+
+        async function trainSpecies(speciesName) {
+            if (!confirm(`Start training for ${speciesName}? This may take 30-60 minutes.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/species/train', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({species_name: speciesName})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`Training started for ${speciesName}`, 'success');
+                    loadTrainingStatus();
+                } else {
+                    showAlert('Training failed: ' + data.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Training failed: ' + error.message, 'error');
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type === 'success' ? 'success' : 'error'}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+    </script>
+</body>
+</html>
