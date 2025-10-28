@@ -231,8 +231,8 @@ class ObjectDetector:
                 cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
             
-            # Save this annotated image
-            if save_detections:
+            # Save this annotated image (only for focused labels or discoveries)
+            if save_detections and (is_focused or is_discovery):
                 self._save_detected_object(
                     annotated_frame, label, confidence,
                     video_name, frame_idx,

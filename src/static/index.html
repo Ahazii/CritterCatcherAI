@@ -3616,6 +3616,24 @@
             }
         }
 
+        // Check Discovery Mode status and dim tab if needed
+        async function checkDiscoveryModeStatus() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                const discoveryMode = data.config?.detection?.discovery_mode !== undefined ? data.config.detection.discovery_mode : true;
+                
+                const discoveryTab = document.getElementById('discoveryTab');
+                if (discoveryMode) {
+                    discoveryTab.classList.remove('disabled');
+                } else {
+                    discoveryTab.classList.add('disabled');
+                }
+            } catch (error) {
+                console.error('Failed to check discovery mode status:', error);
+            }
+        }
+        
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             // Set theme toggle button text
@@ -3629,6 +3647,9 @@
             
             // Check Ring auth status
             checkRingAuthStatus();
+            
+            // Check and dim Discovery Mode tab if needed
+            checkDiscoveryModeStatus();
             
             // Start fetching status
             fetchStatus();
