@@ -179,14 +179,22 @@ class ObjectDetector:
                     # Draw rectangle
                     cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
                     
-                    # Draw label background
+                    # Prepare label text
                     label_text = f"{label} {confidence:.2f}"
                     (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
                     
-                    # Draw label text
-                    cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+                    # Position label: if box is near top of image, put label inside box, otherwise above
+                    if y1 < text_height + baseline + 10:  # Too close to top
+                        # Draw label inside box at top
+                        label_y = y1 + text_height + baseline + 5
+                        cv2.rectangle(annotated_frame, (x1, y1), (x1 + text_width + 4, label_y), color, -1)
+                        cv2.putText(annotated_frame, label_text, (x1 + 2, y1 + text_height + 2), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+                    else:
+                        # Draw label above box (original behavior)
+                        cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
+                        cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
                 
                 # Save detections if enabled
                 if save_detections and confidence > 0.01:
