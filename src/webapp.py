@@ -1914,6 +1914,36 @@ async def add_object_labels(request: dict):
 # HIERARCHICAL TAXONOMY API ENDPOINTS
 # ============================================================================
 
+async def sync_yolo_classes_to_config():
+    """Sync enabled YOLO classes from taxonomy tree to config file."""
+    try:
+        if taxonomy_tree is None:
+            return
+        
+        # Get all enabled YOLO root classes
+        enabled_classes = []
+        for root_id, root_node in taxonomy_tree.roots.items():
+            if root_node.enabled:
+                enabled_classes.append(root_node.name)
+        
+        # Load config
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Update object_labels
+        if 'detection' not in config:
+            config['detection'] = {}
+        config['detection']['object_labels'] = sorted(enabled_classes)
+        
+        # Save config
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        logger.info(f"Synced {len(enabled_classes)} enabled YOLO classes to config: {enabled_classes}")
+    
+    except Exception as e:
+        logger.error(f"Failed to sync YOLO classes to config: {e}")
+
 @app.get("/api/taxonomy/tree")
 async def get_taxonomy_tree():
     """Get the complete hierarchical taxonomy tree."""
@@ -1921,7 +1951,13 @@ async def get_taxonomy_tree():
         if taxonomy_tree is None:
             raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
         
-        return {"tree": taxonomy_tree.to_dict()}
+        # Get enabled YOLO classes
+        enabled_classes = [root.name for root in taxonomy_tree.roots.values() if root.enabled]
+        
+        return {
+            "tree": taxonomy_tree.to_dict(),
+            "enabled_yolo_classes": enabled_classes
+        }
     except Exception as e:
         logger.error(f"Failed to get taxonomy tree: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2043,6 +2079,10 @@ async def update_taxonomy_node(node_id: str, request: dict):
         
         if 'enabled' in request:
             node.enabled = bool(request['enabled'])
+            
+            # If this is a YOLO root node, sync to config
+            if node.level == 'yolo':
+                await sync_yolo_classes_to_config()
         
         if 'metadata' in request:
             node.metadata.update(request['metadata'])

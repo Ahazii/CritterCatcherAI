@@ -727,10 +727,19 @@
                                 ${isExpanded ? '▼' : '▶'}
                             </span>
                         ` : '<span class="tree-toggle"></span>'}
+                        ${isYolo ? `
+                            <input type="checkbox" 
+                                   id="enable_${node.id}" 
+                                   ${node.enabled ? 'checked' : ''} 
+                                   onchange="toggleYoloEnabled('${node.id}', event)" 
+                                   style="margin-right: 0.5rem;"
+                                   title="Enable YOLO detection for this class">
+                        ` : ''}
                         <span class="tree-icon">${icon}</span>
                         <div class="tree-info">
                             <div class="tree-name">${node.name}</div>
                             <div class="tree-stats">
+                                ${isYolo ? `<span style="color: var(--text-secondary); font-size: 0.875rem;">${node.enabled ? 'Detection enabled' : 'Detection disabled'}</span>` : ''}
                                 ${!isYolo ? `<span>📊 Images: ${node.metadata?.training_images || 0}</span>` : ''}
                                 ${!isYolo ? `<span>🎯 Threshold: ${(node.confidence_threshold * 100).toFixed(0)}%</span>` : ''}
                                 ${node.has_model ? '<span style="color: var(--success-color);">✓ Trained</span>' : ''}
@@ -782,6 +791,33 @@
         function collapseAll() {
             expandedNodes.clear();
             renderTaxonomyTree();
+        }
+
+        async function toggleYoloEnabled(nodeId, event) {
+            event.stopPropagation();
+            const checkbox = event.target;
+            const enabled = checkbox.checked;
+            
+            try {
+                const response = await fetch(`/api/taxonomy/node/${encodeURIComponent(nodeId)}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ enabled: enabled })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`${enabled ? 'Enabled' : 'Disabled'} detection for ${data.node.name}`, 'success');
+                    loadTaxonomyTree();
+                } else {
+                    showAlert('Failed to update: ' + data.detail, 'error');
+                    checkbox.checked = !enabled; // Revert checkbox
+                }
+            } catch (error) {
+                showAlert('Failed to update: ' + error.message, 'error');
+                checkbox.checked = !enabled; // Revert checkbox
+            }
         }
 
         function openAddChildModal(nodeId, event) {
