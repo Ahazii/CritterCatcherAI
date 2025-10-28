@@ -68,9 +68,34 @@ Training a custom species classifier involves 4 steps:
 2. Click **"+ Add Species"** button
 3. Fill in the form:
    - **Species Name**: e.g., "hedgehog"
-   - **Parent YOLO Classes**: Comma-separated list (e.g., "cat, dog")
+   - **Parent YOLO Classes**: Use the searchable dropdown (see below)
    - **Confidence Threshold**: 0.75 (recommended)
 4. Click **"Add Species"**
+
+#### Using the Parent YOLO Classes Dropdown
+
+The system now features an improved **multi-select dropdown** for selecting parent classes:
+
+**How to use:**
+1. Click the dropdown field to open the class list
+2. Type to search/filter the 80 available YOLO classes
+3. Click checkboxes to select multiple classes
+4. Selected classes appear as tags (click × to remove)
+5. Click outside the dropdown to close
+
+**Real-time Validation:**
+- ✅ System validates your selections automatically
+- ⚠️ Warning appears if parent classes aren't in your detection list
+- 🔧 One-click button to add missing classes to "Objects to Detect"
+
+**Example workflow:**
+```
+1. Add species "hedgehog" with parent classes: cat, dog
+2. System checks: Are "cat" and "dog" in your detection list?
+3. If missing → Warning: "cat, dog not in detection list"
+4. Click "Add Missing Classes to Detection List"
+5. System automatically updates your config ✓
+```
 
 #### Choosing Parent YOLO Classes
 
@@ -83,10 +108,19 @@ The parent classes tell the system which YOLO detections to check with your spec
 | Fox | dog, cat | Foxes look like dogs/cats |
 | Squirrel | cat, dog | Small mammals often detected as cats |
 
-**Available YOLO Classes:**
+**All 80 Available YOLO COCO Classes:**
 ```
 person, bicycle, car, motorcycle, airplane, bus, train, truck, boat,
-bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe
+traffic light, fire hydrant, stop sign, parking meter, bench,
+bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe,
+backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard,
+sports ball, kite, baseball bat, baseball glove, skateboard, surfboard,
+tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl,
+banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza,
+donut, cake, chair, couch, potted plant, bed, dining table, toilet,
+tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven,
+toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear,
+hair drier, toothbrush
 ```
 
 ### Step 2: Collect Training Images
@@ -222,9 +256,33 @@ volumes:
 
 ## Configuration
 
+### Web-Based Configuration
+
+Most settings can be configured through the **Configuration** tab in the web interface:
+
+1. Navigate to the **⚙️ Configuration** tab
+2. Adjust settings using the intuitive controls
+3. Click **💾 Save Configuration**
+
+#### Objects to Detect (Multi-Select)
+
+The "Objects to Detect" section now uses the same multi-select dropdown:
+
+**Features:**
+- Search through all 80 YOLO classes
+- Select multiple classes with checkboxes
+- Visual tag display of selected classes
+- No more typos or invalid class names!
+
+**Tips:**
+- Start with common animals: bird, cat, dog, person
+- Add specific classes as needed
+- Fewer classes = faster processing
+- More classes = better discovery mode
+
 ### Main Configuration File
 
-Location: `/app/config/config.yaml`
+Advanced users can edit directly: `/app/config/config.yaml`
 
 ### Specialized Detection Section
 
@@ -380,6 +438,50 @@ Content-Type: application/json
   "name": "hedgehog",
   "parent_yolo_class": ["cat", "dog"],
   "confidence_threshold": 0.75
+}
+```
+
+Response (with validation):
+```json
+{
+  "status": "success",
+  "message": "Added species 'hedgehog'",
+  "warning": {
+    "missing_labels": ["cat", "dog"],
+    "message": "Parent YOLO classes ['cat', 'dog'] are not in the detection list..."
+  }
+}
+```
+
+#### Get YOLO Classes List
+```http
+GET /api/yolo_classes
+```
+
+Response:
+```json
+{
+  "classes": ["person", "bicycle", "car", ...]
+}
+```
+
+#### Add Object Labels to Detection List
+```http
+POST /api/config/add_object_labels
+Content-Type: application/json
+
+{
+  "labels": ["cat", "dog"]
+}
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "added_labels": ["cat", "dog"],
+  "current_labels": ["bird", "cat", "dog", "person"],
+  "message": "Added 2 label(s) to detection list"
 }
 ```
 
