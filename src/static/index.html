@@ -1810,7 +1810,7 @@
                     
                     <div class="form-group">
                         <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="checkbox" id="autoRun" ${config.scheduler?.auto_run === true ? 'checked' : ''} style="width: auto;" onchange="toggleIntervalDropdown()">
+                            <input type="checkbox" id="autoRun" ${data.config.scheduler?.auto_run === true ? 'checked' : ''} style="width: auto;" onchange="toggleIntervalDropdown()">
                             Enable Auto Run
                         </label>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
@@ -1821,14 +1821,14 @@
                     <div class="form-group" id="intervalGroup">
                         <label class="form-label">Run Interval</label>
                         <select id="intervalMinutes" class="form-select" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
-                            <option value="15" ${config.scheduler?.interval_minutes === 15 ? 'selected' : ''}>Every 15 minutes</option>
-                            <option value="30" ${config.scheduler?.interval_minutes === 30 ? 'selected' : ''}>Every 30 minutes</option>
-                            <option value="60" ${(config.scheduler?.interval_minutes || 60) === 60 ? 'selected' : ''}>Every hour</option>
-                            <option value="120" ${config.scheduler?.interval_minutes === 120 ? 'selected' : ''}>Every 2 hours</option>
-                            <option value="240" ${config.scheduler?.interval_minutes === 240 ? 'selected' : ''}>Every 4 hours</option>
-                            <option value="360" ${config.scheduler?.interval_minutes === 360 ? 'selected' : ''}>Every 6 hours</option>
-                            <option value="720" ${config.scheduler?.interval_minutes === 720 ? 'selected' : ''}>Every 12 hours</option>
-                            <option value="1440" ${config.scheduler?.interval_minutes === 1440 ? 'selected' : ''}>Every 24 hours</option>
+                            <option value="15" ${data.config.scheduler?.interval_minutes === 15 ? 'selected' : ''}>Every 15 minutes</option>
+                            <option value="30" ${data.config.scheduler?.interval_minutes === 30 ? 'selected' : ''}>Every 30 minutes</option>
+                            <option value="60" ${(data.config.scheduler?.interval_minutes || 60) === 60 ? 'selected' : ''}>Every hour</option>
+                            <option value="120" ${data.config.scheduler?.interval_minutes === 120 ? 'selected' : ''}>Every 2 hours</option>
+                            <option value="240" ${data.config.scheduler?.interval_minutes === 240 ? 'selected' : ''}>Every 4 hours</option>
+                            <option value="360" ${data.config.scheduler?.interval_minutes === 360 ? 'selected' : ''}>Every 6 hours</option>
+                            <option value="720" ${data.config.scheduler?.interval_minutes === 720 ? 'selected' : ''}>Every 12 hours</option>
+                            <option value="1440" ${data.config.scheduler?.interval_minutes === 1440 ? 'selected' : ''}>Every 24 hours</option>
                         </select>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             How often to download and process videos when Auto Run is enabled.
