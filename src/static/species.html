@@ -338,6 +338,110 @@
         .model-item strong {
             color: var(--accent-color);
         }
+
+        /* Multi-select dropdown styles */
+        .multi-select-container {
+            position: relative;
+        }
+
+        .multi-select-display {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            min-height: 46px;
+        }
+
+        .multi-select-display:hover {
+            border-color: var(--accent-color);
+        }
+
+        .multi-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-top: 4px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+        }
+
+        .multi-select-dropdown.active {
+            display: block;
+        }
+
+        .multi-select-search {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .multi-select-option {
+            padding: 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .multi-select-option:hover {
+            background: var(--bg-secondary);
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .selected-tag {
+            background: var(--accent-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .selected-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .placeholder-text {
+            color: var(--text-secondary);
+        }
+
+        .alert-warning {
+            background: #fef5e7;
+            color: #7d6608;
+            border: 1px solid #f9e79f;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
     </style>
 </head>
 <body>
@@ -397,12 +501,22 @@
                     <input type="text" class="form-control" id="speciesName" required placeholder="e.g., hedgehog">
                 </div>
                 <div class="form-group">
-                    <label>Parent YOLO Classes (comma-separated)</label>
-                    <input type="text" class="form-control" id="parentClasses" required placeholder="e.g., cat, dog">
+                    <label>Parent YOLO Classes</label>
+                    <div class="multi-select-container" id="parentClassesContainer">
+                        <div class="multi-select-display" id="parentClassesDisplay" onclick="toggleMultiSelect()">
+                            <span class="placeholder-text">Select YOLO classes...</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="parentClassesDropdown">
+                            <input type="text" class="multi-select-search" id="parentClassesSearch" 
+                                   placeholder="Search classes..." onkeyup="filterMultiSelect()" onclick="event.stopPropagation()">
+                            <div id="parentClassesOptions"></div>
+                        </div>
+                    </div>
                     <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
-                        Available: bird, cat, dog, person, car, bicycle, etc.
+                        Select which YOLO classes this species can be detected within.
                     </small>
                 </div>
+                <div id="validationWarning"></div>
                 <div class="form-group">
                     <label>Confidence Threshold</label>
                     <input type="number" class="form-control" id="confidenceThreshold" min="0" max="1" step="0.05" value="0.75">
@@ -435,14 +549,166 @@
     <script>
         let currentSpecies = null;
         let selectedFiles = [];
+        let allYoloClasses = [];
+        let selectedParentClasses = [];
+        let currentObjectLabels = [];
 
         // Load data on page load
         document.addEventListener('DOMContentLoaded', () => {
+            loadYoloClasses();
             loadSpecies();
             loadTrainingStatus();
             loadModels();
             setInterval(loadTrainingStatus, 5000); // Update every 5 seconds
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!document.getElementById('parentClassesContainer').contains(e.target)) {
+                    document.getElementById('parentClassesDropdown').classList.remove('active');
+                }
+            });
         });
+
+        async function loadYoloClasses() {
+            try {
+                const response = await fetch('/api/yolo_classes');
+                const data = await response.json();
+                allYoloClasses = data.classes;
+                renderMultiSelectOptions();
+            } catch (error) {
+                console.error('Failed to load YOLO classes:', error);
+                showAlert('Failed to load YOLO classes', 'error');
+            }
+        }
+
+        function renderMultiSelectOptions() {
+            const optionsDiv = document.getElementById('parentClassesOptions');
+            optionsDiv.innerHTML = allYoloClasses.map(cls => `
+                <div class="multi-select-option" onclick="toggleClassSelection('${cls}', event)">
+                    <input type="checkbox" id="class_${cls}" ${selectedParentClasses.includes(cls) ? 'checked' : ''}>
+                    <label for="class_${cls}" style="cursor: pointer; user-select: none;">${cls}</label>
+                </div>
+            `).join('');
+        }
+
+        function toggleMultiSelect() {
+            const dropdown = document.getElementById('parentClassesDropdown');
+            dropdown.classList.toggle('active');
+            if (dropdown.classList.contains('active')) {
+                document.getElementById('parentClassesSearch').focus();
+            }
+        }
+
+        function toggleClassSelection(className, event) {
+            event.stopPropagation();
+            const checkbox = document.getElementById(`class_${className}`);
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                if (!selectedParentClasses.includes(className)) {
+                    selectedParentClasses.push(className);
+                }
+            } else {
+                selectedParentClasses = selectedParentClasses.filter(c => c !== className);
+            }
+            
+            updateDisplayTags();
+            validateParentClasses();
+        }
+
+        function updateDisplayTags() {
+            const display = document.getElementById('parentClassesDisplay');
+            
+            if (selectedParentClasses.length === 0) {
+                display.innerHTML = '<span class="placeholder-text">Select YOLO classes...</span>';
+            } else {
+                display.innerHTML = selectedParentClasses.map(cls => `
+                    <div class="selected-tag">
+                        ${cls}
+                        <span class="remove" onclick="removeClassTag('${cls}', event)">×</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function removeClassTag(className, event) {
+            event.stopPropagation();
+            selectedParentClasses = selectedParentClasses.filter(c => c !== className);
+            const checkbox = document.getElementById(`class_${className}`);
+            if (checkbox) checkbox.checked = false;
+            updateDisplayTags();
+            validateParentClasses();
+        }
+
+        function filterMultiSelect() {
+            const search = document.getElementById('parentClassesSearch').value.toLowerCase();
+            const options = document.querySelectorAll('.multi-select-option');
+            
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(search) ? 'flex' : 'none';
+            });
+        }
+
+        async function validateParentClasses() {
+            const warningDiv = document.getElementById('validationWarning');
+            
+            if (selectedParentClasses.length === 0) {
+                warningDiv.innerHTML = '';
+                return;
+            }
+            
+            try {
+                // Get current config to check object_labels
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                currentObjectLabels = config.detection?.object_labels || [];
+                
+                const missingLabels = selectedParentClasses.filter(cls => !currentObjectLabels.includes(cls));
+                
+                if (missingLabels.length > 0) {
+                    warningDiv.innerHTML = `
+                        <div class="alert alert-warning" style="margin-top: 1rem;">
+                            <strong>⚠️ Warning:</strong> The following parent classes are not in the detection list: <strong>${missingLabels.join(', ')}</strong>.<br>
+                            This species will not be detected until these are added to "Objects to Detect".
+                            <button class="btn btn-warning" style="margin-top: 0.5rem; width: 100%;" onclick="addMissingLabels()">
+                                Add Missing Classes to Detection List
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    warningDiv.innerHTML = '';
+                }
+            } catch (error) {
+                console.error('Failed to validate parent classes:', error);
+            }
+        }
+
+        async function addMissingLabels() {
+            const missingLabels = selectedParentClasses.filter(cls => !currentObjectLabels.includes(cls));
+            
+            if (missingLabels.length === 0) return;
+            
+            try {
+                const response = await fetch('/api/config/add_object_labels', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ labels: missingLabels })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`Added ${data.added_labels.length} class(es) to detection list`, 'success');
+                    currentObjectLabels = data.current_labels;
+                    validateParentClasses(); // Re-validate to clear warning
+                } else {
+                    showAlert('Failed to add labels: ' + data.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to add labels: ' + error.message, 'error');
+            }
+        }
 
         async function loadSpecies() {
             try {
@@ -535,22 +801,31 @@
         }
 
         function openAddSpeciesModal() {
+            selectedParentClasses = [];
+            updateDisplayTags();
+            renderMultiSelectOptions();
+            document.getElementById('validationWarning').innerHTML = '';
             document.getElementById('addSpeciesModal').classList.add('active');
         }
 
         function closeAddSpeciesModal() {
             document.getElementById('addSpeciesModal').classList.remove('active');
             document.getElementById('addSpeciesForm').reset();
+            selectedParentClasses = [];
+            updateDisplayTags();
+            document.getElementById('validationWarning').innerHTML = '';
         }
 
         async function addSpecies(event) {
             event.preventDefault();
             
             const name = document.getElementById('speciesName').value.trim();
-            const parentClassesStr = document.getElementById('parentClasses').value;
             const threshold = parseFloat(document.getElementById('confidenceThreshold').value);
             
-            const parentClasses = parentClassesStr.split(',').map(c => c.trim()).filter(c => c);
+            if (selectedParentClasses.length === 0) {
+                showAlert('Please select at least one parent YOLO class', 'error');
+                return;
+            }
             
             try {
                 const response = await fetch('/api/species/add', {
@@ -558,7 +833,7 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         name: name,
-                        parent_yolo_class: parentClasses,
+                        parent_yolo_class: selectedParentClasses,
                         confidence_threshold: threshold
                     })
                 });
@@ -566,7 +841,14 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(`Species "${name}" added successfully!`, 'success');
+                    let alertMessage = `Species "${name}" added successfully!`;
+                    
+                    // Show warning if backend returned missing labels warning
+                    if (data.warning) {
+                        alertMessage += ` Warning: ${data.warning.message}`;
+                    }
+                    
+                    showAlert(alertMessage, data.warning ? 'error' : 'success');
                     closeAddSpeciesModal();
                     loadSpecies();
                 } else {

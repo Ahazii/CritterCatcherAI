@@ -1634,6 +1634,10 @@ async def add_species(request: dict):
         if any(s['name'] == species_name for s in species_list):
             raise HTTPException(status_code=400, detail=f"Species '{species_name}' already exists")
         
+        # Validate parent YOLO classes against current detection list
+        current_object_labels = config.get('detection', {}).get('object_labels', [])
+        missing_labels = [label for label in parent_classes if label not in current_object_labels]
+        
         # Add new species
         new_species = {
             "name": species_name,
@@ -1658,7 +1662,20 @@ async def add_species(request: dict):
         training_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"Added new species: {species_name}")
-        return {"status": "success", "message": f"Added species '{species_name}'"}
+        
+        response = {
+            "status": "success",
+            "message": f"Added species '{species_name}'"
+        }
+        
+        # Include warning if parent classes are missing from detection list
+        if missing_labels:
+            response["warning"] = {
+                "missing_labels": missing_labels,
+                "message": f"Parent YOLO classes {missing_labels} are not in the detection list. The species will not be detected until these are added to 'Objects to Detect'."
+            }
+        
+        return response
     
     except HTTPException:
         raise
@@ -1808,6 +1825,65 @@ async def list_trained_models():
     
     except Exception as e:
         logger.error(f"Failed to list models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/yolo_classes")
+async def get_yolo_classes():
+    """Get the list of all 80 YOLO COCO classes."""
+    try:
+        from object_detector import YOLO_COCO_CLASSES
+        return {"classes": sorted(YOLO_COCO_CLASSES)}
+    except Exception as e:
+        logger.error(f"Failed to get YOLO classes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/config/add_object_labels")
+async def add_object_labels(request: dict):
+    """Add labels to the object detection list in config."""
+    try:
+        labels_to_add = request.get('labels', [])
+        
+        if not labels_to_add:
+            raise HTTPException(status_code=400, detail="No labels provided")
+        
+        # Load config
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Get current object_labels
+        current_labels = config.get('detection', {}).get('object_labels', [])
+        
+        # Add new labels (avoiding duplicates)
+        added_labels = []
+        for label in labels_to_add:
+            if label not in current_labels:
+                current_labels.append(label)
+                added_labels.append(label)
+        
+        # Update config
+        if 'detection' not in config:
+            config['detection'] = {}
+        config['detection']['object_labels'] = current_labels
+        
+        # Save config
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        logger.info(f"Added {len(added_labels)} labels to object_labels: {added_labels}")
+        
+        return {
+            "status": "success",
+            "added_labels": added_labels,
+            "current_labels": current_labels,
+            "message": f"Added {len(added_labels)} label(s) to detection list"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add object labels: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

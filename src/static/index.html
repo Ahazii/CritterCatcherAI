@@ -848,6 +848,95 @@
             opacity: 1;
             transition: opacity 0.3s ease;
         }
+
+        /* Multi-select dropdown styles */
+        .multi-select-container {
+            position: relative;
+        }
+
+        .multi-select-display {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            min-height: 46px;
+        }
+
+        .multi-select-display:hover {
+            border-color: var(--accent-color);
+        }
+
+        .multi-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-top: 4px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+        }
+
+        .multi-select-dropdown.active {
+            display: block;
+        }
+
+        .multi-select-search {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .multi-select-option {
+            padding: 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .multi-select-option:hover {
+            background: var(--bg-secondary);
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .selected-tag {
+            background: var(--accent-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .selected-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .placeholder-text {
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 <body>
@@ -1212,6 +1301,10 @@
         let currentZoomImages = [];
         let currentZoomIndex = 0;
         let undoStack = [];
+        
+        // Multi-select state for config
+        let allYoloClassesConfig = [];
+        let selectedObjectLabels = [];
         
         // Theme Management
         function toggleTheme() {
@@ -1601,6 +1694,7 @@
                 
                 const detection = data.config.detection;
                 const objectLabels = detection.object_labels || [];
+                selectedObjectLabels = [...objectLabels]; // Store current labels
                 const confidence = detection.confidence_threshold || 0.25;
                 const objectFrames = detection.object_frames || 5;
                 const faceTolerance = detection.face_tolerance || 0.6;
@@ -1647,10 +1741,19 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Objects to Detect (one per line)</label>
-                        <textarea id="objectLabels" class="form-input" rows="8" placeholder="hedgehog&#10;fox&#10;cat&#10;dog">${objectLabels.join('\n')}</textarea>
+                        <label class="form-label">Objects to Detect</label>
+                        <div class="multi-select-container" id="objectLabelsContainer">
+                            <div class="multi-select-display" id="objectLabelsDisplay" onclick="toggleObjectLabelsMultiSelect()">
+                                <span class="placeholder-text">Loading...</span>
+                            </div>
+                            <div class="multi-select-dropdown" id="objectLabelsDropdown">
+                                <input type="text" class="multi-select-search" id="objectLabelsSearch" 
+                                       placeholder="Search YOLO classes..." onkeyup="filterObjectLabelsMultiSelect()" onclick="event.stopPropagation()">
+                                <div id="objectLabelsOptions"></div>
+                            </div>
+                        </div>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                            Common options: hedgehog, fox, cat, dog, squirrel, bird, crow, robin, person, car, bicycle
+                            Select which YOLO object classes to detect in videos. Choose from 80 standard COCO classes.
                         </p>
                     </div>
                     
@@ -1763,6 +1866,13 @@
                     </div>
                     <div id="configMessage" style="margin-top: 1rem;"></div>
                 `;
+                
+                // Initialize multi-select after form is rendered
+                await loadYoloClassesForConfig();
+                updateObjectLabelsDisplayTags();
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', handleObjectLabelsOutsideClick);
             } catch (error) {
                 console.error('Failed to load config:', error);
                 document.getElementById('configForm').innerHTML = `
@@ -1780,10 +1890,8 @@
         
         async function saveConfig() {
             try {
-                const labels = document.getElementById('objectLabels').value
-                    .split('\n')
-                    .map(l => l.trim())
-                    .filter(l => l.length > 0);
+                // Use selected object labels from multi-select
+                const labels = selectedObjectLabels;
                 
                 const config = {
                     config: {
@@ -1884,6 +1992,103 @@
                     ${label} <button onclick="removeFromBlacklistByIndex(${index})" style="background: none; border: none; color: white; cursor: pointer; margin-left: 0.25rem;" title="Remove ${label}">✕</button>
                 </span>
             `).join('');
+        }
+        
+        // Multi-select functions for Object Labels
+        async function loadYoloClassesForConfig() {
+            try {
+                const response = await fetch('/api/yolo_classes');
+                const data = await response.json();
+                allYoloClassesConfig = data.classes;
+                renderObjectLabelsMultiSelectOptions();
+            } catch (error) {
+                console.error('Failed to load YOLO classes:', error);
+            }
+        }
+        
+        function renderObjectLabelsMultiSelectOptions() {
+            const optionsDiv = document.getElementById('objectLabelsOptions');
+            if (!optionsDiv) return;
+            
+            optionsDiv.innerHTML = allYoloClassesConfig.map(cls => `
+                <div class="multi-select-option" onclick="toggleObjectLabelSelection('${cls}', event)">
+                    <input type="checkbox" id="obj_class_${cls}" ${selectedObjectLabels.includes(cls) ? 'checked' : ''}>
+                    <label for="obj_class_${cls}" style="cursor: pointer; user-select: none;">${cls}</label>
+                </div>
+            `).join('');
+        }
+        
+        function toggleObjectLabelsMultiSelect() {
+            const dropdown = document.getElementById('objectLabelsDropdown');
+            if (!dropdown) return;
+            dropdown.classList.toggle('active');
+            if (dropdown.classList.contains('active')) {
+                const search = document.getElementById('objectLabelsSearch');
+                if (search) search.focus();
+            }
+        }
+        
+        function toggleObjectLabelSelection(className, event) {
+            event.stopPropagation();
+            const checkbox = document.getElementById(`obj_class_${className}`);
+            if (!checkbox) return;
+            
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                if (!selectedObjectLabels.includes(className)) {
+                    selectedObjectLabels.push(className);
+                }
+            } else {
+                selectedObjectLabels = selectedObjectLabels.filter(c => c !== className);
+            }
+            
+            updateObjectLabelsDisplayTags();
+        }
+        
+        function updateObjectLabelsDisplayTags() {
+            const display = document.getElementById('objectLabelsDisplay');
+            if (!display) return;
+            
+            if (selectedObjectLabels.length === 0) {
+                display.innerHTML = '<span class="placeholder-text">Select YOLO classes...</span>';
+            } else {
+                display.innerHTML = selectedObjectLabels.map(cls => `
+                    <div class="selected-tag">
+                        ${cls}
+                        <span class="remove" onclick="removeObjectLabelTag('${cls}', event)">×</span>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        function removeObjectLabelTag(className, event) {
+            event.stopPropagation();
+            selectedObjectLabels = selectedObjectLabels.filter(c => c !== className);
+            const checkbox = document.getElementById(`obj_class_${className}`);
+            if (checkbox) checkbox.checked = false;
+            updateObjectLabelsDisplayTags();
+        }
+        
+        function filterObjectLabelsMultiSelect() {
+            const search = document.getElementById('objectLabelsSearch');
+            if (!search) return;
+            
+            const searchText = search.value.toLowerCase();
+            const options = document.querySelectorAll('#objectLabelsOptions .multi-select-option');
+            
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(searchText) ? 'flex' : 'none';
+            });
+        }
+        
+        function handleObjectLabelsOutsideClick(e) {
+            const container = document.getElementById('objectLabelsContainer');
+            const dropdown = document.getElementById('objectLabelsDropdown');
+            if (container && dropdown && !container.contains(e.target)) {
+                dropdown.classList.remove('active');
+            }
         }
         
         async function reprocessAllVideos() {
