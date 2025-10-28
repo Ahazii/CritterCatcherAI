@@ -114,6 +114,16 @@ async def root():
     return HTMLResponse(content=html_content, status_code=200)
 
 
+@app.get("/species.html", response_class=HTMLResponse)
+async def species_page():
+    """Serve the species training interface."""
+    species_file = static_path / "species.html"
+    if not species_file.exists():
+        return HTMLResponse("<h1>Species Training</h1><p>Page not found. Please rebuild the Docker image.</p>", status_code=404)
+    
+    return HTMLResponse(content=species_file.read_text(), status_code=200)
+
+
 @app.get("/api/status")
 async def get_status():
     """Get current application status."""
