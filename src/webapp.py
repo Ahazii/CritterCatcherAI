@@ -20,6 +20,9 @@ import uvicorn
 import requests
 import numpy as np
 
+from taxonomy_tree import TaxonomyTree, TaxonomyNode
+from object_detector import YOLO_COCO_CLASSES
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,12 +95,32 @@ app_state = {
 }
 
 CONFIG_PATH = Path("/app/config/config.yaml")
+TAXONOMY_FILE = Path("/app/config/taxonomy.json")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
 DISCOVERIES_FILE = Path("/data/objects/discoveries.json")
 SORTED_PATH = Path("/data/sorted")
 DOWNLOADS_PATH = Path("/data/downloads")
+
+# Global taxonomy tree
+taxonomy_tree: Optional[TaxonomyTree] = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize taxonomy tree on startup."""
+    global taxonomy_tree
+    
+    try:
+        # Load or create taxonomy tree
+        taxonomy_tree = TaxonomyTree.load_from_file(TAXONOMY_FILE, YOLO_COCO_CLASSES)
+        logger.info(f"Taxonomy tree initialized with {len(taxonomy_tree.roots)} root classes")
+    except Exception as e:
+        logger.error(f"Failed to initialize taxonomy tree: {e}")
+        # Create new tree as fallback
+        taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
+        logger.info("Created new taxonomy tree")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1884,6 +1907,238 @@ async def add_object_labels(request: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to add object labels: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# HIERARCHICAL TAXONOMY API ENDPOINTS
+# ============================================================================
+
+@app.get("/api/taxonomy/tree")
+async def get_taxonomy_tree():
+    """Get the complete hierarchical taxonomy tree."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        return {"tree": taxonomy_tree.to_dict()}
+    except Exception as e:
+        logger.error(f"Failed to get taxonomy tree: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/taxonomy/node")
+async def add_taxonomy_node(request: dict):
+    """Add a new species/subspecies node to the taxonomy tree."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        name = request.get('name', '').strip()
+        parent_id = request.get('parent_id', '').strip()
+        level = request.get('level', 'species')
+        confidence_threshold = request.get('confidence_threshold', 0.75)
+        metadata = request.get('metadata', {})
+        
+        if not name:
+            raise HTTPException(status_code=400, detail="Name is required")
+        
+        if not parent_id:
+            raise HTTPException(status_code=400, detail="Parent ID is required")
+        
+        # Generate model path
+        model_filename = name.lower().replace(' ', '_') + '_classifier.pt'
+        model_path = f"/data/models/{model_filename}"
+        
+        # Add node to tree
+        node = taxonomy_tree.add_node(
+            name=name,
+            parent_id=parent_id,
+            level=level,
+            model_path=model_path,
+            confidence_threshold=confidence_threshold,
+            metadata=metadata
+        )
+        
+        # Save tree to file
+        taxonomy_tree.save_to_file(TAXONOMY_FILE)
+        
+        # Create training data directory
+        node_path = taxonomy_tree.get_node_path(node.id)
+        training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
+        training_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get parent node path for validation
+        parent_node = taxonomy_tree.get_node(parent_id)
+        parent_path = taxonomy_tree.get_node_path(parent_id) if parent_node else []
+        
+        logger.info(f"Added taxonomy node: {name} under {parent_id}")
+        
+        return {
+            "status": "success",
+            "node": node.to_dict(),
+            "path": node_path,
+            "parent_path": parent_path,
+            "message": f"Added {level} '{name}' to taxonomy"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to add taxonomy node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/taxonomy/node/{node_id}")
+async def delete_taxonomy_node(node_id: str):
+    """Remove a node and all its descendants from the taxonomy tree."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        # Get node info before deletion
+        node = taxonomy_tree.get_node(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        node_name = node.name
+        
+        # Remove from tree
+        success = taxonomy_tree.remove_node(node_id)
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Cannot remove YOLO root nodes or node not found")
+        
+        # Save updated tree
+        taxonomy_tree.save_to_file(TAXONOMY_FILE)
+        
+        logger.info(f"Removed taxonomy node: {node_name} ({node_id})")
+        
+        return {
+            "status": "success",
+            "message": f"Removed {node_name} and its descendants"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete taxonomy node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/taxonomy/node/{node_id}")
+async def update_taxonomy_node(node_id: str, request: dict):
+    """Update properties of a taxonomy node."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        node = taxonomy_tree.get_node(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        # Update allowed properties
+        if 'confidence_threshold' in request:
+            node.confidence_threshold = float(request['confidence_threshold'])
+        
+        if 'enabled' in request:
+            node.enabled = bool(request['enabled'])
+        
+        if 'metadata' in request:
+            node.metadata.update(request['metadata'])
+        
+        # Save updated tree
+        taxonomy_tree.save_to_file(TAXONOMY_FILE)
+        
+        logger.info(f"Updated taxonomy node: {node.name} ({node_id})")
+        
+        return {
+            "status": "success",
+            "node": node.to_dict(),
+            "message": f"Updated {node.name}"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update taxonomy node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/taxonomy/node/{node_id}")
+async def get_taxonomy_node(node_id: str):
+    """Get details of a specific taxonomy node."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        node = taxonomy_tree.get_node(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        node_path = taxonomy_tree.get_node_path(node_id)
+        
+        # Count training images
+        training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
+        training_images = 0
+        if training_dir.exists():
+            training_images = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png")))
+        
+        return {
+            "node": node.to_dict(),
+            "path": node_path,
+            "training_images": training_images
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get taxonomy node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/taxonomy/node/{node_id}/upload_training_data")
+async def upload_node_training_data(
+    node_id: str,
+    files: List[UploadFile] = File(...)
+):
+    """Upload training images for a taxonomy node."""
+    try:
+        if taxonomy_tree is None:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
+        
+        node = taxonomy_tree.get_node(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        # Get node path for directory structure
+        node_path = taxonomy_tree.get_node_path(node_id)
+        training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
+        training_dir.mkdir(parents=True, exist_ok=True)
+        
+        uploaded_count = 0
+        for file in files:
+            if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                continue
+            
+            file_path = training_dir / file.filename
+            content = await file.read()
+            file_path.write_bytes(content)
+            uploaded_count += 1
+        
+        logger.info(f"Uploaded {uploaded_count} training images for {node.name}")
+        
+        return {
+            "status": "success",
+            "message": f"Uploaded {uploaded_count} image(s) for {node.name}",
+            "node_id": node_id,
+            "path": node_path
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload training data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
