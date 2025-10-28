@@ -202,12 +202,14 @@ class TaxonomyTree:
         Returns:
             True if removed, False if not found
         """
-        if node_id.startswith("yolo_"):
-            logger.warning(f"Cannot remove YOLO root node: {node_id}")
+        node = self.get_node(node_id)
+        if not node:
+            logger.warning(f"Node not found: {node_id}")
             return False
         
-        node = self.get_node(node_id)
-        if not node or not node.parent_id:
+        # Only block deletion of YOLO root nodes (parent_id is None)
+        if not node.parent_id:
+            logger.warning(f"Cannot remove YOLO root node: {node_id}")
             return False
         
         parent = self.get_node(node.parent_id)
