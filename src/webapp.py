@@ -1074,6 +1074,14 @@ async def reprocess_all_videos(background_tasks: BackgroundTasks):
             try:
                 import shutil
                 
+                # Clear detected objects folder for fresh detection images
+                if DETECTED_OBJECTS_PATH.exists():
+                    for item in DETECTED_OBJECTS_PATH.iterdir():
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                            logger.debug(f"Deleted detected objects: {item.name}")
+                    logger.info("Cleared detected objects folder")
+                
                 # Move all videos back
                 DOWNLOADS_PATH.mkdir(parents=True, exist_ok=True)
                 moved_count = 0
