@@ -300,29 +300,33 @@ class ObjectDetector:
         return all_detections
     
     def detect_objects_with_specialization(self, video_path: Path, config: dict, 
-                                          num_frames: int = None) -> Tuple[Dict[str, float], Dict[str, float]]:
+                                          taxonomy_tree=None,
+                                          num_frames: int = None) -> Tuple[Dict[str, float], Dict[str, Tuple]]:
         """
-        Detect objects with YOLO (Stage 1) and specialized classifiers (Stage 2).
+        Detect objects with YOLO (Stage 1) and hierarchical specialized classifiers (Stage 2+).
         
         Args:
             video_path: Path to video file
             config: Full configuration dictionary
+            taxonomy_tree: Hierarchical taxonomy tree for classification
             num_frames: Number of frames to analyze
             
         Returns:
             Tuple of (yolo_detections, species_results)
+            - yolo_detections: {label: confidence}
+            - species_results: {path_string: (confidence, path_list)}
         """
         # Stage 1: YOLO detection
         yolo_detections = self.detect_objects_in_video(video_path, num_frames)
         
-        # Stage 2: Specialized classification (if enabled)
+        # Stage 2+: Hierarchical specialized classification (if enabled)
         species_results = {}
         if config.get('specialized_detection', {}).get('enabled', False):
             try:
                 from specialized_classifier import SpecializedClassifier
                 
-                logger.info(f"Running Stage 2 specialized classification for {video_path.name}")
-                classifier = SpecializedClassifier(config)
+                logger.info(f"Running hierarchical specialized classification for {video_path.name}")
+                classifier = SpecializedClassifier(config, taxonomy_tree=taxonomy_tree)
                 
                 species_results = classifier.classify_detections(
                     video_path,
@@ -331,14 +335,14 @@ class ObjectDetector:
                 )
                 
                 if species_results:
-                    logger.info(f"Specialized detections: {species_results}")
+                    logger.info(f"Hierarchical detections: {list(species_results.keys())}")
                 else:
                     logger.debug("No specialized species detected")
                     
             except ImportError:
-                logger.warning("SpecializedClassifier not available - skipping Stage 2")
+                logger.warning("SpecializedClassifier not available - skipping Stage 2+")
             except Exception as e:
-                logger.error(f"Error in specialized classification: {e}", exc_info=True)
+                logger.error(f"Error in hierarchical classification: {e}", exc_info=True)
         
         return yolo_detections, species_results
     

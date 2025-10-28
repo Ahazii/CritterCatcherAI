@@ -1,6 +1,7 @@
 """
-Specialized classifier for fine-grained species identification (Stage 2).
+"""Specialized classifier for fine-grained species identification (Stage 2).
 Uses custom-trained models to identify specific animals from YOLO detections.
+Supports hierarchical taxonomy for multi-level classification.
 """
 import logging
 import torch
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import json
 from datetime import datetime
+
+from taxonomy_tree import TaxonomyTree, TaxonomyNode
 
 logger = logging.getLogger(__name__)
 
@@ -110,64 +113,64 @@ class SpeciesClassifier:
 
 class SpecializedClassifier:
     """
-    Manages multiple specialized species classifiers.
-    Coordinates Stage 2 classification after YOLO detection.
+    Manages hierarchical species classifiers.
+    Coordinates Stage 2+ classification after YOLO detection using taxonomy tree.
     """
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, taxonomy_tree: Optional[TaxonomyTree] = None):
         """
         Initialize specialized classifier system.
         
         Args:
             config: Configuration dictionary with specialized_detection section
+            taxonomy_tree: Hierarchical taxonomy tree (optional, for backward compatibility)
         """
         self.config = config
         self.enabled = config.get('specialized_detection', {}).get('enabled', False)
-        self.species_config = config.get('specialized_detection', {}).get('species', [])
+        self.taxonomy_tree = taxonomy_tree
         
         # Determine device (GPU if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         logger.info(f"SpecializedClassifier using device: {self.device}")
         
-        # Load all species classifiers
-        self.classifiers: Dict[str, SpeciesClassifier] = {}
-        self.parent_class_mapping: Dict[str, List[str]] = {}  # YOLO class -> species list
+        # Cache for loaded classifiers (node_id -> SpeciesClassifier)
+        self.classifier_cache: Dict[str, SpeciesClassifier] = {}
         
         if self.enabled:
-            self._load_classifiers()
+            if self.taxonomy_tree:
+                logger.info("Using hierarchical taxonomy tree for classification")
+            else:
+                logger.warning("Taxonomy tree not provided, specialized detection may not work")
         else:
             logger.info("Specialized detection is disabled in config")
     
-    def _load_classifiers(self):
-        """Load all configured species classifiers."""
-        for species_cfg in self.species_config:
-            species_name = species_cfg['name']
-            model_path = Path(species_cfg['model_path'])
-            confidence_threshold = species_cfg.get('confidence_threshold', 0.75)
-            parent_yolo_classes = species_cfg.get('parent_yolo_class', [])
-            
-            # Create classifier
+    def _get_or_load_classifier(self, node: TaxonomyNode) -> Optional[SpeciesClassifier]:
+        """Get classifier from cache or load it."""
+        if node.id in self.classifier_cache:
+            return self.classifier_cache[node.id]
+        
+        if not node.has_model():
+            return None
+        
+        # Load classifier
+        try:
             classifier = SpeciesClassifier(
-                species_name=species_name,
-                model_path=model_path,
-                confidence_threshold=confidence_threshold,
+                species_name=node.name,
+                model_path=Path(node.model_path),
+                confidence_threshold=node.confidence_threshold,
                 device=self.device
             )
-            
-            self.classifiers[species_name] = classifier
-            
-            # Build parent class mapping
-            for parent_class in parent_yolo_classes:
-                if parent_class not in self.parent_class_mapping:
-                    self.parent_class_mapping[parent_class] = []
-                self.parent_class_mapping[parent_class].append(species_name)
-            
-            logger.info(f"Loaded {species_name} classifier (parent classes: {parent_yolo_classes})")
+            self.classifier_cache[node.id] = classifier
+            logger.info(f"Loaded classifier for {node.name}")
+            return classifier
+        except Exception as e:
+            logger.error(f"Failed to load classifier for {node.name}: {e}")
+            return None
     
     def classify_detections(self, video_path: Path, yolo_detections: Dict[str, float],
-                           detected_objects_path: Path) -> Dict[str, float]:
+                           detected_objects_path: Path) -> Dict[str, Tuple[float, List[str]]]:
         """
-        Run specialized classification on YOLO detections.
+        Run hierarchical classification on YOLO detections.
         
         Args:
             video_path: Path to the video file being processed
@@ -175,25 +178,30 @@ class SpecializedClassifier:
             detected_objects_path: Path where YOLO saved detection images
             
         Returns:
-            Dictionary of {species_name: confidence} for specialized detections
+            Dictionary of {species_path: (confidence, path_list)} where:
+            - species_path: Full path string (e.g. "bird/finch/goldfinch")
+            - confidence: Detection confidence
+            - path_list: List of taxonomy nodes from root to leaf
         """
-        if not self.enabled or not self.classifiers:
+        if not self.enabled or not self.taxonomy_tree:
             return {}
         
-        species_results = {}
+        results = {}
         video_name = video_path.stem
         
-        logger.info(f"Running specialized classification for {video_name}")
+        logger.info(f"Running hierarchical classification for {video_name}")
         logger.debug(f"YOLO detections: {yolo_detections}")
         
-        # For each YOLO detection, check if we have specialized classifiers
+        # For each YOLO detection, traverse the taxonomy tree
         for yolo_class, yolo_confidence in yolo_detections.items():
-            if yolo_class not in self.parent_class_mapping:
+            # Get classifier chain for this YOLO class
+            classifier_chain = self.taxonomy_tree.get_classifier_chain(yolo_class)
+            
+            if not classifier_chain:
+                logger.debug(f"No specialized classifiers configured for '{yolo_class}'")
                 continue
             
-            # Get specialized classifiers for this YOLO class
-            species_to_check = self.parent_class_mapping[yolo_class]
-            logger.debug(f"YOLO detected '{yolo_class}', checking species: {species_to_check}")
+            logger.debug(f"YOLO detected '{yolo_class}', checking {len(classifier_chain)} classifiers")
             
             # Find detection images for this YOLO class
             label_dir = detected_objects_path / yolo_class.replace(" ", "_")
@@ -201,10 +209,9 @@ class SpecializedClassifier:
                 logger.warning(f"Detection images not found for {yolo_class}")
                 continue
             
-            # Get recent detection images for this video
+            # Get detection images for this video
             detection_images = []
             for img_file in label_dir.glob("*.jpg"):
-                # Check if this image is from the current video
                 if video_name in img_file.name:
                     detection_images.append(img_file)
             
@@ -214,47 +221,89 @@ class SpecializedClassifier:
             
             logger.debug(f"Found {len(detection_images)} detection images for {yolo_class}")
             
-            # Run each specialized classifier on the detection images
-            for species_name in species_to_check:
-                classifier = self.classifiers[species_name]
+            # Run hierarchical classification
+            classification_result = self._classify_hierarchical(
+                detection_images, 
+                classifier_chain,
+                yolo_class
+            )
+            
+            if classification_result:
+                node, confidence, best_image = classification_result
+                path = self.taxonomy_tree.get_node_path(node.id)
+                path_str = "/".join(path)
                 
-                if classifier.model is None:
-                    logger.warning(f"No model loaded for {species_name}, skipping")
-                    continue
+                results[path_str] = (confidence, path)
                 
-                # Classify each detection image
-                max_confidence = 0.0
-                best_match_image = None
+                logger.info(f"✓ Hierarchical match: {path_str} (confidence: {confidence:.3f})")
                 
-                for img_path in detection_images:
-                    try:
-                        image = Image.open(img_path).convert('RGB')
-                        is_species, confidence = classifier.classify(image)
-                        
-                        if confidence > max_confidence:
-                            max_confidence = confidence
-                            best_match_image = img_path
-                        
-                        if is_species:
-                            logger.info(f"✓ {species_name} detected in {img_path.name} "
-                                      f"(confidence: {confidence:.3f})")
-                    
-                    except Exception as e:
-                        logger.error(f"Error classifying {img_path}: {e}")
-                
-                # Store best result for this species
-                if max_confidence > 0:
-                    species_results[species_name] = max_confidence
-                    
-                    # Save specialized detection metadata
-                    if max_confidence >= classifier.confidence_threshold:
-                        self._save_specialized_detection(
-                            video_path, species_name, max_confidence, 
-                            best_match_image, yolo_class
-                        )
+                # Save specialized detection metadata
+                self._save_specialized_detection(
+                    video_path, path_str, confidence,
+                    best_image, yolo_class
+                )
         
-        logger.info(f"Specialized detection results for {video_name}: {species_results}")
-        return species_results
+        logger.info(f"Hierarchical classification results for {video_name}: {list(results.keys())}")
+        return results
+    
+    def _classify_hierarchical(self, detection_images: List[Path], 
+                              classifier_chain: List[TaxonomyNode],
+                              yolo_class: str) -> Optional[Tuple[TaxonomyNode, float, Path]]:
+        """
+        Run hierarchical classification cascade through the tree.
+        
+        Args:
+            detection_images: List of detection image paths
+            classifier_chain: Ordered list of classifier nodes to check
+            yolo_class: Original YOLO class
+            
+        Returns:
+            Tuple of (matched_node, confidence, best_image) or None
+        """
+        best_match = None
+        best_confidence = 0.0
+        best_image = None
+        
+        # Try each classifier in the chain
+        for node in classifier_chain:
+            classifier = self._get_or_load_classifier(node)
+            
+            if classifier is None:
+                logger.debug(f"No model available for {node.name}, skipping")
+                continue
+            
+            # Classify each detection image with this classifier
+            max_conf = 0.0
+            max_img = None
+            
+            for img_path in detection_images:
+                try:
+                    image = Image.open(img_path).convert('RGB')
+                    is_match, confidence = classifier.classify(image)
+                    
+                    if confidence > max_conf:
+                        max_conf = confidence
+                        max_img = img_path
+                
+                except Exception as e:
+                    logger.error(f"Error classifying {img_path}: {e}")
+            
+            # Check if this classifier matched
+            if max_conf >= node.confidence_threshold:
+                logger.debug(f"Match: {node.name} (confidence: {max_conf:.3f})")
+                
+                # Keep track of deepest match in tree
+                if max_conf > best_confidence:
+                    best_match = node
+                    best_confidence = max_conf
+                    best_image = max_img
+            else:
+                logger.debug(f"No match: {node.name} (max confidence: {max_conf:.3f} < threshold: {node.confidence_threshold})")
+        
+        if best_match:
+            return (best_match, best_confidence, best_image)
+        
+        return None
     
     def _save_specialized_detection(self, video_path: Path, species_name: str,
                                    confidence: float, detection_image: Path,
@@ -298,11 +347,25 @@ class SpecializedClassifier:
             logger.error(f"Failed to save specialized detection metadata: {e}")
     
     def get_target_species(self) -> List[str]:
-        """Get list of all configured target species."""
-        return list(self.classifiers.keys())
+        """Get list of all species in taxonomy tree with trained models."""
+        if not self.taxonomy_tree:
+            return []
+        
+        species_list = []
+        for node in self.taxonomy_tree._node_index.values():
+            if node.level != 'yolo' and node.has_model():
+                path = self.taxonomy_tree.get_node_path(node.id)
+                species_list.append("/".join(path))
+        
+        return species_list
     
-    def is_model_available(self, species_name: str) -> bool:
-        """Check if a trained model exists for a species."""
-        if species_name not in self.classifiers:
+    def is_model_available(self, node_id: str) -> bool:
+        """Check if a trained model exists for a taxonomy node."""
+        if not self.taxonomy_tree:
             return False
-        return self.classifiers[species_name].model is not None
+        
+        node = self.taxonomy_tree.get_node(node_id)
+        if not node:
+            return False
+        
+        return node.has_model()
