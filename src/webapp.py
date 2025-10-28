@@ -80,7 +80,15 @@ app_state = {
     "is_processing": False,
     "last_run": None,
     "stats": {},
-    "log_buffer": []
+    "log_buffer": [],
+    "stop_requested": False,
+    "processing_progress": {
+        "current_video": None,
+        "current_step": None,
+        "videos_processed": 0,
+        "videos_total": 0,
+        "start_time": None
+    }
 }
 
 CONFIG_PATH = Path("/app/config/config.yaml")
@@ -109,11 +117,34 @@ async def root():
 @app.get("/api/status")
 async def get_status():
     """Get current application status."""
+    progress = app_state["processing_progress"]
+    
+    # Calculate time elapsed if processing
+    time_elapsed = None
+    time_remaining = None
+    if app_state["is_processing"] and progress["start_time"]:
+        elapsed_seconds = (datetime.now() - progress["start_time"]).total_seconds()
+        time_elapsed = int(elapsed_seconds)
+        
+        # Estimate remaining time
+        if progress["videos_processed"] > 0 and progress["videos_total"] > 0:
+            avg_time_per_video = elapsed_seconds / progress["videos_processed"]
+            remaining_videos = progress["videos_total"] - progress["videos_processed"]
+            time_remaining = int(avg_time_per_video * remaining_videos)
+    
     return {
         "is_processing": app_state["is_processing"],
         "last_run": app_state["last_run"],
         "uptime": "Running",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "processing_progress": {
+            "current_video": progress["current_video"],
+            "current_step": progress["current_step"],
+            "videos_processed": progress["videos_processed"],
+            "videos_total": progress["videos_total"],
+            "time_elapsed": time_elapsed,
+            "time_remaining": time_remaining
+        } if app_state["is_processing"] else None
     }
 
 
@@ -439,6 +470,16 @@ async def trigger_processing(background_tasks: BackgroundTasks):
         logger.warning("Processing already running, rejecting request")
         return {"status": "already_running", "message": "Processing is already in progress"}
     
+    # Reset stop flag and progress
+    app_state["stop_requested"] = False
+    app_state["processing_progress"] = {
+        "current_video": None,
+        "current_step": "Starting...",
+        "videos_processed": 0,
+        "videos_total": 0,
+        "start_time": datetime.now()
+    }
+    
     def process_task():
         app_state["is_processing"] = True
         try:
@@ -454,10 +495,26 @@ async def trigger_processing(background_tasks: BackgroundTasks):
             logger.error(f"Processing failed: {e}", exc_info=True)
         finally:
             app_state["is_processing"] = False
+            app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
     
     background_tasks.add_task(process_task)
     logger.info("Processing task added to background queue")
     return {"status": "started", "message": "Processing started"}
+
+
+@app.post("/api/stop")
+async def stop_processing():
+    """Request to stop current processing gracefully."""
+    if not app_state["is_processing"]:
+        return {"status": "not_processing", "message": "No processing task is currently running"}
+    
+    app_state["stop_requested"] = True
+    logger.info("Stop requested - will finish current video and stop")
+    
+    return {
+        "status": "stopping",
+        "message": "Stop requested. Will finish current video and stop gracefully."
+    }
 
 
 @app.post("/api/download-all")

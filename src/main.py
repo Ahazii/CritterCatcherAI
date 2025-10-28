@@ -158,21 +158,66 @@ def process_videos(config: dict):
     
     logger.info(f"Processing {len(downloaded_videos)} videos")
     
+    # Update progress: set total count
+    try:
+        from webapp import app_state
+        app_state["processing_progress"]["videos_total"] = len(downloaded_videos)
+    except:
+        pass  # webapp might not be loaded
+    
     # Process each video
-    for video_path in downloaded_videos:
+    for idx, video_path in enumerate(downloaded_videos, 1):
+        # Check stop flag
+        try:
+            from webapp import app_state
+            if app_state.get("stop_requested", False):
+                logger.info("Stop requested - ending processing gracefully")
+                break
+        except:
+            pass
+        
         try:
             # Check if video still exists (may have been processed/moved already)
             if not video_path.exists():
                 logger.debug(f"Skipping {video_path.name}: already processed or moved")
                 continue
             
+            # Update progress
+            try:
+                from webapp import app_state
+                app_state["processing_progress"]["current_video"] = video_path.name
+                app_state["processing_progress"]["videos_processed"] = idx
+            except:
+                pass
+            
             logger.info(f"Processing video: {video_path.name}")
+            
+            # Update progress: object detection
+            try:
+                from webapp import app_state
+                app_state["processing_progress"]["current_step"] = "Running YOLO detection..."
+            except:
+                pass
             
             # Run object detection
             detected_objects = object_detector.detect_objects_in_video(video_path)
             
+            # Update progress: face recognition
+            try:
+                from webapp import app_state
+                app_state["processing_progress"]["current_step"] = "Recognizing faces..."
+            except:
+                pass
+            
             # Run face recognition
             recognized_people = face_recognizer.recognize_faces_in_video(video_path)
+            
+            # Update progress: sorting
+            try:
+                from webapp import app_state
+                app_state["processing_progress"]["current_step"] = "Sorting video..."
+            except:
+                pass
             
             # Sort video based on detections
             priority = detection_config.get('priority', 'people')
