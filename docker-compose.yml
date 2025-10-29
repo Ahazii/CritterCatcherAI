@@ -38,6 +38,12 @@ services:
       
       # Ring authentication token
       - /mnt/user/appdata/crittercatcher/tokens:/data/tokens
+      
+      # Training data for species classifiers
+      - /mnt/user/appdata/crittercatcher/training_data:/data/training_data
+      
+      # Trained models for specialized species detection
+      - /mnt/user/appdata/crittercatcher/models:/data/models
     
     # Optional: GPU support for faster inference
     # Uncomment if you have NVIDIA GPU and nvidia-docker installed
