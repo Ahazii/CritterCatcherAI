@@ -134,7 +134,8 @@ class TrainingManager:
         """
         logger.info(f"Preparing dataset for {species_name}")
         
-        species_dir = self.training_data_path / species_name.replace(" ", "_")
+        # Handle taxonomy paths: "cat/Hedgehog" -> "cat_Hedgehog" (consistent with upload handler)
+        species_dir = self.training_data_path / species_name.replace("/", "_").replace(" ", "_")
         
         # Collect positive samples (images of the species)
         positive_dir = species_dir / "train"
@@ -162,7 +163,7 @@ class TrainingManager:
             
             if detected_objects_path.exists():
                 for label_dir in detected_objects_path.iterdir():
-                    if label_dir.is_dir() and label_dir.name != species_name.replace(" ", "_"):
+                    if label_dir.is_dir() and label_dir.name != species_name.replace("/", "_").replace(" ", "_"):
                         label_images = list(label_dir.glob("*.jpg"))[:50]  # Limit per class
                         negative_images.extend(label_images)
         
@@ -391,7 +392,7 @@ class TrainingManager:
             # Save best model
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
-                model_path = self.models_path / f"{species_name.replace(' ', '_')}_classifier.pt"
+                model_path = self.models_path / f"{species_name.replace('/', '_').replace(' ', '_')}_classifier.pt"
                 
                 torch.save({
                     'epoch': epoch,
@@ -424,7 +425,7 @@ class TrainingManager:
             "history": history
         }
         
-        metadata_path = self.models_path / f"{species_name.replace(' ', '_')}_metadata.json"
+        metadata_path = self.models_path / f"{species_name.replace('/', '_').replace(' ', '_')}_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
