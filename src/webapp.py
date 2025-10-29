@@ -1869,7 +1869,8 @@ async def upload_species_training_data(
         if not species_name:
             raise HTTPException(status_code=400, detail="Species name required")
         
-        training_dir = Path("/data/training_data") / species_name.replace(" ", "_") / "train"
+        # Handle taxonomy paths: "cat/Hedgehog" -> "cat_Hedgehog"
+        training_dir = Path("/data/training_data") / species_name.replace("/", "_").replace(" ", "_") / "train"
         training_dir.mkdir(parents=True, exist_ok=True)
         
         uploaded_count = 0
@@ -1903,9 +1904,10 @@ async def train_species(request: dict, background_tasks: BackgroundTasks):
             raise HTTPException(status_code=400, detail="Species name required")
         
         # Check if training data exists
-        training_dir = Path("/data/training_data") / species_name.replace(" ", "_") / "train"
+        # Handle taxonomy paths: "cat/Hedgehog" -> "cat_Hedgehog"
+        training_dir = Path("/data/training_data") / species_name.replace("/", "_").replace(" ", "_") / "train"
         if not training_dir.exists():
-            raise HTTPException(status_code=404, detail=f"No training data found for {species_name}")
+            raise HTTPException(status_code=404, detail=f"No training data found for {species_name}. Expected: {training_dir}")
         
         image_count = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png")))
         if image_count < 10:
