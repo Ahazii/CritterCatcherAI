@@ -1074,13 +1074,32 @@
                 const statusDiv = document.getElementById('trainingStatus');
                 if (data.is_training) {
                     statusDiv.innerHTML = `
-                        <div class="training-status">
-                            <strong>Training: ${data.current_species}</strong>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: 50%"></div>
+                        <div style="background: rgba(66, 153, 225, 0.1); border: 2px solid var(--accent-color); border-radius: 8px; padding: 1.5rem;">
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="font-size: 2rem;">🎓</div>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 1.25rem; font-weight: 600; color: var(--accent-color); margin-bottom: 0.25rem;">
+                                        Training in Progress
+                                    </div>
+                                    <div style="font-size: 1rem; color: var(--text-primary);">
+                                        <strong>${data.current_species}</strong>
+                                    </div>
+                                </div>
                             </div>
-                            <p style="margin-top: 0.5rem; font-size: 0.875rem;">Training in progress... Check logs for details.</p>
+                            <div style="background: var(--bg-secondary); border-radius: 8px; height: 24px; overflow: hidden; margin-bottom: 1rem;">
+                                <div style="background: linear-gradient(90deg, var(--accent-color), var(--success-color)); height: 100%; width: 100%; animation: pulse 2s ease-in-out infinite;"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.875rem; color: var(--text-secondary);">
+                                <span>⏱️ Training can take 30-60 minutes</span>
+                                <span>💾 Model will appear below when complete</span>
+                            </div>
                         </div>
+                        <style>
+                            @keyframes pulse {
+                                0%, 100% { opacity: 1; }
+                                50% { opacity: 0.5; }
+                            }
+                        </style>
                     `;
                 } else {
                     statusDiv.innerHTML = '<p style="color: var(--text-secondary);">No training in progress</p>';
@@ -1243,8 +1262,9 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(`Training started for ${path}`, 'success');
-                    loadTrainingStatus();
+                    showAlert(`✅ Training started for ${path}!\n\n⏱️ This will take 30-60 minutes.\n🔄 The page refreshes every 5 seconds to show progress.\n💾 Model will appear in "Trained Models" when complete.`, 'success');
+                    // Immediately refresh status to show training banner
+                    setTimeout(() => loadTrainingStatus(), 1000);
                 } else {
                     showAlert('Training failed: ' + data.detail, 'error');
                 }
