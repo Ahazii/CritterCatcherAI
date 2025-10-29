@@ -3342,34 +3342,7 @@
             lazyImages.forEach(img => imageObserver.observe(img));
         }
         
-        // Enhanced zoom modal with keyboard navigation
-        function openZoomModal(imageSrc, label, confidence) {
-            const modal = document.getElementById('zoomModal');
-            const modalImg = document.getElementById('zoomModalImage');
-            const modalInfo = document.getElementById('zoomModalInfo');
-            
-            modal.classList.add('show');
-            modalImg.src = imageSrc;
-            
-            let infoHTML = `<strong>Label:</strong> ${label}`;
-            if (confidence) {
-                const conf = (confidence * 100).toFixed(1);
-                infoHTML += `<br><strong>Confidence:</strong> ${conf}%`;
-            }
-            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Click anywhere to close | ESC to close | ← → to navigate</em>`;
-            
-            modalInfo.innerHTML = infoHTML;
-            
-            // Enable keyboard navigation
-            document.addEventListener('keydown', handleZoomModalKeyboard);
-        }
-        
-        function handleZoomModalKeyboard(event) {
-            if (event.key === 'Escape') {
-                closeZoomModal();
-            }
-            // Arrow key navigation can be enhanced in future
-        }
+        // Enhanced zoom modal with keyboard navigation - handled by earlier definition
         
         // ===== END PHASE 2 =====
         
