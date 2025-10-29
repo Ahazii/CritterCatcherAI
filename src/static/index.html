@@ -604,8 +604,9 @@
         .image-item img {
             width: 100%;
             height: 150px;
-            object-fit: cover;
+            object-fit: contain;
             display: block;
+            background: var(--bg-secondary);
         }
         
         .image-overlay {
@@ -697,6 +698,13 @@
             border-radius: 8px;
             text-align: center;
             color: var(--text-primary);
+        }
+        
+        .zoom-modal-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
         }
         
         .zoom-modal-close {
@@ -1296,6 +1304,10 @@
         <div class="zoom-modal-content" onclick="event.stopPropagation()">
             <img id="zoomModalImage" src="" alt="Zoomed view">
             <div id="zoomModalInfo" class="zoom-modal-info"></div>
+            <div id="zoomModalActions" class="zoom-modal-actions" style="display: none;">
+                <button class="btn btn-success" onclick="confirmFromZoom(event)" style="padding: 0.75rem 1.5rem;">✓ Confirm</button>
+                <button class="btn" onclick="deleteFromZoom(event)" style="background: var(--danger-color); padding: 0.75rem 1.5rem;">✗ Delete</button>
+            </div>
         </div>
     </div>
     
@@ -1317,6 +1329,7 @@
         let currentZoomImages = [];
         let currentZoomIndex = 0;
         let undoStack = [];
+        let currentZoomDetectionId = null;  // Store detection ID for zoom modal actions
         
         // Multi-select state for config
         let allYoloClassesConfig = [];
@@ -2566,13 +2579,15 @@
         }
         
         // Image zoom modal functions
-        function openZoomModal(imageSrc, label, confidence) {
+        function openZoomModal(imageSrc, label, confidence, detectionId = null) {
             const modal = document.getElementById('zoomModal');
             const modalImg = document.getElementById('zoomModalImage');
             const modalInfo = document.getElementById('zoomModalInfo');
+            const modalActions = document.getElementById('zoomModalActions');
             
             modal.classList.add('show');
             modalImg.src = imageSrc;
+            currentZoomDetectionId = detectionId;
             
             let infoHTML = `<strong>Label:</strong> ${label}`;
             if (confidence) {
@@ -2583,6 +2598,13 @@
             
             modalInfo.innerHTML = infoHTML;
             
+            // Show action buttons only for detected objects (when detectionId is provided)
+            if (detectionId) {
+                modalActions.style.display = 'flex';
+            } else {
+                modalActions.style.display = 'none';
+            }
+            
             // Enable ESC key to close
             document.addEventListener('keydown', handleZoomModalEscape);
         }
@@ -2591,7 +2613,63 @@
             if (event) event.stopPropagation();
             const modal = document.getElementById('zoomModal');
             modal.classList.remove('show');
+            currentZoomDetectionId = null;
             document.removeEventListener('keydown', handleZoomModalEscape);
+        }
+        
+        async function confirmFromZoom(event) {
+            event.stopPropagation();
+            if (!currentZoomDetectionId) return;
+            
+            try {
+                const response = await fetch('/api/detected_objects/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ detections: [currentZoomDetectionId] })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                closeZoomModal();
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to confirm:', error);
+                alert('Failed to confirm detection');
+            }
+        }
+        
+        async function deleteFromZoom(event) {
+            event.stopPropagation();
+            if (!currentZoomDetectionId) return;
+            
+            if (!confirm('Delete this detection?\n\nThis is incorrectly identified and will be removed.')) {
+                return;
+            }
+            
+            try {
+                const [label, filename] = currentZoomDetectionId.split(':');
+                const response = await fetch('/api/detected_objects/relabel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        old_label: label,
+                        new_label: '',
+                        filename: filename,
+                        action: 'delete'
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Detection deleted');
+                    closeZoomModal();
+                    loadDetectedObjects();
+                } else {
+                    alert('Failed to delete detection');
+                }
+            } catch (error) {
+                console.error('Failed to delete:', error);
+                alert('Failed to delete detection');
+            }
         }
         
         function handleZoomModalEscape(event) {
@@ -3213,7 +3291,7 @@
                         <div class="image-item" 
                              id="object-${detectionId.replace(/[^a-z0-9]/gi, '-')}" 
                              onclick="toggleObjectSelection('${detectionId}', event)"
-                             ondblclick="openZoomModal('${imageSrc}', '${obj.label}', ${confidenceValue}); event.stopPropagation();"
+                             ondblclick="openZoomModal('${imageSrc}', '${obj.label}', ${confidenceValue}, '${detectionId}'); event.stopPropagation();"
                              title="Click to select | Double-click to zoom">
                             <img data-src="${imageSrc}" alt="${obj.label}" class="lazy">
                             <div class="confidence-badge">${confidence}% ${obj.label}</div>
