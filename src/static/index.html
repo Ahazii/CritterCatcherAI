@@ -2599,8 +2599,12 @@
             
             modalInfo.innerHTML = infoHTML;
             
-            // Show action buttons only for detected objects (when detectionId is provided)
+            // Show Confirm/Delete buttons for detected objects (when detectionId is provided)
             if (detectionId) {
+                modalActions.innerHTML = `
+                    <button class="btn btn-success" onclick="confirmFromZoom(event)" style="padding: 0.75rem 1.5rem;">✓ Confirm</button>
+                    <button class="btn" onclick="deleteFromZoom(event)" style="background: var(--danger-color); padding: 0.75rem 1.5rem;">✗ Delete</button>
+                `;
                 modalActions.style.display = 'flex';
             } else {
                 modalActions.style.display = 'none';
