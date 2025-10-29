@@ -2785,6 +2785,70 @@
         }
         
         // Per-category actions for detected objects
+        async function confirmSelectedInGroup(groupDetectionIds) {
+            // Filter to only selected items within this group
+            const selected = groupDetectionIds.filter(id => selectedObjects.has(id));
+            if (selected.length === 0) {
+                alert('Please select at least one object in this group');
+                return;
+            }
+            if (!confirm(`Confirm ${selected.length} selected detection(s) as correct?\n\nThese will be kept and used for AI training.`)) {
+                return;
+            }
+            alert(`${selected.length} detection(s) confirmed as correct!`);
+            // Clear selections and reload
+            selected.forEach(id => selectedObjects.delete(id));
+            loadDetectedObjects();
+        }
+        
+        async function deleteSelectedInGroup(groupDetectionIds) {
+            // Filter to only selected items within this group
+            const selected = groupDetectionIds.filter(id => selectedObjects.has(id));
+            if (selected.length === 0) {
+                alert('Please select at least one object in this group');
+                return;
+            }
+            if (!confirm(`Delete ${selected.length} selected detection(s)?\n\nThese are incorrectly identified and will be removed.`)) {
+                return;
+            }
+            
+            try {
+                // Parse label:filename format and group by label
+                const byLabel = {};
+                for (const detectionId of selected) {
+                    const [label, filename] = detectionId.split(':');
+                    if (!byLabel[label]) byLabel[label] = [];
+                    byLabel[label].push(filename);
+                }
+                
+                // Delete each
+                let deleted = 0;
+                for (const [label, filenames] of Object.entries(byLabel)) {
+                    for (const filename of filenames) {
+                        const response = await fetch('/api/detected_objects/relabel', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                old_label: label,
+                                new_label: '',
+                                filename: filename,
+                                action: 'delete'
+                            })
+                        });
+                        if (response.ok) deleted++;
+                    }
+                }
+                
+                alert(`Deleted ${deleted} detection(s)`);
+                selected.forEach(id => selectedObjects.delete(id));
+                loadDetectedObjects();
+                
+            } catch (error) {
+                console.error('Failed to delete objects:', error);
+                alert('Failed to delete some objects');
+            }
+        }
+        
         async function confirmCategoryObjects(label, detectionIds) {
             if (!confirm(`Confirm all ${label} detections as correct?`)) return;
             alert(`All ${label} detections confirmed!`);
@@ -3121,6 +3185,8 @@
                 html += `
                     </div>
                     <div class="label-controls" style="margin-top: 0.75rem; margin-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+                        <button class="btn btn-small" onclick="confirmSelectedInGroup(${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--success-color);" title="Confirm selected ${obj.label} detections as correct">✓ Confirm Selected</button>
+                        <button class="btn btn-small" onclick="deleteSelectedInGroup(${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--danger-color);" title="Delete selected ${obj.label} detections">✗ Delete Selected</button>
                         <button class="btn btn-small" onclick="confirmCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--success-color);" title="Confirm all ${obj.label} detections as correct">✓ Confirm All</button>
                         <button class="btn btn-small" onclick="deleteCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--danger-color);" title="Delete all ${obj.label} detections">✗ Delete All</button>
                         <button class="btn btn-small" onclick="relabelCategoryObjects('${obj.label}', ${JSON.stringify(detectionFilenames).replace(/"/g, '&quot;')})" style="background: var(--warning-color); color: white;" title="Relabel all ${obj.label} detections">🏷 Relabel All</button>
