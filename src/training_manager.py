@@ -15,6 +15,8 @@ import json
 import shutil
 from datetime import datetime
 import time
+from queue import Queue, Empty
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,11 @@ class TrainingManager:
         # Training state
         self.current_training = None
         self.training_history = []
+        
+        # Training queue
+        self.train_queue: Queue[str] = Queue()
+        self._worker_started = False
+        self._worker_thread: Optional[threading.Thread] = None
     
     def get_transforms(self, augment: bool = False) -> transforms.Compose:
         """
@@ -121,6 +128,36 @@ class TrainingManager:
                                    std=[0.229, 0.224, 0.225])
             ])
     
+    def _slugify(self, species_name: str) -> str:
+        """Normalize species name to a filesystem-friendly slug.
+        - Replace taxonomy separators and spaces with underscores.
+        """
+        return species_name.replace("/", "_").replace(" ", "_")
+
+    def ensure_worker(self):
+        if not self._worker_started:
+            self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+            self._worker_thread.start()
+            self._worker_started = True
+            logger.info("Training queue worker started")
+
+    def enqueue_training(self, species_name: str):
+        """Add a training job to the queue and start the worker if needed."""
+        self.ensure_worker()
+        self.train_queue.put(species_name)
+        logger.info(f"Queued training job for {species_name} (queue size: {self.train_queue.qsize()})")
+
+    def _worker_loop(self):
+        while True:
+            species_name = self.train_queue.get()
+            try:
+                logger.info(f"Dequeued training job: {species_name}")
+                self.train_species_classifier(species_name)
+            except Exception as e:
+                logger.error(f"Queued training failed for {species_name}: {e}", exc_info=True)
+            finally:
+                self.train_queue.task_done()
+
     def prepare_dataset(self, species_name: str, negative_samples_ratio: float = 1.0) -> Tuple[Dataset, Dataset]:
         """
         Prepare training and validation datasets for a species.
@@ -134,13 +171,25 @@ class TrainingManager:
         """
         logger.info(f"Preparing dataset for {species_name}")
         
-        # Handle taxonomy paths: "cat/Hedgehog" -> "cat_Hedgehog" (consistent with upload handler)
-        species_dir = self.training_data_path / species_name.replace("/", "_").replace(" ", "_")
+        # Determine species directory with robust fallback against legacy paths
+        slug = self._slugify(species_name)
+        base_paths = [Path("/data/training_data"), Path("/data/Training_Data")]
+        candidate_dirs = []
+        for base in base_paths:
+            candidate_dirs.append(base / slug)
+            candidate_dirs.append(base / species_name.replace("/", "_"))  # legacy (spaces preserved)
+        species_dir = None
+        for cand in candidate_dirs:
+            if (cand / "train").exists():
+                species_dir = cand
+                break
+        if species_dir is None:
+            # Default to normalized path for error message
+            species_dir = self.training_data_path / slug
+            raise FileNotFoundError(f"Training data not found: {species_dir / 'train'}")
         
         # Collect positive samples (images of the species)
         positive_dir = species_dir / "train"
-        if not positive_dir.exists():
-            raise FileNotFoundError(f"Training data not found: {positive_dir}")
         
         positive_images = list(positive_dir.glob("*.jpg")) + list(positive_dir.glob("*.png"))
         if len(positive_images) == 0:
@@ -163,7 +212,7 @@ class TrainingManager:
             
             if detected_objects_path.exists():
                 for label_dir in detected_objects_path.iterdir():
-                    if label_dir.is_dir() and label_dir.name != species_name.replace("/", "_").replace(" ", "_"):
+                    if label_dir.is_dir() and label_dir.name != self._slugify(species_name):
                         label_images = list(label_dir.glob("*.jpg"))[:50]  # Limit per class
                         negative_images.extend(label_images)
         
@@ -399,7 +448,7 @@ class TrainingManager:
             # Save best model
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
-                model_path = self.models_path / f"{species_name.replace('/', '_').replace(' ', '_')}_classifier.pt"
+                model_path = self.models_path / f"{self._slugify(species_name)}_classifier.pt"
                 
                 torch.save({
                     'epoch': epoch,
@@ -432,7 +481,7 @@ class TrainingManager:
             "history": history
         }
         
-        metadata_path = self.models_path / f"{species_name.replace('/', '_').replace(' ', '_')}_metadata.json"
+        metadata_path = self.models_path / f"{self._slugify(species_name)}_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
@@ -450,9 +499,16 @@ class TrainingManager:
     
     def get_training_status(self) -> Dict:
         """Get current training status."""
+        # Snapshot queue (best-effort)
+        try:
+            queued = list(self.train_queue.queue)
+        except Exception:
+            queued = []
         return {
             "is_training": self.current_training is not None,
             "current_species": self.current_training.get("species") if self.current_training else None,
+            "queue_length": len(queued),
+            "queue": queued,
             "device": self.device,
             "available_models": self.list_trained_models()
         }

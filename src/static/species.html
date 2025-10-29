@@ -1072,9 +1072,13 @@
                 const data = await response.json();
                 
                 const statusDiv = document.getElementById('trainingStatus');
-                if (data.is_training) {
-                    statusDiv.innerHTML = `
-                        <div style="background: rgba(66, 153, 225, 0.1); border: 2px solid var(--accent-color); border-radius: 8px; padding: 1.5rem;">
+                if (data.is_training || data.queue_length > 0) {
+                    let html = '';
+                    
+                    // Current training
+                    if (data.is_training) {
+                        html += `
+                        <div style="background: rgba(66, 153, 225, 0.1); border: 2px solid var(--accent-color); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">
                             <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                                 <div style="font-size: 2rem;">🎓</div>
                                 <div style="flex: 1;">
@@ -1100,7 +1104,28 @@
                                 50% { opacity: 0.5; }
                             }
                         </style>
-                    `;
+                        `;
+                    }
+                    
+                    // Queue
+                    if (data.queue_length > 0) {
+                        html += `
+                        <div style="background: rgba(237, 137, 54, 0.1); border: 2px solid var(--warning-color); border-radius: 8px; padding: 1rem;">
+                            <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--warning-color);">
+                                📋 Training Queue (${data.queue_length})
+                            </div>
+                            <ul style="list-style: none; padding: 0; margin: 0;">
+                                ${data.queue.map((species, idx) => `
+                                    <li style="padding: 0.5rem; background: var(--bg-card); border-radius: 4px; margin-bottom: 0.25rem;">
+                                        <strong>#${idx + 1}</strong>: ${species}
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        `;
+                    }
+                    
+                    statusDiv.innerHTML = html;
                 } else {
                     statusDiv.innerHTML = '<p style="color: var(--text-secondary);">No training in progress</p>';
                 }

@@ -1882,8 +1882,9 @@ async def upload_species_training_data(
         if not species_name:
             raise HTTPException(status_code=400, detail="Species name required")
         
-        # Handle taxonomy paths: "dog/Jack Russell" -> "dog_Jack Russell" (preserve spaces in names)
-        training_dir = Path("/data/training_data") / species_name.replace("/", "_") / "train"
+        # Normalize species name to slug: "dog/Jack Russell" -> "dog_Jack_Russell"
+        slug = species_name.replace("/", "_").replace(" ", "_")
+        training_dir = Path("/data/training_data") / slug / "train"
         training_dir.mkdir(parents=True, exist_ok=True)
         
         # Set directory permissions for all users (rule: folders created by AI should have full permissions)
@@ -1924,8 +1925,9 @@ async def train_species(request: dict, background_tasks: BackgroundTasks):
             raise HTTPException(status_code=400, detail="Species name required")
         
         # Check if training data exists
-        # Handle taxonomy paths: "dog/Jack Russell" -> "dog_Jack Russell" (preserve spaces in names)
-        training_dir = Path("/data/training_data") / species_name.replace("/", "_") / "train"
+        # Normalize to slug: "dog/Jack Russell" -> "dog_Jack_Russell"
+        slug = species_name.replace("/", "_").replace(" ", "_")
+        training_dir = Path("/data/training_data") / slug / "train"
         if not training_dir.exists():
             raise HTTPException(status_code=404, detail=f"No training data found for {species_name}. Expected: {training_dir}")
         
@@ -1936,21 +1938,9 @@ async def train_species(request: dict, background_tasks: BackgroundTasks):
         
         logger.info(f"Starting training for {species_name} with {image_count} images")
         
-        def training_task():
-            try:
-                global training_manager
-                
-                result = training_manager.train_species_classifier(species_name)
-                
-                if result["success"]:
-                    logger.info(f"Training complete for {species_name}: {result['best_val_acc']:.2f}% accuracy")
-                else:
-                    logger.error(f"Training failed for {species_name}: {result.get('error')}")
-            
-            except Exception as e:
-                logger.error(f"Training task failed: {e}", exc_info=True)
-        
-        background_tasks.add_task(training_task)
+        # Enqueue training (handles concurrency via worker thread)
+        global training_manager
+        training_manager.enqueue_training(species_name)
         
         return {
             "status": "started",
