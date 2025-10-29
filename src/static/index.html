@@ -2617,14 +2617,26 @@
                 return;
             }
             
-            if (!confirm(`Confirm ${selectedObjects.size} detection(s) as correct?\n\nThese will be kept and used for AI training.`)) {
+            if (!confirm(`Confirm ${selectedObjects.size} detection(s) as correct?\n\nThese will be moved to confirmed folder and removed from review list.`)) {
                 return;
             }
             
-            // For confirmed objects, we just need to keep them - no API call needed unless you want to log confirmations
-            alert(`${selectedObjects.size} detection(s) confirmed as correct!`);
-            selectedObjects.clear();
-            loadDetectedObjects();
+            try {
+                const response = await fetch('/api/detected_objects/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ detections: Array.from(selectedObjects) })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                
+                selectedObjects.clear();
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to confirm objects:', error);
+                alert('Failed to confirm some objects');
+            }
         }
         
         async function deleteSelectedObjects() {
@@ -2792,13 +2804,27 @@
                 alert('Please select at least one object in this group');
                 return;
             }
-            if (!confirm(`Confirm ${selected.length} selected detection(s) as correct?\n\nThese will be kept and used for AI training.`)) {
+            if (!confirm(`Confirm ${selected.length} selected detection(s) as correct?\n\nThese will be moved to confirmed folder and removed from review list.`)) {
                 return;
             }
-            alert(`${selected.length} detection(s) confirmed as correct!`);
-            // Clear selections and reload
-            selected.forEach(id => selectedObjects.delete(id));
-            loadDetectedObjects();
+            
+            try {
+                const response = await fetch('/api/detected_objects/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ detections: selected })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                
+                // Clear selections and reload
+                selected.forEach(id => selectedObjects.delete(id));
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to confirm objects:', error);
+                alert('Failed to confirm some objects');
+            }
         }
         
         async function deleteSelectedInGroup(groupDetectionIds) {
@@ -2850,9 +2876,22 @@
         }
         
         async function confirmCategoryObjects(label, detectionIds) {
-            if (!confirm(`Confirm all ${label} detections as correct?`)) return;
-            alert(`All ${label} detections confirmed!`);
-            loadDetectedObjects();
+            if (!confirm(`Confirm all ${label} detections as correct?\n\nThese will be moved to confirmed folder and removed from review list.`)) return;
+            
+            try {
+                const response = await fetch('/api/detected_objects/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ detections: detectionIds })
+                });
+                
+                const data = await response.json();
+                alert(data.message);
+                loadDetectedObjects();
+            } catch (error) {
+                console.error('Failed to confirm category:', error);
+                alert('Failed to confirm some objects');
+            }
         }
         
         async function deleteCategoryObjects(label, detectionIds) {

@@ -936,10 +936,15 @@ async def get_detected_objects():
         
         # Iterate through label directories
         for label_dir in DETECTED_OBJECTS_PATH.iterdir():
-            if label_dir.is_dir():
+            if label_dir.is_dir() and label_dir.name != "confirmed":
                 label_objects = []
                 
+                # Only include files in root of label dir, not in confirmed subfolder
                 for img_file in label_dir.glob("*.jpg"):
+                    # Skip if this is in a subfolder (like confirmed)
+                    if img_file.parent != label_dir:
+                        continue
+                    
                     metadata_file = label_dir / f"{img_file.name}.json"
                     if metadata_file.exists():
                         with open(metadata_file, 'r') as f:
@@ -976,6 +981,65 @@ async def get_detected_object_image(label: str, filename: str):
         raise
     except Exception as e:
         logger.error(f"Failed to serve image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/detected_objects/confirm")
+async def confirm_detected_objects(request: dict):
+    """Confirm detected objects as correct - moves them to confirmed subfolder."""
+    try:
+        detections = request.get('detections', [])  # List of "label:filename" strings
+        
+        if not detections:
+            raise HTTPException(status_code=400, detail="No detections specified")
+        
+        confirmed_count = 0
+        for detection_id in detections:
+            try:
+                # Parse "label:filename" format
+                label, filename = detection_id.split(':', 1)
+                label = label.replace(" ", "_")
+                
+                # Source paths
+                old_path = DETECTED_OBJECTS_PATH / label / filename
+                old_metadata_path = DETECTED_OBJECTS_PATH / label / f"{filename}.json"
+                
+                if not old_path.exists():
+                    continue
+                
+                # Confirmed directory
+                confirmed_dir = DETECTED_OBJECTS_PATH / label / "confirmed"
+                confirmed_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions for confirmed folder
+                try:
+                    import stat
+                    confirmed_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as e:
+                    logger.warning(f"Could not set permissions on {confirmed_dir}: {e}")
+                
+                # Move files
+                new_path = confirmed_dir / filename
+                new_metadata_path = confirmed_dir / f"{filename}.json"
+                
+                old_path.rename(new_path)
+                if old_metadata_path.exists():
+                    old_metadata_path.rename(new_metadata_path)
+                
+                confirmed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to confirm {detection_id}: {e}")
+                continue
+        
+        return {
+            "status": "success",
+            "message": f"Confirmed {confirmed_count} detection(s)"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to confirm objects: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
