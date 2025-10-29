@@ -1075,7 +1075,9 @@ async def get_discoveries():
 
 @app.post("/api/discoveries/approve")
 async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
-    """Approve discovered objects and add them to tracking list."""
+    """Approve discovered objects and add them to taxonomy tree as YOLO root nodes."""
+    global taxonomy_tree
+    
     try:
         labels = request.get('labels', [])
         relabel_from = request.get('relabel_from')  # Optional: for correcting misidentifications
@@ -1083,25 +1085,44 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
         if not labels:
             raise HTTPException(status_code=400, detail="No labels specified")
         
-        # Load config
-        if not CONFIG_PATH.exists():
-            raise HTTPException(status_code=404, detail="Config file not found")
+        if not taxonomy_tree:
+            raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
         
-        with open(CONFIG_PATH, 'r') as f:
-            config = yaml.safe_load(f)
+        # Add each label as a YOLO root node in the taxonomy tree
+        new_labels = []
+        for label in labels:
+            yolo_id = f"yolo_{label.replace(' ', '_')}"
+            
+            # Check if it already exists
+            if yolo_id in taxonomy_tree.nodes:
+                logger.info(f"YOLO node '{label}' already exists in taxonomy tree")
+                continue
+            
+            # Add as YOLO root node with enabled=True
+            taxonomy_tree.add_yolo_root(label, enabled=True)
+            new_labels.append(label)
+            logger.info(f"Added '{label}' as enabled YOLO root node in taxonomy tree")
         
-        # Add to object_labels
-        current_labels = config.get('detection', {}).get('object_labels', [])
-        new_labels = [label for label in labels if label not in current_labels]
-        
+        # Save taxonomy tree
         if new_labels:
-            config['detection']['object_labels'].extend(new_labels)
+            taxonomy_tree.save_to_file(TAXONOMY_FILE)
             
-            # Save config
-            with open(CONFIG_PATH, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False)
+            # Also update config object_labels for backward compatibility
+            if CONFIG_PATH.exists():
+                with open(CONFIG_PATH, 'r') as f:
+                    config = yaml.safe_load(f)
+                
+                current_labels = config.get('detection', {}).get('object_labels', [])
+                for label in new_labels:
+                    if label not in current_labels:
+                        current_labels.append(label)
+                
+                config['detection']['object_labels'] = current_labels
+                
+                with open(CONFIG_PATH, 'w') as f:
+                    yaml.dump(config, f, default_flow_style=False)
             
-            logger.info(f"Added {len(new_labels)} labels to tracking: {new_labels}")
+            logger.info(f"Added {len(new_labels)} labels to taxonomy tree and config")
         
         # Handle relabeling (correcting misidentifications)
         if relabel_from:

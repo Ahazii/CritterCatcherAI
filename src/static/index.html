@@ -1994,6 +1994,15 @@
                 const result = await response.json();
                 const message = result.message || 'Configuration saved successfully';
                 
+                // Update Discovery Mode tab dimming immediately
+                const discoveryMode = document.getElementById('discoveryMode').checked;
+                const discoveryTab = document.getElementById('discoveryTab');
+                if (discoveryMode) {
+                    discoveryTab.classList.remove('disabled');
+                } else {
+                    discoveryTab.classList.add('disabled');
+                }
+                
                 const msgDiv = document.getElementById('configMessage');
                 msgDiv.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
                     ✓ ${message}<br>
@@ -2314,8 +2323,9 @@
                 });
                 
                 const data = await response.json();
-                alert(data.message);
+                alert(data.message + '\n\nView and manage these objects in the Species Training page.');
                 loadDiscoveries(); // Reload
+                selectedDiscoveries.clear(); // Clear selection
                 
             } catch (error) {
                 console.error('Failed to approve discoveries:', error);
@@ -2393,8 +2403,9 @@
                 });
                 
                 const data = await response.json();
-                alert(`Corrected: "${oldLabel}" → "${correctedLabel}"\n\n${data.message}`);
+                alert(`Corrected: "${oldLabel}" → "${correctedLabel}"\\n\\n${data.message}\\n\\nView and manage this object in the Species Training page.`);
                 loadDiscoveries(); // Reload
+                selectedDiscoveries.clear(); // Clear selection
                 
             } catch (error) {
                 console.error('Failed to relabel discovery:', error);
