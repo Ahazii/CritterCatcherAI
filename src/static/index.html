@@ -2715,13 +2715,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ labels: [label] })
                 });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Enable failed:', errorText);
+                    alert(`Failed to enable discovery: ${response.status} ${response.statusText}`);
+                    return;
+                }
+                
                 const data = await response.json();
-                alert(data.message);
+                alert(data.message || 'Discovery enabled successfully');
                 closeZoomModal();
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to enable:', error);
-                alert('Failed to enable discovery');
+                alert('Failed to enable discovery: ' + error.message);
             }
         }
         
@@ -2739,13 +2747,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ labels: [label] })
                 });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Blacklist failed:', errorText);
+                    alert(`Failed to blacklist discovery: ${response.status} ${response.statusText}`);
+                    return;
+                }
+                
                 const data = await response.json();
-                alert(data.message);
+                alert(data.message || 'Discovery blacklisted successfully');
                 closeZoomModal();
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to blacklist:', error);
-                alert('Failed to blacklist discovery');
+                alert('Failed to blacklist discovery: ' + error.message);
             }
         }
         
