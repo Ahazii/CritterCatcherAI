@@ -3066,7 +3066,7 @@
                     <div class="label-controls" style="margin-top: 0.75rem; margin-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
                         <button class="btn btn-small" onclick="trackSingleDiscovery('${discovery.label}')" style="background: var(--success-color);" title="Add '${discovery.label}' to Species Training page and enable tracking">✓ Enable</button>
                         <button class="btn btn-small" onclick="blacklistSingleDiscovery('${discovery.label}')" style="background: var(--warning-color); color: white;" title="Stop Discovery Mode from suggesting '${discovery.label}' (adds to blacklist)">✗ Blacklist</button>
-                        <button class="btn btn-small" onclick="relabelSingleDiscovery('${discovery.label}')" style="background: var(--danger-color);" title="AI misidentified this - correct the label for '${discovery.label}'">🏷 Relabel</button>
+                        <button class="btn btn-small" onclick="relabelSingleDiscovery('${discovery.label}')" style="background: var(--danger-color);" title="Correct wrong identification - moves images to correct folder (does not retrain YOLO)">🏷 Relabel</button>
                     </div>
                 `;
             }
@@ -3075,7 +3075,7 @@
                 <div class="label-controls" style="margin-top: 1.5rem;">
                     <button class="btn" onclick="approveDiscoveries()" style="background: var(--success-color);" title="Add selected objects to Species Training page and enable tracking">✓ Enable Selected</button>
                     <button class="btn" onclick="ignoreDiscoveries()" style="background: var(--warning-color); color: white;" title="Stop Discovery Mode from suggesting these objects (adds to blacklist)">✗ Blacklist Selected</button>
-                    <button class="btn" onclick="relabelDiscoveries()" style="background: var(--danger-color);" title="AI misidentified - correct the label">❌ Relabel Selected</button>
+                    <button class="btn" onclick="relabelDiscoveries()" style="background: var(--danger-color);" title="Correct wrong identification - moves images to correct folder (does not retrain YOLO)">❌ Relabel Selected</button>
                 </div>
             `;
             

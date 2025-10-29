@@ -2325,11 +2325,21 @@ async def upload_node_training_data(
         
         logger.info(f"Uploaded {uploaded_count} training images for {node.name}")
         
+        # Update node metadata with training image count
+        total_images = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png")))
+        if not node.metadata:
+            node.metadata = {}
+        node.metadata['training_images'] = total_images
+        
+        # Save updated tree
+        taxonomy_tree.save_to_file(TAXONOMY_FILE)
+        
         return {
             "status": "success",
-            "message": f"Uploaded {uploaded_count} image(s) for {node.name}",
+            "message": f"Uploaded {uploaded_count} image(s) for {node.name}. Total: {total_images}",
             "node_id": node_id,
-            "path": node_path
+            "path": node_path,
+            "training_images": total_images
         }
     
     except HTTPException:
