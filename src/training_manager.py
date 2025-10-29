@@ -311,9 +311,15 @@ class TrainingManager:
         Returns:
             Training results dictionary
         """
-        logger.info(f"=" * 80)
+        logger.info(f"="* 80)
         logger.info(f"Starting training for {species_name}")
-        logger.info(f"=" * 80)
+        logger.info(f"="* 80)
+        
+        # Set training status
+        self.current_training = {
+            "species": species_name,
+            "started_at": datetime.now().isoformat()
+        }
         
         start_time = time.time()
         
@@ -322,6 +328,7 @@ class TrainingManager:
             train_dataset, val_dataset = self.prepare_dataset(species_name)
         except Exception as e:
             logger.error(f"Failed to prepare dataset: {e}")
+            self.current_training = None  # Clear training status on error
             return {"success": False, "error": str(e)}
         
         # Create dataloaders
@@ -428,6 +435,9 @@ class TrainingManager:
         metadata_path = self.models_path / f"{species_name.replace('/', '_').replace(' ', '_')}_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+        
+        # Clear training status
+        self.current_training = None
         
         return {
             "success": True,

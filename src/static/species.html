@@ -1262,7 +1262,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(`✅ Training started for ${path}!\n\n⏱️ This will take 30-60 minutes.\n🔄 The page refreshes every 5 seconds to show progress.\n💾 Model will appear in "Trained Models" when complete.`, 'success');
+                    // Show alert for 30 seconds (30000ms)
+                    showAlert(`✅ Training started for ${path}!\n\n⏱️ This will take 30-60 minutes.\n🔄 The page refreshes every 5 seconds to show progress.\n💾 Model will appear in "Trained Models" when complete.`, 'success', 30000);
                     // Immediately refresh status to show training banner
                     setTimeout(() => loadTrainingStatus(), 1000);
                 } else {
@@ -1312,13 +1313,16 @@
             }
         }
 
-        function showAlert(message, type) {
+        function showAlert(message, type, duration = 5000) {
             const container = document.getElementById('alert-container');
             const alert = document.createElement('div');
             alert.className = `alert alert-${type === 'success' ? 'success' : 'error'}`;
+            alert.style.whiteSpace = 'pre-line';
+            alert.style.fontSize = '1rem';
+            alert.style.fontWeight = '500';
             alert.textContent = message;
             container.appendChild(alert);
-            setTimeout(() => alert.remove(), 5000);
+            setTimeout(() => alert.remove(), duration);
         }
     </script>
 </body>

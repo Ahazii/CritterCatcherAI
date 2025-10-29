@@ -106,11 +106,14 @@ DOWNLOADS_PATH = Path("/data/downloads")
 # Global taxonomy tree
 taxonomy_tree: Optional[TaxonomyTree] = None
 
+# Global training manager (shared instance to track training status)
+training_manager = None
+
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize taxonomy tree on startup."""
-    global taxonomy_tree
+    """Initialize taxonomy tree and training manager on startup."""
+    global taxonomy_tree, training_manager
     
     try:
         # Load or create taxonomy tree
@@ -121,6 +124,16 @@ async def startup_event():
         # Create new tree as fallback
         taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
         logger.info("Created new taxonomy tree")
+    
+    # Initialize training manager
+    try:
+        from training_manager import TrainingManager
+        from main import load_config
+        config = load_config()
+        training_manager = TrainingManager(config)
+        logger.info("Training manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize training manager: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1873,6 +1886,13 @@ async def upload_species_training_data(
         training_dir = Path("/data/training_data") / species_name.replace("/", "_") / "train"
         training_dir.mkdir(parents=True, exist_ok=True)
         
+        # Set directory permissions for all users (rule: folders created by AI should have full permissions)
+        try:
+            import stat
+            training_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
+        except Exception as e:
+            logger.warning(f"Could not set permissions on {training_dir}: {e}")
+        
         uploaded_count = 0
         for file in files:
             if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
@@ -1918,13 +1938,9 @@ async def train_species(request: dict, background_tasks: BackgroundTasks):
         
         def training_task():
             try:
-                from training_manager import TrainingManager
-                from main import load_config
+                global training_manager
                 
-                config = load_config()
-                trainer = TrainingManager(config)
-                
-                result = trainer.train_species_classifier(species_name)
+                result = training_manager.train_species_classifier(species_name)
                 
                 if result["success"]:
                     logger.info(f"Training complete for {species_name}: {result['best_val_acc']:.2f}% accuracy")
@@ -1952,13 +1968,17 @@ async def train_species(request: dict, background_tasks: BackgroundTasks):
 async def get_species_training_status():
     """Get current training status and available models."""
     try:
-        from training_manager import TrainingManager
-        from main import load_config
+        global training_manager
         
-        config = load_config()
-        trainer = TrainingManager(config)
+        if training_manager is None:
+            return {
+                "is_training": False,
+                "current_species": None,
+                "device": "unknown",
+                "available_models": []
+            }
         
-        status = trainer.get_training_status()
+        status = training_manager.get_training_status()
         return status
     
     except Exception as e:
