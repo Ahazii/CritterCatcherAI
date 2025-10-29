@@ -85,9 +85,34 @@
         }
 
         .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .logo img {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+        }
+        
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .logo-title {
             color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+            line-height: 1;
+        }
+        
+        .logo-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: normal;
         }
 
         .header-actions {
@@ -961,14 +986,18 @@
     </div>
     <header>
         <div class="header-content">
-            <div>
-                <div class="logo">
-                    🦔 CritterCatcherAI 
-                    <span class="version">
-                        <a href="https://github.com/Ahazii/CritterCatcherAI/releases" target="_blank" title="View releases">{{version}}</a>
-                    </span>
+            <div class="logo">
+                <img src="/static/android-chrome-192x192.png" alt="CritterCatcherAI Logo">
+                <div class="logo-text">
+                    <div class="logo-title">CritterCatcherAI</div>
+                    <div class="logo-subtitle">
+                        Written by Ahazi | 
+                        <span class="version">
+                            <a href="https://github.com/Ahazii/CritterCatcherAI/releases/tag/v0.1.0" target="_blank" title="View release">v0.1.0</a>
+                        </span>
+                         | Built: {{build_date}}
+                    </div>
                 </div>
-                <div class="build-date">Built: {{build_date}}</div>
             </div>
             <div class="header-actions">
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
