@@ -681,11 +681,12 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            padding-bottom: 2rem;
         }
         
         .zoom-modal img {
             max-width: 100%;
-            max-height: 90vh;
+            max-height: 70vh;
             object-fit: contain;
             border-radius: 8px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
@@ -2672,6 +2673,82 @@
             }
         }
         
+        // Discovery-specific zoom modal with Enable/Blacklist actions
+        function openZoomModalDiscovery(imageSrc, label, confidence, detectionId) {
+            const modal = document.getElementById('zoomModal');
+            const modalImg = document.getElementById('zoomModalImage');
+            const modalInfo = document.getElementById('zoomModalInfo');
+            const modalActions = document.getElementById('zoomModalActions');
+            
+            modal.classList.add('show');
+            modalImg.src = imageSrc;
+            currentZoomDetectionId = detectionId;
+            
+            let infoHTML = `<strong>Discovery:</strong> ${label}`;
+            if (confidence) {
+                const conf = (confidence * 100).toFixed(1);
+                infoHTML += `<br><strong>Confidence:</strong> ${conf}%`;
+            }
+            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Click anywhere to close | ESC to close</em>`;
+            
+            modalInfo.innerHTML = infoHTML;
+            
+            // Show Enable and Blacklist buttons for discoveries
+            modalActions.innerHTML = `
+                <button class="btn btn-success" onclick="enableFromZoom(event)" style="padding: 0.75rem 1.5rem;">✓ Enable</button>
+                <button class="btn" onclick="blacklistFromZoom(event)" style="background: var(--warning-color); color: white; padding: 0.75rem 1.5rem;">✗ Blacklist</button>
+            `;
+            modalActions.style.display = 'flex';
+            
+            document.addEventListener('keydown', handleZoomModalEscape);
+        }
+        
+        async function enableFromZoom(event) {
+            event.stopPropagation();
+            if (!currentZoomDetectionId) return;
+            
+            const [label] = currentZoomDetectionId.split(':');
+            
+            try {
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: [label] })
+                });
+                const data = await response.json();
+                alert(data.message);
+                closeZoomModal();
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to enable:', error);
+                alert('Failed to enable discovery');
+            }
+        }
+        
+        async function blacklistFromZoom(event) {
+            event.stopPropagation();
+            if (!currentZoomDetectionId) return;
+            
+            const [label] = currentZoomDetectionId.split(':');
+            
+            if (!confirm(`Blacklist "${label}"?\n\nThis object won't be suggested again.`)) return;
+            
+            try {
+                const response = await fetch('/api/discoveries/ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: [label] })
+                });
+                const data = await response.json();
+                alert(data.message);
+                closeZoomModal();
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to blacklist:', error);
+                alert('Failed to blacklist discovery');
+            }
+        }
+        
         function handleZoomModalEscape(event) {
             if (event.key === 'Escape') {
                 closeZoomModal();
@@ -3232,9 +3309,10 @@
                 
                 for (const img of discovery.sample_images) {
                     const imageSrc = `/api/detected_objects/image/${img.path}`;
+                    const detectionId = `${discovery.label}:${img.filename}`;
                     html += `
                         <div class="image-item" 
-                             ondblclick="openZoomModal('${imageSrc}', '${discovery.label}', ${discovery.avg_confidence})"
+                             ondblclick="openZoomModalDiscovery('${imageSrc}', '${discovery.label}', ${discovery.avg_confidence}, '${detectionId}')"
                              title="Double-click to zoom">
                             <img data-src="${imageSrc}" alt="${discovery.label}" class="lazy">
                             <div class="confidence-badge">${discovery.label}</div>
