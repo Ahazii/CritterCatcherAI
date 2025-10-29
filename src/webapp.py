@@ -2105,16 +2105,22 @@ async def get_taxonomy_tree():
         if taxonomy_tree is None:
             raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
         
-        # Sync training image counts for all non-YOLO nodes
+        # Sync training image counts for all non-YOLO nodes and add path to metadata
         def sync_node_training_counts(node):
-            """Recursively sync training image counts from filesystem."""
+            """Recursively sync training image counts from filesystem and add path."""
+            # Get node path
+            node_path = taxonomy_tree.get_node_path(node.id)
+            
+            # Store path in metadata for frontend access
+            if not node.metadata:
+                node.metadata = {}
+            node.metadata['path'] = node_path
+            
+            # Sync training image count for non-YOLO nodes
             if node.level != 'yolo':
-                node_path = taxonomy_tree.get_node_path(node.id)
                 training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
                 if training_dir.exists():
                     count = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png"))) + len(list(training_dir.glob("*.jpeg")))
-                    if not node.metadata:
-                        node.metadata = {}
                     node.metadata['training_images'] = count
             
             # Recursively process children

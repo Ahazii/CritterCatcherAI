@@ -903,8 +903,8 @@
         }
 
         function getNodePath(node) {
-            // This should be provided by the API but we'll construct it
-            return node.path || [node.name];
+            // Use path from metadata (provided by backend)
+            return node.metadata?.path || node.path || [node.name];
         }
 
         function toggleMultiSelect() {
