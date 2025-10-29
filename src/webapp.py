@@ -2103,6 +2103,29 @@ async def get_taxonomy_tree():
         if taxonomy_tree is None:
             raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
         
+        # Sync training image counts for all non-YOLO nodes
+        def sync_node_training_counts(node):
+            """Recursively sync training image counts from filesystem."""
+            if node.level != 'yolo':
+                node_path = taxonomy_tree.get_node_path(node.id)
+                training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
+                if training_dir.exists():
+                    count = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png"))) + len(list(training_dir.glob("*.jpeg")))
+                    if not node.metadata:
+                        node.metadata = {}
+                    node.metadata['training_images'] = count
+            
+            # Recursively process children
+            for child in node.children:
+                sync_node_training_counts(child)
+        
+        # Sync all root nodes
+        for root_node in taxonomy_tree.roots.values():
+            sync_node_training_counts(root_node)
+        
+        # Save updated tree
+        taxonomy_tree.save_to_file(TAXONOMY_FILE)
+        
         # Get enabled YOLO classes
         enabled_classes = [root.name for root in taxonomy_tree.roots.values() if root.enabled]
         
