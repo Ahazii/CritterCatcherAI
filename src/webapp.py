@@ -993,6 +993,14 @@ async def confirm_detected_objects(request: dict):
         if not detections:
             raise HTTPException(status_code=400, detail="No detections specified")
         
+        # Load config for max confirmed images setting
+        config = {}
+        if CONFIG_PATH.exists():
+            with open(CONFIG_PATH, 'r') as f:
+                config = yaml.safe_load(f)
+        
+        max_confirmed = config.get('image_review', {}).get('max_confirmed_images', 200)
+        
         confirmed_count = 0
         for detection_id in detections:
             try:
@@ -1027,6 +1035,22 @@ async def confirm_detected_objects(request: dict):
                     old_metadata_path.rename(new_metadata_path)
                 
                 confirmed_count += 1
+                
+                # Cleanup old confirmed images if exceeding max_confirmed
+                confirmed_images = sorted(confirmed_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime)
+                if len(confirmed_images) > max_confirmed:
+                    # Delete oldest images
+                    to_delete = confirmed_images[:len(confirmed_images) - max_confirmed]
+                    for img in to_delete:
+                        try:
+                            img.unlink()
+                            metadata_file = confirmed_dir / f"{img.name}.json"
+                            if metadata_file.exists():
+                                metadata_file.unlink()
+                            logger.debug(f"Deleted old confirmed image: {img.name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete old confirmed image {img.name}: {e}")
+                
             except Exception as e:
                 logger.error(f"Failed to confirm {detection_id}: {e}")
                 continue

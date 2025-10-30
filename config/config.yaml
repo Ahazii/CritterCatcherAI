@@ -129,6 +129,17 @@ scheduler:
   # Options: 15, 30, 60, 120, 240, 360, 720, 1440
   interval_minutes: 60
 
+# Image Review settings
+image_review:
+  # Auto-confirm threshold (0.0-1.0)
+  # Detections with confidence >= this threshold are automatically confirmed
+  # and bypass manual review
+  auto_confirm_threshold: 0.85
+  
+  # Maximum confirmed images to keep per label
+  # Older confirmed images are automatically deleted when limit is exceeded
+  max_confirmed_images: 200
+
 # Application settings
 # Run once and exit, or run continuously
 run_once: false

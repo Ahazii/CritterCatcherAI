@@ -387,6 +387,7 @@ class ObjectDetector:
                              bbox: tuple = None) -> bool:
         """
         Save a detected object image and metadata.
+        Auto-confirms detections above threshold to confirmed folder.
         
         Args:
             frame: Frame image with detected object
@@ -400,9 +401,33 @@ class ObjectDetector:
             True if saved, False if skipped
         """
         try:
+            # Load config to check auto-confirm threshold
+            import yaml
+            config_path = Path("/app/config/config.yaml")
+            auto_confirm_threshold = 0.85  # Default
+            max_confirmed = 200  # Default
+            
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    auto_confirm_threshold = config.get('image_review', {}).get('auto_confirm_threshold', 0.85)
+                    max_confirmed = config.get('image_review', {}).get('max_confirmed_images', 200)
+            
+            # Determine if auto-confirm applies (not for discoveries)
+            should_auto_confirm = not is_discovery and confidence >= auto_confirm_threshold
+            
             # Create label directory
             label_dir = self.detected_objects_path / label.replace(" ", "_")
             label_dir.mkdir(parents=True, exist_ok=True)
+            
+            # If auto-confirm, save to confirmed subfolder
+            if should_auto_confirm:
+                confirmed_dir = label_dir / "confirmed"
+                confirmed_dir.mkdir(parents=True, exist_ok=True)
+                target_dir = confirmed_dir
+                logger.debug(f"Auto-confirming {label} detection (confidence: {confidence:.2f})")
+            else:
+                target_dir = label_dir
             
             # Generate unique filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -410,7 +435,7 @@ class ObjectDetector:
             filename = f"{timestamp}_{video_base}_f{frame_idx}_{label.replace(' ', '_')}.jpg"
             
             # Save image
-            image_path = label_dir / filename
+            image_path = target_dir / filename
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             cv2.imwrite(str(image_path), frame_bgr)
             
@@ -423,14 +448,30 @@ class ObjectDetector:
                 "confidence": confidence,
                 "timestamp": timestamp,
                 "is_discovery": is_discovery,
+                "auto_confirmed": should_auto_confirm,
                 "bbox": {"x1": bbox[0], "y1": bbox[1], "x2": bbox[2], "y2": bbox[3]} if bbox else None
             }
             
-            metadata_path = label_dir / f"{filename}.json"
+            metadata_path = target_dir / f"{filename}.json"
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f)
             
-            logger.debug(f"Saved detected object: {label} (confidence: {confidence:.2f})")
+            # Cleanup old confirmed images if auto-confirmed and limit exceeded
+            if should_auto_confirm:
+                confirmed_images = sorted(confirmed_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime)
+                if len(confirmed_images) > max_confirmed:
+                    to_delete = confirmed_images[:len(confirmed_images) - max_confirmed]
+                    for img in to_delete:
+                        try:
+                            img.unlink()
+                            meta = target_dir / f"{img.name}.json"
+                            if meta.exists():
+                                meta.unlink()
+                            logger.debug(f"Deleted old confirmed image: {img.name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete old image {img.name}: {e}")
+            
+            logger.debug(f"Saved detected object: {label} (confidence: {confidence:.2f}, auto_confirmed: {should_auto_confirm})")
             return True
             
         except Exception as e:
