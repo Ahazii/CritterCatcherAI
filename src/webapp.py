@@ -251,9 +251,28 @@ async def update_config(config_data: dict):
         if "config" not in config_data:
             raise HTTPException(status_code=400, detail="Invalid config format")
         
-        # Write to config file
+        # Load existing config to preserve sections not managed by UI
+        existing_config = {}
+        if CONFIG_PATH.exists():
+            with open(CONFIG_PATH, 'r') as f:
+                existing_config = yaml.safe_load(f) or {}
+        
+        new_config = config_data["config"]
+        
+        # Preserve specialized_detection subsections (species, clip_extraction, training)
+        # Only update the 'enabled' flag from UI
+        if "specialized_detection" in new_config:
+            if "specialized_detection" not in existing_config:
+                existing_config["specialized_detection"] = {}
+            
+            # Preserve existing subsections
+            for key in ['species', 'clip_extraction', 'training']:
+                if key in existing_config.get("specialized_detection", {}):
+                    new_config["specialized_detection"][key] = existing_config["specialized_detection"][key]
+        
+        # Write merged config to file
         with open(CONFIG_PATH, 'w') as f:
-            yaml.dump(config_data["config"], f, default_flow_style=False)
+            yaml.dump(new_config, f, default_flow_style=False)
         
         logger.info("Configuration updated successfully")
         return {"status": "success", "message": "Configuration updated"}

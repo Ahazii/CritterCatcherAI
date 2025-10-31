@@ -1769,6 +1769,9 @@
                 const autoConfirmThreshold = imageReview.auto_confirm_threshold || 0.85;
                 const maxConfirmed = imageReview.max_confirmed_images || 200;
                 
+                // Specialized Detection settings
+                const specializedEnabled = data.config.specialized_detection?.enabled || false;
+                
                 // Store in memory for editing
                 window.currentIgnoredLabels = [...ignoredLabels];
                 
@@ -1891,6 +1894,22 @@
                                style="width: 100%;">
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Maximum confirmed images kept per label. Older images are automatically deleted when limit is exceeded. Recommended: 100-300
+                        </p>
+                    </div>
+                    
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">🦔 Specialized Species Detection</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="specializedEnabled" ${specializedEnabled ? 'checked' : ''} style="width: auto;">
+                            Enable Specialized Species Detection (Stage 2)
+                        </label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            🎯 Use trained AI models to identify specific species (e.g., Jack Russell, Goldfinch) beyond basic YOLO categories.<br>
+                            <strong>Requirements:</strong> Species must be trained via Species Training page with sufficient training images.<br>
+                            <strong>Effect:</strong> Videos will be sorted by specific species (e.g., /sorted/Jack_Russell/) instead of general category (e.g., /sorted/dog/).
                         </p>
                     </div>
                     
@@ -2059,6 +2078,9 @@
                         image_review: {
                             auto_confirm_threshold: parseFloat(document.getElementById('autoConfirmThreshold').value),
                             max_confirmed_images: parseInt(document.getElementById('maxConfirmed').value)
+                        },
+                        specialized_detection: {
+                            enabled: document.getElementById('specializedEnabled').checked
                         },
                         run_once: false,
                         interval_minutes: parseInt(document.getElementById('intervalMinutes').value)  // Keep for backwards compatibility
