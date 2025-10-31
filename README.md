@@ -12,6 +12,10 @@ CritterCatcherAI monitors your Ring doorbell, downloads videos to a shared volum
 - **Open-Vocabulary Detection**: Detect arbitrary objects like "hedgehog", "wren", "fox", etc.
 - **Face Recognition**: Identify specific people like family members or frequent visitors
 - **Automatic Organization**: Videos are automatically moved to class-specific shared volumes
+- **Image Review Automation**: Auto-confirm high-confidence detections and manage training data size
+- **Discovery Mode**: Automatically find new objects in your videos
+- **Specialized Species Training**: Train custom AI models for specific wildlife
+- **Web Interface**: Modern UI for monitoring, configuration, and training
 - **Unraid Optimized**: Designed to run seamlessly on Unraid servers
 
 ## Architecture
@@ -178,6 +182,13 @@ interval_minutes: 60      # Check for new videos every 60 minutes
 ```yaml
 detection:
   priority: people  # or "objects" - determines what gets priority in sorting
+```
+
+**Image Review (New in v0.1.0):**
+```yaml
+image_review:
+  auto_confirm_threshold: 0.85  # Auto-confirm detections >= 85% confidence
+  max_confirmed_images: 200      # Keep max 200 confirmed images per label
 ```
 
 ### Advanced Configuration

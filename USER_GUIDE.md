@@ -280,9 +280,59 @@ The "Objects to Detect" section now uses the same multi-select dropdown:
 - Fewer classes = faster processing
 - More classes = better discovery mode
 
+#### Image Review Settings (New in v0.1.0)
+
+The **Image Review** section helps manage the flow of detected objects and training data:
+
+**Auto-Confirm Threshold** (Default: 85%)
+- Detections with confidence ≥ this threshold are automatically confirmed
+- Auto-confirmed images bypass manual review and go directly to `confirmed/` folder
+- Discovery detections are never auto-confirmed (always require manual review)
+- **Recommended**: 0.80-0.90 for balanced automation
+- **Conservative**: 0.90+ to minimize false positives
+- **Aggressive**: 0.70-0.80 if you have well-trained models
+
+**Max Confirmed Images per Label** (Default: 200)
+- Maximum number of confirmed images kept per label
+- When limit is exceeded, oldest confirmed images are automatically deleted
+- Cleanup happens immediately on confirmation (no background task)
+- **Recommended**: 100-300 for most use cases
+- **Storage-constrained**: 50-100 to save disk space
+- **Large datasets**: 500-1000 for extensive training libraries
+
+**How It Works:**
+```
+1. YOLO detects "cat" with 90% confidence
+2. System checks: 90% ≥ 85% auto-confirm threshold?
+3. YES → Saves to /data/objects/detected/cat/confirmed/
+4. Checks: Total confirmed images > 200?
+5. YES → Deletes oldest confirmed images to maintain limit
+6. Result: Automatic training data management!
+```
+
+**Benefits:**
+- ✅ Reduces manual review workload for high-confidence detections
+- ✅ Automatically maintains training data size
+- ✅ Prevents disk space issues from unlimited image accumulation
+- ✅ Keeps only most recent images (better for seasonal variations)
+
 ### Main Configuration File
 
 Advanced users can edit directly: `/app/config/config.yaml`
+
+### Image Review Section
+
+```yaml
+image_review:
+  # Auto-confirm threshold (0.0-1.0)
+  # Detections with confidence >= this threshold are automatically confirmed
+  # and bypass manual review
+  auto_confirm_threshold: 0.85
+  
+  # Maximum confirmed images to keep per label
+  # Older confirmed images are automatically deleted when limit is exceeded
+  max_confirmed_images: 200
+```
 
 ### Specialized Detection Section
 

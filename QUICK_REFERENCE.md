@@ -124,6 +124,18 @@ specialized_detection:
 - **0.5-0.7**: ✅ **Recommended** (balanced)
 - **0.8-0.9**: Lenient (more false positives)
 
+### Image Review Settings (New in v0.1.0)
+
+#### Auto-Confirm Threshold
+- **0.70-0.80**: Aggressive (more auto-confirms, use with caution)
+- **0.80-0.90**: ✅ **Recommended** (balanced automation)
+- **0.90-1.00**: Conservative (minimal automation)
+
+#### Max Confirmed Images per Label
+- **50-100**: Storage-constrained systems
+- **100-300**: ✅ **Recommended** (most use cases)
+- **500-1000**: Large training datasets
+
 ### Species Training Settings
 
 #### Confidence Threshold (per species)
@@ -177,7 +189,8 @@ umbrella, vase, wine glass, zebra
 - **Training data**: `/data/training_data/SPECIES/train/`
 - **Models**: `/data/models/SPECIES_classifier.pt`
 - **Face encodings**: `/data/faces/encodings.pkl`
-- **Detected objects**: `/data/objects/detected/`
+- **Detected objects**: `/data/objects/detected/LABEL/` (pending review)
+- **Confirmed objects**: `/data/objects/detected/LABEL/confirmed/` (auto/manually confirmed)
 - **Specialized detections**: `/data/objects/specialized/`
 
 ### Unraid Paths (Host)
