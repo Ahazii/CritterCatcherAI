@@ -334,28 +334,54 @@ def main():
     except:
         pass
     
-    if not auto_run:
-        logger.info("Auto Run is DISABLED. Waiting for manual trigger from the web UI.")
-        # Keep the web server running but do not process automatically
-        while True:
-            try:
-                time.sleep(60)
-            except KeyboardInterrupt:
-                logger.info("Shutting down")
-                break
-        return
+    logger.info("Scheduler loop started - will respect config changes in real-time")
     
-    logger.info(f"Auto Run is ENABLED - Running in continuous mode with {interval_minutes} minute interval")
+    # Main scheduler loop - checks app_state dynamically
     while True:
         try:
-            # Set next run time
             from webapp import app_state
-            next_run_time = datetime.now() + timedelta(minutes=interval_minutes)
+            
+            # Check if scheduler is enabled (respects real-time config changes)
+            if not app_state["scheduler"]["enabled"]:
+                # Scheduler disabled - sleep and check again
+                if not hasattr(main, '_logged_disabled'):
+                    logger.info("Auto Run is DISABLED. Waiting for manual trigger or config change.")
+                    main._logged_disabled = True
+                time.sleep(10)  # Check every 10 seconds
+                continue
+            
+            # Reset the disabled log flag
+            if hasattr(main, '_logged_disabled'):
+                delattr(main, '_logged_disabled')
+                logger.info("Auto Run is ENABLED - resuming automatic processing")
+            
+            # Get current interval from app_state (may have changed)
+            current_interval = app_state["scheduler"]["interval_minutes"]
+            
+            # Set next run time
+            next_run_time = datetime.now() + timedelta(minutes=current_interval)
             app_state["scheduler"]["next_run"] = next_run_time.isoformat()
             
+            logger.info(f"Processing videos (interval: {current_interval} minutes)")
             process_videos(config)
-            logger.info(f"Sleeping for {interval_minutes} minutes")
-            time.sleep(interval_minutes * 60)
+            
+            logger.info(f"Sleeping for {current_interval} minutes (next run: {next_run_time.strftime('%Y-%m-%d %H:%M:%S')})")
+            
+            # Sleep in smaller intervals to allow checking for config changes
+            sleep_seconds = current_interval * 60
+            sleep_interval = 10  # Check every 10 seconds
+            slept = 0
+            
+            while slept < sleep_seconds:
+                # Check if scheduler was disabled during sleep
+                if not app_state["scheduler"]["enabled"]:
+                    logger.info("Scheduler disabled during sleep - stopping automatic processing")
+                    app_state["scheduler"]["next_run"] = None
+                    break
+                
+                time.sleep(min(sleep_interval, sleep_seconds - slept))
+                slept += sleep_interval
+                
         except KeyboardInterrupt:
             logger.info("Shutting down")
             break

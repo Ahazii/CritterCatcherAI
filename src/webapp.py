@@ -280,6 +280,15 @@ async def update_config(config_data: dict):
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(new_config, f, default_flow_style=False)
         
+        # Update scheduler state if changed
+        scheduler_config = new_config.get('scheduler', {})
+        if scheduler_config:
+            app_state["scheduler"]["enabled"] = scheduler_config.get('auto_run', False)
+            app_state["scheduler"]["interval_minutes"] = scheduler_config.get('interval_minutes', 60)
+            # Reset next_run when config changes - will be set by main loop
+            if not app_state["scheduler"]["enabled"]:
+                app_state["scheduler"]["next_run"] = None
+        
         logger.info("Configuration updated successfully")
         return {"status": "success", "message": "Configuration updated"}
     except Exception as e:
