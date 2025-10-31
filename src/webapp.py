@@ -288,6 +288,10 @@ async def update_config(config_data: dict):
             # Reset next_run when config changes - will be set by main loop
             if not app_state["scheduler"]["enabled"]:
                 app_state["scheduler"]["next_run"] = None
+                # If processing is active, stop it
+                if app_state["is_processing"]:
+                    logger.info("Scheduler disabled during processing - stopping current run")
+                    app_state["stop_requested"] = True
         
         logger.info("Configuration updated successfully")
         return {"status": "success", "message": "Configuration updated"}

@@ -196,11 +196,14 @@ def process_videos(config: dict):
     
     # Process each video
     for idx, video_path in enumerate(downloaded_videos, 1):
-        # Check stop flag
+        # Check stop flag or if scheduler was disabled
         try:
             from webapp import app_state
             if app_state.get("stop_requested", False):
                 logger.info("Stop requested - ending processing gracefully")
+                break
+            if not app_state["scheduler"]["enabled"]:
+                logger.info("Scheduler disabled - stopping current processing run")
                 break
         except:
             pass
