@@ -4096,6 +4096,62 @@
             }
         }
         
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/api/analytics/stats');
+                const stats = await response.json();
+                
+                // Update stat cards
+                document.getElementById('analyticsVideos').textContent = stats.total_videos || 0;
+                document.getElementById('analyticsDetections').textContent = stats.total_detections || 0;
+                document.getElementById('analyticsStage2').textContent = stats.stage2_classifications || 0;
+                
+                // Count trained faces
+                const trainedFaces = Object.keys(stats.face_recognition_stats || {}).length;
+                document.getElementById('analyticsTrainedFaces').textContent = trainedFaces;
+                
+                // Display Stage 2 specialized detection stats
+                const stage2Container = document.getElementById('stage2Stats');
+                if (stats.specialized_stats && stats.specialized_stats.total > 0) {
+                    let html = '<div class="face-list">';
+                    
+                    // Sort by count descending
+                    const sortedSpecies = Object.entries(stats.specialized_stats.by_species)
+                        .sort((a, b) => b[1] - a[1]);
+                    
+                    sortedSpecies.forEach(([species, count]) => {
+                        html += `
+                            <div class="face-item">
+                                <div>
+                                    <div class="face-name">🦔 ${species}</div>
+                                    <div class="face-count">Specialized classification</div>
+                                </div>
+                                <div class="stat-value" style="font-size: 1.5rem; margin: 0;">${count}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    html += `<p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+                        <strong>Stage 2 Detection:</strong> Videos analyzed with trained species-specific models to identify exact species beyond basic YOLO categories.
+                    </p>`;
+                    
+                    stage2Container.innerHTML = html;
+                } else {
+                    stage2Container.innerHTML = `
+                        <p style="color: var(--text-secondary);">
+                            No Stage 2 classifications yet. Enable Specialized Detection in Configuration and train species models in Species Training.
+                        </p>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Failed to load analytics:', error);
+                document.getElementById('stage2Stats').innerHTML = 
+                    '<p style="color: var(--danger-color);">Failed to load specialized detection stats</p>';
+            }
+        }
+        
         // Update tab switching to include new tabs
         const originalSwitchTab = switchTab;
         switchTab = function(tabName) {
