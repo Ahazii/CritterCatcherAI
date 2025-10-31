@@ -145,6 +145,14 @@ def process_videos(config: dict):
     # Authenticate with existing token
     logger.info("Authenticating with Ring using saved token")
     
+    # Update progress: authentication
+    try:
+        from webapp import app_state
+        app_state["processing_progress"]["current_step"] = "Authenticating with Ring..."
+        app_state["processing_progress"]["phase"] = "authentication"
+    except:
+        pass
+    
     if not ring_downloader.authenticate():
         logger.error("Failed to authenticate with Ring (token may be expired)")
         logger.error("Please re-authenticate using the web interface (Ring Setup tab)")
@@ -158,6 +166,14 @@ def process_videos(config: dict):
     logger.info("Downloading recent Ring videos")
     video_hours = ring_config.get('download_hours', 24)
     video_limit = ring_config.get('download_limit')
+    
+    # Update progress: downloading
+    try:
+        from webapp import app_state
+        app_state["processing_progress"]["current_step"] = f"Downloading videos from Ring (last {video_hours}h)..."
+        app_state["processing_progress"]["phase"] = "downloading"
+    except:
+        pass
     
     downloaded_videos = ring_downloader.download_recent_videos(
         hours=video_hours,
@@ -207,7 +223,8 @@ def process_videos(config: dict):
             # Update progress: object detection
             try:
                 from webapp import app_state
-                app_state["processing_progress"]["current_step"] = "Running YOLO detection..."
+                app_state["processing_progress"]["current_step"] = f"Analyzing {video_path.name} with YOLO..."
+                app_state["processing_progress"]["phase"] = "detection"
             except:
                 pass
             
@@ -216,6 +233,14 @@ def process_videos(config: dict):
             
             if specialized_enabled and taxonomy_tree:
                 logger.debug("Using specialized detection (Stage 1 + Stage 2)")
+                
+                # Update for Stage 2
+                try:
+                    from webapp import app_state
+                    app_state["processing_progress"]["current_step"] = f"Running specialized species detection on {video_path.name}..."
+                except:
+                    pass
+                
                 detected_objects, species_results = object_detector.detect_objects_with_specialization(
                     video_path, config, taxonomy_tree
                 )
@@ -233,7 +258,8 @@ def process_videos(config: dict):
             # Update progress: face recognition
             try:
                 from webapp import app_state
-                app_state["processing_progress"]["current_step"] = "Recognizing faces..."
+                app_state["processing_progress"]["current_step"] = f"Recognizing faces in {video_path.name}..."
+                app_state["processing_progress"]["phase"] = "face_recognition"
             except:
                 pass
             
@@ -243,7 +269,8 @@ def process_videos(config: dict):
             # Update progress: sorting
             try:
                 from webapp import app_state
-                app_state["processing_progress"]["current_step"] = "Sorting video..."
+                app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name}..."
+                app_state["processing_progress"]["phase"] = "sorting"
             except:
                 pass
             
