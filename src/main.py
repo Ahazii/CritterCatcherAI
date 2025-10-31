@@ -339,6 +339,9 @@ def main():
     
     logger.info("Scheduler loop started - will respect config changes in real-time")
     
+    # Track if this is the first run
+    first_run = True
+    
     # Main scheduler loop - checks app_state dynamically
     while True:
         try:
@@ -351,12 +354,13 @@ def main():
                     logger.info("Auto Run is DISABLED. Waiting for manual trigger or config change.")
                     main._logged_disabled = True
                 time.sleep(10)  # Check every 10 seconds
+                first_run = True  # Reset first_run flag when disabled
                 continue
             
             # Reset the disabled log flag
             if hasattr(main, '_logged_disabled'):
                 delattr(main, '_logged_disabled')
-                logger.info("Auto Run is ENABLED - resuming automatic processing")
+                logger.info("Auto Run is ENABLED - waiting for first scheduled run")
             
             # Get current interval from app_state (may have changed)
             current_interval = app_state["scheduler"]["interval_minutes"]
@@ -365,8 +369,13 @@ def main():
             next_run_time = datetime.now() + timedelta(minutes=current_interval)
             app_state["scheduler"]["next_run"] = next_run_time.isoformat()
             
-            logger.info(f"Processing videos (interval: {current_interval} minutes)")
-            process_videos(config)
+            # On first run, wait for the interval before processing
+            if first_run:
+                logger.info(f"Scheduler enabled - first run scheduled for {next_run_time.strftime('%Y-%m-%d %H:%M:%S')} ({current_interval} minutes)")
+                first_run = False
+            else:
+                logger.info(f"Processing videos (interval: {current_interval} minutes)")
+                process_videos(config)
             
             logger.info(f"Sleeping for {current_interval} minutes (next run: {next_run_time.strftime('%Y-%m-%d %H:%M:%S')})")
             
