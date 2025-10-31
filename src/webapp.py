@@ -1630,11 +1630,20 @@ async def get_analytics_stats():
         stats = {
             "total_videos": 0,
             "total_detections": 0,
+            "stage2_classifications": 0,
             "categories": {},
             "daily_stats": [],
             "top_detections": [],
-            "face_recognition_stats": {}
+            "face_recognition_stats": {},
+            "specialized_stats": {
+                "total": 0,
+                "by_species": {}
+            }
         }
+        
+        # Get YOLO classes for comparison
+        from object_detector import YOLO_COCO_CLASSES
+        yolo_classes_lower = [c.lower() for c in YOLO_COCO_CLASSES]
         
         # Count videos by category
         if SORTED_PATH.exists():
@@ -1646,10 +1655,20 @@ async def get_analytics_stats():
                                 video_count = len(list(person_dir.glob("*.mp4")))
                                 stats["categories"][f"people/{person_dir.name}"] = video_count
                                 stats["total_videos"] += video_count
+                                # Count as Stage 2 if not a YOLO class
+                                if person_dir.name.lower() not in yolo_classes_lower:
+                                    stats["stage2_classifications"] += video_count
+                                    stats["specialized_stats"]["total"] += video_count
+                                    stats["specialized_stats"]["by_species"][person_dir.name] = video_count
                     else:
                         video_count = len(list(category_dir.glob("*.mp4")))
                         stats["categories"][category_dir.name] = video_count
                         stats["total_videos"] += video_count
+                        # Count as Stage 2 if not a YOLO class
+                        if category_dir.name.lower() not in yolo_classes_lower:
+                            stats["stage2_classifications"] += video_count
+                            stats["specialized_stats"]["total"] += video_count
+                            stats["specialized_stats"]["by_species"][category_dir.name] = video_count
         
         # Count detections
         if DETECTED_OBJECTS_PATH.exists():
@@ -1711,6 +1730,104 @@ async def get_analytics_timeline(days: int = 30):
         return {"timeline": timeline}
     except Exception as e:
         logger.error(f"Failed to get timeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/storage")
+async def get_storage_data():
+    """Get storage information for all sorted video categories."""
+    try:
+        storage_data = []
+        total_size = 0
+        total_videos = 0
+        
+        if SORTED_PATH.exists():
+            for category_dir in SORTED_PATH.iterdir():
+                if category_dir.is_dir():
+                    # Handle people subdirectories
+                    if category_dir.name == "people":
+                        for person_dir in category_dir.iterdir():
+                            if person_dir.is_dir():
+                                video_files = list(person_dir.glob("*.mp4"))
+                                size = sum(f.stat().st_size for f in video_files)
+                                total_size += size
+                                total_videos += len(video_files)
+                                
+                                storage_data.append({
+                                    "category": f"people/{person_dir.name}",
+                                    "path": str(person_dir.relative_to(SORTED_PATH)),
+                                    "video_count": len(video_files),
+                                    "size_bytes": size,
+                                    "size_mb": round(size / (1024 * 1024), 2)
+                                })
+                    else:
+                        video_files = list(category_dir.glob("*.mp4"))
+                        size = sum(f.stat().st_size for f in video_files)
+                        total_size += size
+                        total_videos += len(video_files)
+                        
+                        storage_data.append({
+                            "category": category_dir.name,
+                            "path": str(category_dir.relative_to(SORTED_PATH)),
+                            "video_count": len(video_files),
+                            "size_bytes": size,
+                            "size_mb": round(size / (1024 * 1024), 2)
+                        })
+        
+        # Sort by size descending
+        storage_data.sort(key=lambda x: x["size_bytes"], reverse=True)
+        
+        return {
+            "categories": storage_data,
+            "total_videos": total_videos,
+            "total_size_bytes": total_size,
+            "total_size_mb": round(total_size / (1024 * 1024), 2),
+            "total_size_gb": round(total_size / (1024 * 1024 * 1024), 2)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get storage data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/storage/{category_path:path}")
+async def delete_category(category_path: str):
+    """Delete all videos and metadata for a specific category."""
+    try:
+        import shutil
+        
+        # Sanitize path to prevent directory traversal
+        category_path = category_path.strip("/")
+        full_path = SORTED_PATH / category_path
+        
+        # Verify path is within SORTED_PATH
+        if not str(full_path.resolve()).startswith(str(SORTED_PATH.resolve())):
+            raise HTTPException(status_code=400, detail="Invalid category path")
+        
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Count videos before deletion
+        video_count = len(list(full_path.glob("*.mp4")))
+        
+        # Delete the directory and all contents
+        shutil.rmtree(full_path)
+        logger.info(f"Deleted category '{category_path}' with {video_count} videos")
+        
+        # Delete associated metadata from detected objects
+        metadata_dir = DETECTED_OBJECTS_PATH / category_path.split("/")[-1]
+        if metadata_dir.exists():
+            shutil.rmtree(metadata_dir)
+            logger.info(f"Deleted metadata for '{category_path}'")
+        
+        return {
+            "status": "success",
+            "message": f"Deleted {video_count} video(s) from {category_path}",
+            "deleted_videos": video_count
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete category: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

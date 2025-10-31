@@ -1823,6 +1823,89 @@
             }
         }
 
+        async function loadStorageData() {
+            try {
+                const response = await fetch('/api/storage');
+                const data = await response.json();
+                
+                const listContainer = document.getElementById('storageList');
+                
+                if (!data.categories || data.categories.length === 0) {
+                    listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No sorted videos found</p>';
+                    return;
+                }
+                
+                // Display summary
+                let html = `
+                    <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem; display: flex; justify-content: space-around; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);">${data.total_videos}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">Total Videos</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);">${data.total_size_gb.toFixed(2)} GB</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">Total Size</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);">${data.categories.length}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">Categories</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Display each category
+                data.categories.forEach(cat => {
+                    const sizeDisplay = cat.size_mb > 1000 ? 
+                        `${(cat.size_mb / 1024).toFixed(2)} GB` : 
+                        `${cat.size_mb.toFixed(2)} MB`;
+                    
+                    html += `
+                        <div class="face-item" style="display: flex; align-items: center; justify-content: space-between;">
+                            <div style="flex: 1;">
+                                <div class="face-name">📁 ${cat.category}</div>
+                                <div class="face-count">${cat.video_count} videos • ${sizeDisplay}</div>
+                            </div>
+                            <button class="btn" onclick="deleteCategory('${cat.path}', '${cat.category}')" 
+                                    style="background: var(--danger-color);">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    `;
+                });
+                
+                listContainer.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load storage data:', error);
+                document.getElementById('storageList').innerHTML = 
+                    '<p style="color: var(--danger-color); text-align: center; padding: 2rem;">Failed to load storage data</p>';
+            }
+        }
+        
+        async function deleteCategory(path, categoryName) {
+            if (!confirm(`Delete all videos in "${categoryName}"?\n\nThis will permanently delete all videos and their metadata. This cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/storage/${encodeURIComponent(path)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`✓ ${data.message}`);
+                    loadStorageData(); // Refresh the list
+                    fetchStats(); // Update main stats
+                } else {
+                    alert(`✗ Failed to delete: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Failed to delete category:', error);
+                alert('✗ Failed to delete category');
+            }
+        }
+
         async function loadFaces() {
             try {
                 const response = await fetch('/api/faces');
