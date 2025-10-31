@@ -1056,6 +1056,7 @@
             <div class="card stat-card">
                 <div class="stat-label">Status</div>
                 <div id="statusBadge" class="status-badge idle">Idle</div>
+                <div id="statusStep" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; min-height: 1rem;"></div>
             </div>
             <div class="card stat-card">
                 <div class="stat-label">Total Videos
@@ -1580,10 +1581,15 @@
                     const percent = prog.videos_total > 0 ? 
                         Math.round((prog.videos_processed / prog.videos_total) * 100) : 0;
                     
-                    // Update status badge with progress and current step
-                    const stepText = prog.current_step ? `<br><span style="font-size: 0.75em; opacity: 0.9;">${prog.current_step}</span>` : '';
-                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span>${stepText}`;
+                    // Update status badge with progress
+                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span>`;
                     statusBadge.className = 'status-badge processing';
+                    
+                    // Update step in separate line below badge
+                    const statusStep = document.getElementById('statusStep');
+                    if (statusStep) {
+                        statusStep.textContent = prog.current_step || 'Processing...';
+                    }
                     
                     // Show/hide buttons in header
                     document.getElementById('stopProcessingBtn').style.display = 'inline-block';
@@ -1612,6 +1618,13 @@
                     statusBadge.textContent = 'Idle';
                     statusBadge.className = 'status-badge idle';
                     document.getElementById('stopProcessingBtn').style.display = 'none';
+                    
+                    // Clear step text
+                    const statusStep = document.getElementById('statusStep');
+                    if (statusStep) {
+                        statusStep.textContent = '';
+                    }
+                    
                     if (dashboardProgress) {
                         dashboardProgress.innerHTML = '';
                     }
