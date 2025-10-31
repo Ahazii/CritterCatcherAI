@@ -420,6 +420,21 @@ class ObjectDetector:
             label_dir = self.detected_objects_path / label.replace(" ", "_")
             label_dir.mkdir(parents=True, exist_ok=True)
             
+            # Deduplication: Check if we already saved an image from this video+label recently
+            # This prevents saving 5+ nearly identical frames from the same video
+            video_base = Path(video_name).stem if video_name else "unknown"
+            
+            # Check both pending and confirmed folders for existing images from this video
+            existing_files = list(label_dir.glob(f"*_{video_base}_*.jpg"))
+            confirmed_dir_path = label_dir / "confirmed"
+            if confirmed_dir_path.exists():
+                existing_files.extend(list(confirmed_dir_path.glob(f"*_{video_base}_*.jpg")))
+            
+            if existing_files:
+                # Already saved at least one detection from this video+label, skip
+                logger.debug(f"Skipping duplicate detection: {label} from {video_name} (already have {len(existing_files)} image(s))")
+                return False
+            
             # If auto-confirm, save to confirmed subfolder
             if should_auto_confirm:
                 confirmed_dir = label_dir / "confirmed"
@@ -431,7 +446,6 @@ class ObjectDetector:
             
             # Generate unique filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            video_base = Path(video_name).stem if video_name else "unknown"
             filename = f"{timestamp}_{video_base}_f{frame_idx}_{label.replace(' ', '_')}.jpg"
             
             # Save image

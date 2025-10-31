@@ -13,6 +13,8 @@ from ring_downloader import RingDownloader
 from object_detector import ObjectDetector
 from face_recognizer import FaceRecognizer
 from video_sorter import VideoSorter
+from taxonomy_tree import TaxonomyTree
+from object_detector import YOLO_COCO_CLASSES
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -54,6 +56,16 @@ def process_videos(config: dict):
     # Get configuration values (environment variables override config file)
     download_path = config.get('paths', {}).get('downloads', '/data/downloads')
     sorted_path = config.get('paths', {}).get('sorted', '/data/sorted')
+    
+    # Load taxonomy tree for specialized detection
+    taxonomy_file = Path("/app/config/taxonomy.json")
+    taxonomy_tree = None
+    try:
+        taxonomy_tree = TaxonomyTree.load_from_file(taxonomy_file, YOLO_COCO_CLASSES)
+        logger.info(f"Taxonomy tree loaded with {len(taxonomy_tree.roots)} root classes")
+    except Exception as e:
+        logger.warning(f"Failed to load taxonomy tree: {e}. Specialized detection will be unavailable.")
+        taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
     
     ring_config = config.get('ring', {})
     detection_config = config.get('detection', {})
@@ -199,8 +211,24 @@ def process_videos(config: dict):
             except:
                 pass
             
-            # Run object detection
-            detected_objects = object_detector.detect_objects_in_video(video_path)
+            # Run object detection - use specialized detection if enabled
+            specialized_enabled = config.get('specialized_detection', {}).get('enabled', False)
+            
+            if specialized_enabled and taxonomy_tree:
+                logger.debug("Using specialized detection (Stage 1 + Stage 2)")
+                detected_objects, species_results = object_detector.detect_objects_with_specialization(
+                    video_path, config, taxonomy_tree
+                )
+                
+                # Merge species results into detected_objects for sorting
+                # Species detections override parent YOLO detections
+                if species_results:
+                    logger.info(f"Specialized detections: {list(species_results.keys())}")
+                    for species, (confidence, path) in species_results.items():
+                        detected_objects[species] = confidence
+            else:
+                logger.debug("Using standard YOLO detection only (Stage 1)")
+                detected_objects = object_detector.detect_objects_in_video(video_path)
             
             # Update progress: face recognition
             try:

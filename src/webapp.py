@@ -648,12 +648,23 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
         try:
             logger.info("Starting cleanup task - processing ALL videos in downloads folder...")
             from main import load_config
-            from object_detector import ObjectDetector
+            from object_detector import ObjectDetector, YOLO_COCO_CLASSES
             from face_recognizer import FaceRecognizer
             from video_sorter import VideoSorter
+            from taxonomy_tree import TaxonomyTree
             
             config = load_config()
             detection_config = config.get('detection', {})
+            
+            # Load taxonomy tree for specialized detection
+            taxonomy_file = Path("/app/config/taxonomy.json")
+            taxonomy_tree = None
+            try:
+                taxonomy_tree = TaxonomyTree.load_from_file(taxonomy_file, YOLO_COCO_CLASSES)
+                logger.info(f"Taxonomy tree loaded with {len(taxonomy_tree.roots)} root classes")
+            except Exception as e:
+                logger.warning(f"Failed to load taxonomy tree: {e}")
+                taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
             
             # Get all video files in downloads
             downloads_path = Path("/data/downloads")
@@ -717,8 +728,23 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
                     
                     logger.info(f"Processing video: {video_path.name}")
                     
-                    # Run object detection
-                    detected_objects = object_detector.detect_objects_in_video(video_path)
+                    # Run object detection - use specialized detection if enabled
+                    specialized_enabled = config.get('specialized_detection', {}).get('enabled', False)
+                    
+                    if specialized_enabled and taxonomy_tree:
+                        logger.debug("Using specialized detection (Stage 1 + Stage 2)")
+                        detected_objects, species_results = object_detector.detect_objects_with_specialization(
+                            video_path, config, taxonomy_tree
+                        )
+                        
+                        # Merge species results into detected_objects for sorting
+                        if species_results:
+                            logger.info(f"Specialized detections: {list(species_results.keys())}")
+                            for species, (confidence, path) in species_results.items():
+                                detected_objects[species] = confidence
+                    else:
+                        logger.debug("Using standard YOLO detection only (Stage 1)")
+                        detected_objects = object_detector.detect_objects_in_video(video_path)
                     
                     # Update progress
                     app_state["processing_progress"]["current_step"] = "Recognizing faces..."
