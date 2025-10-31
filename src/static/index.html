@@ -977,6 +977,25 @@
         .placeholder-text {
             color: var(--text-secondary);
         }
+        
+        /* Scheduler Badge */
+        .scheduler-badge {
+            background: rgba(66, 153, 225, 0.1);
+            border: 1px solid var(--accent-color);
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: var(--accent-color);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .scheduler-badge.disabled {
+            background: rgba(160, 174, 192, 0.1);
+            border-color: var(--text-secondary);
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 <body>
@@ -1000,6 +1019,9 @@
                 </div>
             </div>
             <div class="header-actions">
+                <div id="schedulerBadge" class="scheduler-badge" style="display: none;" title="Next scheduled run">
+                    ⏰ <span id="schedulerCountdown">--:--:--</span>
+                </div>
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
                 <select id="refreshRate" class="form-select" onchange="updateRefreshRate()" title="Status refresh rate">
                     <option value="2000">Refresh: 2s</option>
@@ -1458,6 +1480,57 @@
             }
         }
         
+        let schedulerCountdownInterval = null;
+        
+        function updateSchedulerBadge(scheduler) {
+            const badge = document.getElementById('schedulerBadge');
+            const countdown = document.getElementById('schedulerCountdown');
+            
+            if (!scheduler || !scheduler.enabled) {
+                badge.style.display = 'none';
+                if (schedulerCountdownInterval) {
+                    clearInterval(schedulerCountdownInterval);
+                    schedulerCountdownInterval = null;
+                }
+                return;
+            }
+            
+            badge.style.display = 'inline-flex';
+            badge.classList.remove('disabled');
+            
+            if (!scheduler.next_run) {
+                countdown.textContent = 'Starting...';
+                return;
+            }
+            
+            // Start countdown timer if not already running
+            if (!schedulerCountdownInterval) {
+                schedulerCountdownInterval = setInterval(() => {
+                    updateCountdown(scheduler.next_run);
+                }, 1000);
+            }
+            
+            updateCountdown(scheduler.next_run);
+        }
+        
+        function updateCountdown(nextRunISO) {
+            const countdown = document.getElementById('schedulerCountdown');
+            const nextRun = new Date(nextRunISO);
+            const now = new Date();
+            const diffMs = nextRun - now;
+            
+            if (diffMs <= 0) {
+                countdown.textContent = 'Running...';
+                return;
+            }
+            
+            const hours = Math.floor(diffMs / (1000 * 60 * 60));
+            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+            
+            countdown.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
         async function fetchStatus() {
             try {
                 const response = await fetch('/api/status');
@@ -1465,6 +1538,11 @@
                 
                 const statusBadge = document.getElementById('statusBadge');
                 const dashboardProgress = document.getElementById('dashboardProgress');
+                
+                // Update scheduler badge
+                if (data.scheduler) {
+                    updateSchedulerBadge(data.scheduler);
+                }
                 
                 if (data.is_processing && data.processing_progress) {
                     const prog = data.processing_progress;

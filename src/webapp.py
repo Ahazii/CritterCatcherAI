@@ -91,6 +91,11 @@ app_state = {
         "videos_processed": 0,
         "videos_total": 0,
         "start_time": None
+    },
+    "scheduler": {
+        "enabled": False,
+        "interval_minutes": 60,
+        "next_run": None
     }
 }
 
@@ -190,7 +195,8 @@ async def get_status():
             "videos_total": progress["videos_total"],
             "time_elapsed": time_elapsed,
             "time_remaining": time_remaining
-        } if app_state["is_processing"] else None
+        } if app_state["is_processing"] else None,
+        "scheduler": app_state["scheduler"]
     }
 
 

@@ -7,6 +7,7 @@ import sys
 import time
 import logging
 from pathlib import Path
+from datetime import datetime, timedelta
 import yaml
 
 from ring_downloader import RingDownloader
@@ -325,6 +326,14 @@ def main():
         logger.info("Processing complete")
         return
     
+    # Update scheduler state in webapp
+    try:
+        from webapp import app_state
+        app_state["scheduler"]["enabled"] = auto_run
+        app_state["scheduler"]["interval_minutes"] = interval_minutes
+    except:
+        pass
+    
     if not auto_run:
         logger.info("Auto Run is DISABLED. Waiting for manual trigger from the web UI.")
         # Keep the web server running but do not process automatically
@@ -339,6 +348,11 @@ def main():
     logger.info(f"Auto Run is ENABLED - Running in continuous mode with {interval_minutes} minute interval")
     while True:
         try:
+            # Set next run time
+            from webapp import app_state
+            next_run_time = datetime.now() + timedelta(minutes=interval_minutes)
+            app_state["scheduler"]["next_run"] = next_run_time.isoformat()
+            
             process_videos(config)
             logger.info(f"Sleeping for {interval_minutes} minutes")
             time.sleep(interval_minutes * 60)
