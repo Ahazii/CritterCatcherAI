@@ -375,7 +375,20 @@ def main():
                 first_run = False
             else:
                 logger.info(f"Processing videos (interval: {current_interval} minutes)")
-                process_videos(config)
+                
+                # Set processing state before running
+                app_state["is_processing"] = True
+                app_state["stop_requested"] = False
+                app_state["processing_progress"]["start_time"] = datetime.now()
+                
+                try:
+                    process_videos(config)
+                    app_state["last_run"] = datetime.now().isoformat()
+                except Exception as e:
+                    logger.error(f"Scheduled processing failed: {e}", exc_info=True)
+                finally:
+                    app_state["is_processing"] = False
+                    app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
             
             logger.info(f"Sleeping for {current_interval} minutes (next run: {next_run_time.strftime('%Y-%m-%d %H:%M:%S')})")
             
