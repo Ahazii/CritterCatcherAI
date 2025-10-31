@@ -1471,8 +1471,9 @@
                     const percent = prog.videos_total > 0 ? 
                         Math.round((prog.videos_processed / prog.videos_total) * 100) : 0;
                     
-                    // Update status badge with progress
-                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span>`;
+                    // Update status badge with progress and current step
+                    const stepText = prog.current_step ? `<br><span style="font-size: 0.75em; opacity: 0.9;">${prog.current_step}</span>` : '';
+                    statusBadge.innerHTML = `⚙️ Processing <span style="font-size: 0.8em">(${prog.videos_processed}/${prog.videos_total})</span>${stepText}`;
                     statusBadge.className = 'status-badge processing';
                     
                     // Show/hide buttons in header
