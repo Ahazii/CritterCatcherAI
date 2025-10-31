@@ -1058,7 +1058,9 @@
                 <div id="statusBadge" class="status-badge idle">Idle</div>
             </div>
             <div class="card stat-card">
-                <div class="stat-label">Total Videos</div>
+                <div class="stat-label">Total Videos
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; font-weight: normal;">Sorted videos across all categories</div>
+                </div>
                 <div class="stat-value" id="totalVideos">0</div>
             </div>
             <div class="card stat-card">
@@ -1096,6 +1098,7 @@
             <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
             <button class="tab" onclick="switchTab('analytics')">📈 Analytics</button>
             <button class="tab" onclick="switchTab('metrics')">📊 Metrics</button>
+            <button class="tab" onclick="switchTab('storage')">💾 Storage</button>
             <button class="tab" onclick="switchTab('videos')">🎥 Videos</button>
             <button class="tab" id="discoveryTab" onclick="switchTab('review')">🔍 Discovery Mode</button>
             <button class="tab" onclick="window.location.href='/species.html'">🦔 Species Training</button>
@@ -1126,12 +1129,19 @@
                     <div class="stat-value" id="analyticsDetections">0</div>
                 </div>
                 <div class="card stat-card">
-                    <div class="stat-label">Unique Categories</div>
-                    <div class="stat-value" id="analyticsCategories">0</div>
+                    <div class="stat-label">Stage 2 Classifications</div>
+                    <div class="stat-value" id="analyticsStage2">0</div>
                 </div>
                 <div class="card stat-card">
                     <div class="stat-label">Trained Faces</div>
                     <div class="stat-value" id="analyticsTrainedFaces">0</div>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">Specialized Detection Statistics</div>
+                <div id="stage2Stats" style="padding: 1rem;">
+                    <p style="color: var(--text-secondary);">Loading...</p>
                 </div>
             </div>
             
@@ -1196,6 +1206,25 @@
             
             <div style="text-align: center; margin-top: 1rem;">
                 <button class="btn" onclick="loadMetrics()" style="padding: 0.75rem 2rem;">🔄 Refresh Metrics</button>
+            </div>
+        </div>
+
+        <!-- Storage Management Tab -->
+        <div id="storage" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">💾 Sorted Video Storage</div>
+                    <button class="btn" onclick="loadStorageData()" style="padding: 0.4rem 1rem; font-size: 0.875rem;">🔄 Refresh</button>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Manage sorted videos by category. Each category shows the video count and total size. Deleting a category removes all videos and their metadata.
+                </p>
+                <div id="storageList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div style="text-align: center; padding: 2rem;">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 1rem;">Loading storage data...</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1420,6 +1449,7 @@
                 'dashboard': '📊 Dashboard',
                 'analytics': '📈 Analytics',
                 'metrics': '📊 Metrics',
+                'storage': '💾 Storage',
                 'videos': '🎥 Videos',
                 'review': '🏷️ Review & Label',
                 'ring': '🔔 Ring Setup',
@@ -1448,6 +1478,7 @@
 
             // Load tab-specific data
             if (tabName === 'videos') loadVideos();
+            if (tabName === 'storage') loadStorageData();
             if (tabName === 'review') {
                 loadDiscoveries();
                 loadUnknownFaces();
