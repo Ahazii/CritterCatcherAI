@@ -1,5 +1,5 @@
 """
-"""Specialized classifier for fine-grained species identification (Stage 2).
+Specialized classifier for fine-grained species identification (Stage 2).
 Uses custom-trained models to identify specific animals from YOLO detections.
 Supports hierarchical taxonomy for multi-level classification.
 """
