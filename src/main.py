@@ -258,11 +258,12 @@ def process_videos(config: dict):
                 detected_objects = object_detector.detect_objects_in_video(video_path)
                 species_results = {}
             
-            # Run face recognition ONLY if priority is "people" and no objects detected
+            # Run face recognition ONLY if enabled and conditions are met
             priority = detection_config.get('priority', 'objects')
+            face_recognition_enabled = config.get('face_recognition', {}).get('enabled', False)
             recognized_people = set()
             
-            if priority == "people" or not detected_objects:
+            if face_recognition_enabled and (priority == "people" or not detected_objects):
                 # Update progress: face recognition
                 try:
                     from webapp import app_state
