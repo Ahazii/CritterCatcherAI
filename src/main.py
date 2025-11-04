@@ -285,7 +285,7 @@ def process_videos(config: dict):
             # Sort video using specialized detection-aware sorting
             if specialized_enabled and species_results:
                 # Use new specialized sorting with species-specific folders
-                detected_objects_path = Path(config['paths']['downloads']) / f"{video_path.stem}_detections.json"
+                detected_objects_path = Path("/data/objects/detected")
                 result = video_sorter.sort_with_specialization(
                     video_path,
                     yolo_detections=detected_objects,
