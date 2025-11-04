@@ -166,19 +166,24 @@ class VideoSorter:
         """
         stats = {}
         
-        for class_dir in self.sorted_base_path.iterdir():
-            if class_dir.is_dir():
-                # Count video files
-                video_count = len(list(class_dir.glob("*.mp4")))
-                
-                # Handle nested people directories
-                if class_dir.name == "people":
-                    for person_dir in class_dir.iterdir():
-                        if person_dir.is_dir():
-                            person_count = len(list(person_dir.glob("*.mp4")))
-                            stats[f"people/{person_dir.name}"] = person_count
-                else:
-                    stats[class_dir.name] = video_count
+        def count_videos_recursive(base_path: Path, prefix: str = ""):
+            """Recursively count videos in nested directories."""
+            for item in base_path.iterdir():
+                if item.is_dir():
+                    # Check for videos directly in this directory
+                    video_count = len(list(item.glob("*.mp4")))
+                    
+                    # Build the full path name
+                    full_name = f"{prefix}/{item.name}" if prefix else item.name
+                    
+                    # If videos exist here, add to stats
+                    if video_count > 0:
+                        stats[full_name] = video_count
+                    
+                    # Recursively check subdirectories
+                    count_videos_recursive(item, full_name)
+        
+        count_videos_recursive(self.sorted_base_path)
         
         logger.debug(f"Video sorting statistics: {stats}")
         return stats

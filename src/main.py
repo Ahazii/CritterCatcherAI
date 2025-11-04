@@ -249,26 +249,29 @@ def process_videos(config: dict):
                     video_path, config, taxonomy_tree
                 )
                 
-                # Merge species results into detected_objects for sorting
-                # Species detections override parent YOLO detections
+            # Merge species results for deduplication tracking
+                # Keep species_results separate for specialized sorting
                 if species_results:
                     logger.info(f"Specialized detections: {list(species_results.keys())}")
-                    for species, (confidence, path) in species_results.items():
-                        detected_objects[species] = confidence
             else:
                 logger.debug("Using standard YOLO detection only (Stage 1)")
                 detected_objects = object_detector.detect_objects_in_video(video_path)
+                species_results = {}
             
-            # Update progress: face recognition
-            try:
-                from webapp import app_state
-                app_state["processing_progress"]["current_step"] = f"Recognizing faces in {video_path.name}..."
-                app_state["processing_progress"]["phase"] = "face_recognition"
-            except:
-                pass
+            # Run face recognition ONLY if priority is "people" and no objects detected
+            priority = detection_config.get('priority', 'objects')
+            recognized_people = set()
             
-            # Run face recognition
-            recognized_people = face_recognizer.recognize_faces_in_video(video_path)
+            if priority == "people" or not detected_objects:
+                # Update progress: face recognition
+                try:
+                    from webapp import app_state
+                    app_state["processing_progress"]["current_step"] = f"Recognizing faces in {video_path.name}..."
+                    app_state["processing_progress"]["phase"] = "face_recognition"
+                except:
+                    pass
+                
+                recognized_people = face_recognizer.recognize_faces_in_video(video_path)
             
             # Update progress: sorting
             try:
@@ -278,14 +281,27 @@ def process_videos(config: dict):
             except:
                 pass
             
-            # Sort video based on detections
-            priority = detection_config.get('priority', 'people')
-            sorted_path = video_sorter.sort_video(
-                video_path,
-                detected_objects=detected_objects,
-                recognized_people=recognized_people,
-                priority=priority
-            )
+            # Sort video using specialized detection-aware sorting
+            if specialized_enabled and species_results:
+                # Use new specialized sorting with species-specific folders
+                detected_objects_path = Path(config['paths']['downloads']) / f"{video_path.stem}_detections.json"
+                result = video_sorter.sort_with_specialization(
+                    video_path,
+                    yolo_detections=detected_objects,
+                    species_results={name: conf for name, (conf, _) in species_results.items()},
+                    config=config,
+                    detected_objects_path=detected_objects_path,
+                    recognized_people=recognized_people
+                )
+                sorted_path = result.get("video_path", video_path)
+            else:
+                # Use standard sorting
+                sorted_path = video_sorter.sort_video(
+                    video_path,
+                    detected_objects=detected_objects,
+                    recognized_people=recognized_people,
+                    priority=priority
+                )
             
             logger.info(f"Video processed and sorted to: {sorted_path}")
             
