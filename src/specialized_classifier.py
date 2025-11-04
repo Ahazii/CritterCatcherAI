@@ -190,23 +190,28 @@ class SpecializedClassifier:
         video_name = video_path.stem
         
         logger.info(f"Running hierarchical classification for {video_name}")
-        logger.debug(f"YOLO detections: {yolo_detections}")
+        logger.info(f"YOLO Stage 1 detections: {yolo_detections}")
+        
+        if not yolo_detections:
+            logger.warning(f"⚠️ No YOLO detections for {video_name} - Stage 2 cannot run without Stage 1 detections")
         
         # For each YOLO detection, traverse the taxonomy tree
         for yolo_class, yolo_confidence in yolo_detections.items():
             # Get classifier chain for this YOLO class
+            logger.info(f"  → Processing YOLO class '{yolo_class}' (confidence: {yolo_confidence:.2f})")
             classifier_chain = self.taxonomy_tree.get_classifier_chain(yolo_class)
             
             if not classifier_chain:
+                logger.debug(f"    No trained species models for {yolo_class}")
                 logger.debug(f"No specialized classifiers configured for '{yolo_class}'")
                 continue
             
-            logger.debug(f"YOLO detected '{yolo_class}', checking {len(classifier_chain)} classifiers")
+            logger.info(f"    Found {len(classifier_chain)} trained species models for '{yolo_class}': {[n.name for n in classifier_chain]}")
             
             # Find detection images for this YOLO class
             label_dir = detected_objects_path / yolo_class.replace(" ", "_")
             if not label_dir.exists():
-                logger.warning(f"Detection images not found for {yolo_class}")
+                logger.warning(f"    ⚠️ Detection images directory not found: {label_dir}")
                 continue
             
             # Get detection images for this video
@@ -216,10 +221,11 @@ class SpecializedClassifier:
                     detection_images.append(img_file)
             
             if not detection_images:
-                logger.debug(f"No detection images found for {yolo_class} in {video_name}")
+                logger.warning(f"    ⚠️ No detection images found for {yolo_class} in {video_name}")
+                logger.debug(f"    Searched in: {label_dir}")
                 continue
             
-            logger.debug(f"Found {len(detection_images)} detection images for {yolo_class}")
+            logger.info(f"    Found {len(detection_images)} detection images for Stage 2 classification")
             
             # Run hierarchical classification
             classification_result = self._classify_hierarchical(
@@ -290,7 +296,7 @@ class SpecializedClassifier:
             
             # Check if this classifier matched
             if max_conf >= node.confidence_threshold:
-                logger.debug(f"Match: {node.name} (confidence: {max_conf:.3f})")
+                logger.info(f"      ✓ MATCH: {node.name} (confidence: {max_conf:.3f} >= threshold: {node.confidence_threshold})")
                 
                 # Keep track of deepest match in tree
                 if max_conf > best_confidence:
@@ -298,7 +304,7 @@ class SpecializedClassifier:
                     best_confidence = max_conf
                     best_image = max_img
             else:
-                logger.debug(f"No match: {node.name} (max confidence: {max_conf:.3f} < threshold: {node.confidence_threshold})")
+                logger.info(f"      ✗ NO MATCH: {node.name} (confidence: {max_conf:.3f} < threshold: {node.confidence_threshold})")
         
         if best_match:
             return (best_match, best_confidence, best_image)
