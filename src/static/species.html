@@ -674,7 +674,7 @@
             </div>
             
             <div id="imageTypeInfo" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--accent-color); color: white; border-radius: 6px;">
-                <strong>Positive Examples:</strong> Images OF <span id="uploadSpeciesName1"></span>. These teach the AI what this species looks like.
+                <strong>Positive Examples:</strong> Select image type above to see description.
             </div>
             
             <div class="file-upload" onclick="document.getElementById('trainingImages').click()">
@@ -1229,7 +1229,8 @@
         function updateImageTypeInfo() {
             const imageType = document.querySelector('input[name="imageType"]:checked').value;
             const infoDiv = document.getElementById('imageTypeInfo');
-            const speciesName = document.getElementById('uploadSpeciesName').textContent;
+            const speciesNameEl = document.getElementById('uploadSpeciesName');
+            const speciesName = speciesNameEl ? speciesNameEl.textContent : 'this species';
             
             if (imageType === 'positive') {
                 infoDiv.style.background = 'var(--accent-color)';
@@ -1249,7 +1250,6 @@
             const path = getNodePath(node);
             const speciesName = path.join(' > ');
             document.getElementById('uploadSpeciesName').textContent = speciesName;
-            document.getElementById('uploadSpeciesName1').textContent = speciesName;
             document.getElementById('uploadModal').classList.add('active');
             
             // Reset to positive
