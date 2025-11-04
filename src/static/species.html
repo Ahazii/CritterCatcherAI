@@ -657,9 +657,26 @@
                 <h2 class="modal-title">Upload Training Images</h2>
                 <button class="close-btn" onclick="closeUploadModal()">&times;</button>
             </div>
-            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
-                Upload images of <strong id="uploadSpeciesName"></strong>. Minimum 10 images recommended.
-            </p>
+            
+            <!-- Image Type Selector -->
+            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Image Type:</label>
+                <div style="display: flex; gap: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="radio" name="imageType" value="positive" checked onchange="updateImageTypeInfo()">
+                        <span>✅ Positive Examples</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="radio" name="imageType" value="negative" onchange="updateImageTypeInfo()">
+                        <span>❌ Negative Examples</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="imageTypeInfo" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--accent-color); color: white; border-radius: 6px;">
+                <strong>Positive Examples:</strong> Images OF <span id="uploadSpeciesName1"></span>. These teach the AI what this species looks like.
+            </div>
+            
             <div class="file-upload" onclick="document.getElementById('trainingImages').click()">
                 <input type="file" id="trainingImages" accept="image/*" multiple onchange="handleFileSelect(event)">
                 <p>📁 Click to select images or drag and drop</p>
@@ -1209,6 +1226,20 @@
             }
         }
 
+        function updateImageTypeInfo() {
+            const imageType = document.querySelector('input[name="imageType"]:checked').value;
+            const infoDiv = document.getElementById('imageTypeInfo');
+            const speciesName = document.getElementById('uploadSpeciesName').textContent;
+            
+            if (imageType === 'positive') {
+                infoDiv.style.background = 'var(--accent-color)';
+                infoDiv.innerHTML = `<strong>✅ Positive Examples:</strong> Images OF ${speciesName}. These teach the AI what this species looks like.`;
+            } else {
+                infoDiv.style.background = 'var(--danger-color)';
+                infoDiv.innerHTML = `<strong>❌ Negative Examples:</strong> Images NOT of ${speciesName} (other species, similar animals, background). These teach the AI what to ignore.`;
+            }
+        }
+        
         function openUploadModalForNode(nodeId, event) {
             event.stopPropagation();
             const node = findNodeById(taxonomyTree.roots, nodeId);
@@ -1216,8 +1247,15 @@
             
             currentNodeId = nodeId;
             const path = getNodePath(node);
-            document.getElementById('uploadSpeciesName').textContent = path.join(' > ');
+            const speciesName = path.join(' > ');
+            document.getElementById('uploadSpeciesName').textContent = speciesName;
+            document.getElementById('uploadSpeciesName1').textContent = speciesName;
             document.getElementById('uploadModal').classList.add('active');
+            
+            // Reset to positive
+            document.querySelector('input[name="imageType"][value="positive"]').checked = true;
+            updateImageTypeInfo();
+            
             selectedFiles = [];
             document.getElementById('fileList').innerHTML = '';
         }
@@ -1245,8 +1283,10 @@
                 return;
             }
             
+            const imageType = document.querySelector('input[name="imageType"]:checked').value;
             const formData = new FormData();
             selectedFiles.forEach(file => formData.append('files', file));
+            formData.append('image_type', imageType);  // 'positive' or 'negative'
             
             try {
                 const response = await fetch(`/api/taxonomy/node/${encodeURIComponent(currentNodeId)}/upload_training_data`, {
@@ -1257,7 +1297,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(data.message, 'success');
+                    const typeLabel = imageType === 'positive' ? '✅ positive' : '❌ negative';
+                    showAlert(`${data.message}\n(${typeLabel} examples)`, 'success');
                     closeUploadModal();
                     loadTaxonomyTree();
                 } else {

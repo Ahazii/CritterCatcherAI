@@ -2623,9 +2623,10 @@ async def get_taxonomy_node(node_id: str):
 @app.post("/api/taxonomy/node/{node_id}/upload_training_data")
 async def upload_node_training_data(
     node_id: str,
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    image_type: str = 'positive'  # 'positive' or 'negative'
 ):
-    """Upload training images for a taxonomy node."""
+    """Upload training images (positive or negative examples) for a taxonomy node."""
     try:
         if taxonomy_tree is None:
             raise HTTPException(status_code=500, detail="Taxonomy tree not initialized")
@@ -2636,8 +2637,22 @@ async def upload_node_training_data(
         
         # Get node path for directory structure
         node_path = taxonomy_tree.get_node_path(node_id)
-        training_dir = Path("/data/training_data") / "_".join(node_path) / "train"
+        base_training_dir = Path("/data/training_data") / "_".join(node_path)
+        
+        # Choose directory based on image type
+        if image_type == 'negative':
+            training_dir = base_training_dir / "train_negative"
+        else:
+            training_dir = base_training_dir / "train"
+        
         training_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set directory permissions (rule: folders created by AI should have full permissions)
+        try:
+            import stat
+            training_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
+        except Exception as e:
+            logger.warning(f"Could not set permissions on {training_dir}: {e}")
         
         uploaded_count = 0
         for file in files:
@@ -2649,23 +2664,36 @@ async def upload_node_training_data(
             file_path.write_bytes(content)
             uploaded_count += 1
         
-        logger.info(f"Uploaded {uploaded_count} training images for {node.name}")
+        type_label = "negative" if image_type == "negative" else "positive"
+        logger.info(f"Uploaded {uploaded_count} {type_label} training images for {node.name}")
         
-        # Update node metadata with training image count
-        total_images = len(list(training_dir.glob("*.jpg"))) + len(list(training_dir.glob("*.png")))
+        # Update node metadata with training image counts
+        positive_dir = base_training_dir / "train"
+        negative_dir = base_training_dir / "train_negative"
+        
+        positive_count = 0
+        negative_count = 0
+        
+        if positive_dir.exists():
+            positive_count = len(list(positive_dir.glob("*.jpg"))) + len(list(positive_dir.glob("*.png")))
+        if negative_dir.exists():
+            negative_count = len(list(negative_dir.glob("*.jpg"))) + len(list(negative_dir.glob("*.png")))
+        
         if not node.metadata:
             node.metadata = {}
-        node.metadata['training_images'] = total_images
+        node.metadata['training_images'] = positive_count
+        node.metadata['negative_training_images'] = negative_count
         
         # Save updated tree
         taxonomy_tree.save_to_file(TAXONOMY_FILE)
         
         return {
             "status": "success",
-            "message": f"Uploaded {uploaded_count} image(s) for {node.name}. Total: {total_images}",
+            "message": f"Uploaded {uploaded_count} {type_label} image(s) for {node.name}. Total: {positive_count} positive, {negative_count} negative",
             "node_id": node_id,
             "path": node_path,
-            "training_images": total_images
+            "training_images": positive_count,
+            "negative_training_images": negative_count
         }
     
     except HTTPException:
