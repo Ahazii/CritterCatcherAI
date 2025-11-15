@@ -1402,6 +1402,7 @@
         const selectedFaces = new Set();
         const selectedObjects = new Set();
         const selectedDiscoveries = new Set();
+        const selectedDiscoveryImages = new Set();  // For individual discovery image selection
         window.currentIgnoredLabels = [];
         
         // Phase 2: Multi-select state
@@ -2723,7 +2724,12 @@
             const newLabel = prompt(
                 `The AI thinks this is "${oldLabel}" but you disagree.\n\n` +
                 `What is the CORRECT label for these images?\n\n` +
-                `Examples: hedgehog, fox, cat, person, car, etc.`,
+                `Format: Category or Category/Subcategory\n` +
+                `Examples:\n` +
+                `  - hedgehog\n` +
+                `  - Hedgehog/European Hedgehog\n` +
+                `  - fox\n` +
+                `  - Fox/Red Fox`,
                 oldLabel
             );
             
@@ -2739,6 +2745,7 @@
             }
             
             try {
+                console.log('Relabeling discoveries:', oldLabel, '->', correctedLabel);
                 // First, approve the discovery with the corrected label
                 const response = await fetch('/api/discoveries/approve', {
                     method: 'POST',
@@ -2749,11 +2756,19 @@
                     })
                 });
                 
+                console.log('Response status:', response.status);
                 if (!response.ok) {
-                    const errorData = await response.json();
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse error:', e);
+                        errorData = { detail: response.statusText };
+                    }
                     throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
                 }
                 const data = await response.json();
+                console.log('Relabel successful:', data);
                 alert(`Corrected: "${oldLabel}" → "${correctedLabel}"\\n\\n${data.message}\\n\\nView and manage this object in the Species Training page.`);
                 loadDiscoveries(); // Reload
                 selectedDiscoveries.clear(); // Clear selection
@@ -2920,6 +2935,19 @@
             }
         }
         
+        function toggleDiscoveryImageSelection(detectionId, event) {
+            if (event) event.stopPropagation();
+            const saferId = detectionId.replace(/[^a-z0-9]/gi, '-');
+            const element = document.getElementById(`discovery-img-${saferId}`);
+            if (selectedDiscoveryImages.has(detectionId)) {
+                selectedDiscoveryImages.delete(detectionId);
+                element.classList.remove('selected');
+            } else {
+                selectedDiscoveryImages.add(detectionId);
+                element.classList.add('selected');
+            }
+        }
+        
         // Image zoom modal functions
         function openZoomModal(imageSrc, label, confidence, detectionId = null) {
             const modal = document.getElementById('zoomModal');
@@ -3038,10 +3066,11 @@
             
             modalInfo.innerHTML = infoHTML;
             
-            // Show Enable and Blacklist buttons for discoveries
+            // Show Enable, Relabel, and Blacklist buttons for discoveries
             modalActions.innerHTML = `
                 <button class="btn btn-success" onclick="enableFromZoom(event)" style="padding: 0.75rem 1.5rem;">✓ Enable</button>
-                <button class="btn" onclick="blacklistFromZoom(event)" style="background: var(--warning-color); color: white; padding: 0.75rem 1.5rem;">✗ Blacklist</button>
+                <button class="btn" onclick="relabelFromZoom(event)" style="background: var(--warning-color); color: white; padding: 0.75rem 1.5rem;">🏷 Relabel</button>
+                <button class="btn" onclick="blacklistFromZoom(event)" style="background: var(--danger-color); padding: 0.75rem 1.5rem;">✗ Blacklist</button>
             `;
             modalActions.style.display = 'flex';
             
@@ -3075,6 +3104,60 @@
             } catch (error) {
                 console.error('Failed to enable:', error);
                 alert('Failed to enable discovery: ' + error.message);
+            }
+        }
+        
+        async function relabelFromZoom(event) {
+            event.stopPropagation();
+            if (!currentZoomDetectionId) return;
+            
+            const [label] = currentZoomDetectionId.split(':');
+            
+            const newLabel = prompt(
+                `The AI thinks this is "${label}" but you disagree.\n\n` +
+                `What is the CORRECT label?\n\n` +
+                `Format: Category or Category/Subcategory\n` +
+                `Examples:\n` +
+                `  - dog\n` +
+                `  - Dog/Golden Retriever\n` +
+                `  - cat\n` +
+                `  - Cat/Siamese`,
+                label
+            );
+            
+            if (newLabel === null || newLabel.trim() === '' || newLabel.trim().toLowerCase() === label) return;
+            
+            try {
+                console.log('Relabeling from zoom:', label, '->', newLabel);
+                const response = await fetch('/api/discoveries/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        labels: [newLabel.trim().toLowerCase()],
+                        relabel_from: label
+                    })
+                });
+                
+                console.log('Relabel response status:', response.status);
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse error:', e);
+                        errorData = { detail: response.statusText };
+                    }
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Relabel successful:', data);
+                alert(`Corrected: "${label}" → "${newLabel.trim().toLowerCase()}"\n\n${data.message}`);
+                closeZoomModal();
+                loadDiscoveries();
+            } catch (error) {
+                console.error('Failed to relabel discovery:', error);
+                alert('Failed to relabel discovery: ' + error.message);
             }
         }
         
@@ -3308,12 +3391,19 @@
         async function relabelSingleDiscovery(label) {
             const newLabel = prompt(
                 `The AI thinks this is "${label}" but you disagree.\n\n` +
-                `What is the CORRECT label?`,
+                `What is the CORRECT label?\n\n` +
+                `Format: Category or Category/Subcategory\n` +
+                `Examples:\n` +
+                `  - hedgehog\n` +
+                `  - Hedgehog/European Hedgehog\n` +
+                `  - fox\n` +
+                `  - Fox/Red Fox`,
                 label
             );
             if (newLabel === null || newLabel.trim() === '' || newLabel.trim().toLowerCase() === label) return;
             
             try {
+                console.log('Relabeling single discovery:', label, '->', newLabel);
                 const response = await fetch('/api/discoveries/approve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3322,12 +3412,24 @@
                         relabel_from: label
                     })
                 });
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse error:', e);
+                        errorData = { detail: response.statusText };
+                    }
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
                 const data = await response.json();
+                console.log('Relabel successful:', data);
                 alert(`Corrected: "${label}" → "${newLabel.trim().toLowerCase()}"\n\n${data.message}`);
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to relabel discovery:', error);
-                alert('Failed to relabel discovery');
+                alert('Failed to relabel discovery: ' + error.message);
             }
         }
         
@@ -3633,9 +3735,20 @@
             const minConf = parseFloat(document.getElementById('detectedMinConfidence').value);
             const sortBy = document.getElementById('detectedSortBy').value;
             
+            // Get monitored and blacklisted labels (normalize to lowercase for comparison)
+            const monitoredLabels = (selectedObjectLabels || []).map(l => l.toLowerCase());
+            const blacklistedLabels = (window.currentIgnoredLabels || []).map(l => l.toLowerCase());
+            
             let filtered = [];
             detectedData.forEach(obj => {
-                const matchesSearch = obj.label.toLowerCase().includes(searchTerm);
+                const objLabelLower = obj.label.toLowerCase();
+                
+                // Skip if already being monitored or blacklisted
+                if (monitoredLabels.includes(objLabelLower) || blacklistedLabels.includes(objLabelLower)) {
+                    return;
+                }
+                
+                const matchesSearch = objLabelLower.includes(searchTerm);
                 const avgConf = obj.detections.reduce((sum, d) => sum + d.confidence, 0) / obj.detections.length;
                 const matchesConf = avgConf >= minConf;
                 
@@ -3690,10 +3803,13 @@
                 for (const img of discovery.sample_images) {
                     const imageSrc = `/api/detected_objects/image/${img.path}`;
                     const detectionId = `${discovery.label}:${img.filename}`;
+                    const safeId = detectionId.replace(/[^a-z0-9]/gi, '-');
                     html += `
                         <div class="image-item" 
-                             ondblclick="openZoomModalDiscovery('${imageSrc}', '${discovery.label}', ${discovery.avg_confidence}, '${detectionId}')"
-                             title="Double-click to zoom">
+                             id="discovery-img-${safeId}"
+                             onclick="toggleDiscoveryImageSelection('${detectionId}', event)"
+                             ondblclick="openZoomModalDiscovery('${imageSrc}', '${discovery.label}', ${discovery.avg_confidence}, '${detectionId}'); event.stopPropagation();"
+                             title="Click to select | Double-click to zoom">
                             <img data-src="${imageSrc}" alt="${discovery.label}" class="lazy">
                             <div class="confidence-badge">${discovery.label}</div>
                         </div>
