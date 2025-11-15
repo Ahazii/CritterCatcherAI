@@ -1260,10 +1260,13 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
     global taxonomy_tree
     
     try:
+        logger.info(f"approve_discoveries called with request: {request}")
         labels = request.get('labels', [])
         relabel_from = request.get('relabel_from')  # Optional: for correcting misidentifications
+        logger.info(f"Parsed labels: {labels}, relabel_from: {relabel_from}")
         
         if not labels:
+            logger.error("No labels specified in request")
             raise HTTPException(status_code=400, detail="No labels specified")
         
         if not taxonomy_tree:

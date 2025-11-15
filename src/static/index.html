@@ -2644,20 +2644,35 @@
             }
             
             try {
+                const labels = Array.from(selectedDiscoveries);
+                console.log('Approving discoveries:', labels);
+                const payload = { labels: labels };
                 const response = await fetch('/api/discoveries/approve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ labels: Array.from(selectedDiscoveries) })
+                    body: JSON.stringify(payload)
                 });
                 
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse error response:', e);
+                        errorData = { detail: response.statusText };
+                    }
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
+                console.log('Response data:', data);
                 alert(data.message + '\n\nView and manage these objects in the Species Training page.');
                 loadDiscoveries(); // Reload
                 selectedDiscoveries.clear(); // Clear selection
                 
             } catch (error) {
                 console.error('Failed to approve discoveries:', error);
-                alert('Failed to approve discoveries');
+                alert('Failed to approve discoveries: ' + error.message);
             }
         }
         
@@ -2679,13 +2694,17 @@
                     body: JSON.stringify({ labels: Array.from(selectedDiscoveries) })
                 });
                 
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 alert(data.message);
                 loadDiscoveries(); // Reload
                 
             } catch (error) {
                 console.error('Failed to ignore discoveries:', error);
-                alert('Failed to ignore discoveries');
+                alert('Failed to ignore discoveries: ' + error.message);
             }
         }
         
@@ -2730,6 +2749,10 @@
                     })
                 });
                 
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 alert(`Corrected: "${oldLabel}" → "${correctedLabel}"\\n\\n${data.message}\\n\\nView and manage this object in the Species Training page.`);
                 loadDiscoveries(); // Reload
@@ -2737,7 +2760,7 @@
                 
             } catch (error) {
                 console.error('Failed to relabel discovery:', error);
-                alert('Failed to relabel discovery');
+                alert('Failed to relabel discovery: ' + error.message);
             }
         }
         
@@ -2755,12 +2778,13 @@
                 let html = '';
                 
                 for (const group of data.groups) {
+                    const filenames = group.faces.map(f => f.filename);
                     html += `
                         <div class="group-header">
                             <div>
                                 <strong>Group ${data.groups.indexOf(group) + 1}</strong> - ${group.count} similar face(s)
                             </div>
-                            <button class="btn btn-small" onclick="selectAllInGroup('${group.id}', ${JSON.stringify(group.faces.map(f => f.filename))})">Select All</button>
+                            <button class="btn btn-small" onclick="selectAllInGroup('${group.id}')" data-filenames='${JSON.stringify(filenames)}'>Select All</button>
                         </div>
                         <div class="image-grid">
                     `;
@@ -2810,7 +2834,10 @@
             }
         }
         
-        function selectAllInGroup(groupId, filenames) {
+        function selectAllInGroup(groupId) {
+            const button = event.target;
+            const filenamesJson = button.getAttribute('data-filenames');
+            const filenames = JSON.parse(filenamesJson);
             for (const filename of filenames) {
                 if (!selectedFaces.has(filename)) {
                     selectedFaces.add(filename);
@@ -3227,18 +3254,33 @@
         
         // Per-category actions for discoveries
         async function trackSingleDiscovery(label) {
+            console.log('trackSingleDiscovery called for label:', label);
             try {
+                const payload = { labels: [label] };
+                console.log('Sending payload:', payload);
                 const response = await fetch('/api/discoveries/approve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ labels: [label] })
+                    body: JSON.stringify(payload)
                 });
+                console.log('Response status:', response.status, response.statusText);
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse error response:', e);
+                        errorData = { detail: response.statusText };
+                    }
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
+                console.log('Response data:', data);
                 alert(data.message);
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to track discovery:', error);
-                alert('Failed to track discovery');
+                alert('Failed to track discovery: ' + error.message);
             }
         }
         
@@ -3250,12 +3292,16 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ labels: [label] })
                 });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 alert(data.message);
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to blacklist discovery:', error);
-                alert('Failed to blacklist discovery');
+                alert('Failed to blacklist discovery: ' + error.message);
             }
         }
         

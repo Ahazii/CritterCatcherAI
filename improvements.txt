@@ -1,0 +1,21 @@
+improvements
+
+More selective over downloads - can we get the timestamp and only download once?
+
+species detect mode, integrate into main screen.
+Move items into Plex folder.
+Pictures in the Trained People Window
+Videos Tab should play videos.
+App Name to link to something?
+Download All should just download and nothing else
+We Need in-app logging.
+Single Frames could be stored for training purposes.
+Video Statistics by category could show images and subcategories.
+Storage section with delete, could show contents of folder with images and allow multi selection and delete.
+Videos section should allow playing. But needs organisation.
+
+
+Bugs when selecting unknown faces, Select All does not work.
+"Last Run" Does not persist
+Bug when deleteing from the "Storage" tab, if there is a subfolder such as "Jack_Russell" "✗ Failed to delete: [Errno 39] Directory not empty: 'Jack_Russell'"
+When "Stop" pressed, downloads continue.
