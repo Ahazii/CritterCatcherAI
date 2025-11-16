@@ -2724,12 +2724,12 @@
             const newLabel = prompt(
                 `The AI thinks this is "${oldLabel}" but you disagree.\n\n` +
                 `What is the CORRECT label for these images?\n\n` +
-                `Format: Category or Category/Subcategory\n` +
+                `Format: category or category/subcategory\n` +
                 `Examples:\n` +
                 `  - hedgehog\n` +
-                `  - Hedgehog/European Hedgehog\n` +
+                `  - hedgehog/european_hedgehog\n` +
                 `  - fox\n` +
-                `  - Fox/Red Fox`,
+                `  - fox/red_fox`,
                 oldLabel
             );
             
@@ -3116,12 +3116,12 @@
             const newLabel = prompt(
                 `The AI thinks this is "${label}" but you disagree.\n\n` +
                 `What is the CORRECT label?\n\n` +
-                `Format: Category or Category/Subcategory\n` +
+                `Format: category or category/subcategory\n` +
                 `Examples:\n` +
                 `  - dog\n` +
-                `  - Dog/Golden Retriever\n` +
+                `  - dog/jack_russell\n` +
                 `  - cat\n` +
-                `  - Cat/Siamese`,
+                `  - cat/siamese`,
                 label
             );
             
@@ -3392,12 +3392,12 @@
             const newLabel = prompt(
                 `The AI thinks this is "${label}" but you disagree.\n\n` +
                 `What is the CORRECT label?\n\n` +
-                `Format: Category or Category/Subcategory\n` +
+                `Format: category or category/subcategory\n` +
                 `Examples:\n` +
                 `  - hedgehog\n` +
-                `  - Hedgehog/European Hedgehog\n` +
+                `  - hedgehog/european_hedgehog\n` +
                 `  - fox\n` +
-                `  - Fox/Red Fox`,
+                `  - fox/red_fox`,
                 label
             );
             if (newLabel === null || newLabel.trim() === '' || newLabel.trim().toLowerCase() === label) return;

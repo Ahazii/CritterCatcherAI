@@ -1275,17 +1275,50 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
         # Add each label as a YOLO root node in the taxonomy tree
         new_labels = []
         for label in labels:
-            yolo_id = f"yolo_{label.replace(' ', '_')}"
+            # Handle both 'dog' and 'dog/Jack_Russell' format
+            base_label = label.split('/')[0]  # Get just the YOLO class part
+            yolo_id = f"yolo_{base_label.replace(' ', '_')}"
             
-            # Check if it already exists
-            if yolo_id in taxonomy_tree.nodes:
-                logger.info(f"YOLO node '{label}' already exists in taxonomy tree")
+            # Check if YOLO root already exists
+            existing_node = taxonomy_tree.get_node(yolo_id)
+            if existing_node:
+                logger.info(f"YOLO node '{base_label}' already exists in taxonomy tree")
+                # If it's a subcategory (has '/'), add as child node
+                if '/' in label:
+                    subcategory = label.split('/', 1)[1]
+                    # Add subcategory as child of YOLO root
+                    try:
+                        taxonomy_tree.add_node(
+                            name=subcategory,
+                            parent_id=yolo_id,
+                            level="species"
+                        )
+                        new_labels.append(label)
+                        logger.info(f"Added '{subcategory}' as subspecies under '{base_label}'")
+                    except Exception as e:
+                        logger.warning(f"Could not add subcategory '{label}': {e}")
                 continue
             
-            # Add as YOLO root node with enabled=True
-            taxonomy_tree.add_yolo_root(label, enabled=True)
-            new_labels.append(label)
-            logger.info(f"Added '{label}' as enabled YOLO root node in taxonomy tree")
+            # Ensure YOLO root node exists and is enabled
+            if yolo_id in taxonomy_tree.roots:
+                taxonomy_tree.roots[yolo_id].enabled = True
+                new_labels.append(base_label)
+                logger.info(f"Enabled YOLO root node '{base_label}'")
+                
+                # If it's a subcategory, add it as child
+                if '/' in label:
+                    subcategory = label.split('/', 1)[1]
+                    try:
+                        taxonomy_tree.add_node(
+                            name=subcategory,
+                            parent_id=yolo_id,
+                            level="species"
+                        )
+                        logger.info(f"Added '{subcategory}' as species under '{base_label}'")
+                    except Exception as e:
+                        logger.warning(f"Could not add subcategory '{subcategory}': {e}")
+            else:
+                logger.warning(f"YOLO root node '{base_label}' not found in taxonomy tree")
         
         # Save taxonomy tree
         if new_labels:
@@ -1312,7 +1345,9 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
         if relabel_from:
             import shutil
             old_label_dir = DETECTED_OBJECTS_PATH / relabel_from.replace(" ", "_")
-            new_label_dir = DETECTED_OBJECTS_PATH / labels[0].replace(" ", "_")
+            # Use just the base label for directory (no subcategory in path)
+            base_new_label = labels[0].split('/')[0]
+            new_label_dir = DETECTED_OBJECTS_PATH / base_new_label.replace(" ", "_")
             
             if old_label_dir.exists():
                 new_label_dir.mkdir(parents=True, exist_ok=True)
@@ -1326,11 +1361,11 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
                     new_img_path = new_label_dir / img_file.name
                     shutil.move(str(img_file), str(new_img_path))
                     
-                    # Move and update metadata
+                    # Move and update metadata with the full label (including subcategory if present)
                     if metadata_file.exists():
                         with open(metadata_file, 'r') as f:
                             metadata = json.load(f)
-                        metadata['label'] = labels[0]
+                        metadata['label'] = labels[0]  # Store full label including subcategory
                         
                         new_metadata_path = new_label_dir / f"{img_file.name}.json"
                         with open(new_metadata_path, 'w') as f:
@@ -1339,7 +1374,7 @@ async def approve_discoveries(request: dict, background_tasks: BackgroundTasks):
                     
                     moved_count += 1
                 
-                # Remove old directory
+                # Remove old directory if empty
                 if old_label_dir.exists() and not list(old_label_dir.iterdir()):
                     old_label_dir.rmdir()
                 
