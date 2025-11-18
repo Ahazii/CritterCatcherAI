@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal Profiles - CritterCatcherAI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --danger-color: #f56565;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --accent-color: #63b3ed;
+            --accent-hover: #4299e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-title {
+            color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.875rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .profile-card {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .profile-info h3 {
+            margin-bottom: 0.5rem;
+            color: var(--accent-color);
+        }
+
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .stat {
+            background: var(--bg-secondary);
+            padding: 0.75rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .profile-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.75rem 0;
+        }
+
+        .badge {
+            background: var(--accent-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+        }
+
+        .profile-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+
+        input[type="checkbox"] {
+            margin-top: 0.25rem;
+            cursor: pointer;
+        }
+
+        .checkbox-label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .checkbox-label strong {
+            color: var(--text-primary);
+        }
+
+        .checkbox-label small {
+            color: var(--text-secondary);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Grid */
+        .profiles-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert.active {
+            display: block;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 1px solid #90cdf4;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-color);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--success-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="logo">
+                <span class="logo-title">🦡 CritterCatcherAI</span>
+            </a>
+            <div class="header-actions">
+                <button class="btn btn-success" onclick="openCreateModal()">+ New Profile</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('profiles-tab')">Profiles</button>
+            <button class="tab-button" onclick="switchTab('stats-tab')">Statistics</button>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alert" class="alert"></div>
+
+        <!-- Profiles Tab -->
+        <div id="profiles-tab" class="tab-content active">
+            <div id="profilesList" class="profiles-grid">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <h3>No profiles yet</h3>
+                    <p>Create your first animal profile to get started.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="stats-tab" class="tab-content">
+            <div id="statsList" class="profiles-grid">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📊</div>
+                    <p>No statistics available</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Create Animal Profile</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+
+            <form id="profileForm" onsubmit="handleSaveProfile(event)">
+                <!-- Animal Name -->
+                <div class="form-group">
+                    <label for="profileName">Animal Name *</label>
+                    <input type="text" id="profileName" required 
+                           placeholder="e.g., Hedgehog, Golden Eagle">
+                    <small>The name of the animal you want to detect</small>
+                </div>
+
+                <!-- YOLO Categories -->
+                <div class="form-group">
+                    <label>YOLO Categories *</label>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                        Select which YOLO categories might contain your target animal
+                    </p>
+                    <div id="yoloCategories" class="checkbox-group"></div>
+                </div>
+
+                <!-- Text Description -->
+                <div class="form-group">
+                    <label for="textDescription">Animal Description</label>
+                    <textarea id="textDescription" 
+                              placeholder="e.g., a small spiky hedgehog with brown fur">
+                    </textarea>
+                    <small>Used by CLIP/ViT for accurate identification. Leave blank for auto-generated.</small>
+                </div>
+
+                <!-- Confidence Threshold -->
+                <div class="form-group">
+                    <label for="confidenceThreshold">
+                        Auto-Approval Confidence Threshold: <span id="thresholdValue">0.80</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" id="confidenceThreshold" min="0.5" max="0.99" step="0.01" 
+                               value="0.80" onchange="updateThresholdDisplay()">
+                        <span id="thresholdPercent">80%</span>
+                    </div>
+                    <small>Frames with confidence ≥ threshold will be auto-sorted</small>
+                </div>
+
+                <!-- Auto-Approval Toggle -->
+                <div class="form-group">
+                    <label class="toggle-switch">
+                        <span>Require manual confirmation for all matches</span>
+                        <label class="switch">
+                            <input type="checkbox" id="manualConfirmation">
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                    <small>When enabled, ALL frames go to review regardless of confidence</small>
+                </div>
+
+                <!-- Retraining Settings -->
+                <div class="form-group">
+                    <label for="retrainingThreshold">
+                        Retraining Accuracy Threshold: <span id="retrainingValue">0.85</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" id="retrainingThreshold" min="0.5" max="0.99" step="0.01" 
+                               value="0.85" onchange="updateRetrainingDisplay()">
+                        <span id="retrainingPercent">85%</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmationCountRecommendation">
+                        Confirmations before retraining recommendation
+                    </label>
+                    <input type="number" id="confirmationCountRecommendation" min="10" max="500" 
+                           value="50" step="10">
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Save Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const YOLO_CATEGORIES = [
+            { name: 'person', description: 'Human' },
+            { name: 'dog', description: 'Canine animal' },
+            { name: 'cat', description: 'Feline animal' },
+            { name: 'bird', description: 'Flying animal with feathers' },
+            { name: 'sheep', description: 'Woolly livestock' },
+            { name: 'cow', description: 'Large bovine animal' },
+            { name: 'horse', description: 'Large equine animal' },
+            { name: 'bear', description: 'Large carnivorous mammal' },
+            { name: 'deer', description: 'Hoofed grazing animal' },
+            { name: 'fox', description: 'Canine predator' },
+            { name: 'rabbit', description: 'Small hopping mammal' },
+        ];
+
+        let currentProfileId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeYoloCategories();
+            loadProfiles();
+        });
+
+        function initializeYoloCategories() {
+            const container = document.getElementById('yoloCategories');
+            container.innerHTML = YOLO_CATEGORIES.map(cat => `
+                <div class="checkbox-item">
+                    <input type="checkbox" id="cat-${cat.name}" value="${cat.name}" name="yoloCategories">
+                    <label class="checkbox-label" for="cat-${cat.name}">
+                        <strong>${cat.name}</strong>
+                        <small>${cat.description}</small>
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+
+            // Load stats if needed
+            if (tabId === 'stats-tab') {
+                loadStatistics();
+            }
+        }
+
+        function openCreateModal() {
+            currentProfileId = null;
+            document.getElementById('modalTitle').textContent = 'Create Animal Profile';
+            document.getElementById('profileForm').reset();
+            document.getElementById('profileModal').classList.add('active');
+        }
+
+        function openEditModal(profileId) {
+            currentProfileId = profileId;
+            document.getElementById('modalTitle').textContent = 'Edit Animal Profile';
+
+            // Load profile data
+            fetch(`/api/animal-profiles/${profileId}`)
+                .then(r => r.json())
+                .then(data => {
+                    const profile = data.profile;
+                    document.getElementById('profileName').value = profile.name;
+                    document.getElementById('textDescription').value = profile.text_description;
+                    document.getElementById('confidenceThreshold').value = profile.confidence_threshold;
+                    document.getElementById('retrainingThreshold').value = profile.retraining_threshold;
+                    document.getElementById('confirmationCountRecommendation').value = 
+                        profile.confirmation_count_recommendation;
+                    document.getElementById('manualConfirmation').checked = !profile.auto_approval_enabled;
+
+                    // Set YOLO categories
+                    document.querySelectorAll('input[name="yoloCategories"]').forEach(cb => {
+                        cb.checked = profile.yolo_categories.includes(cb.value);
+                    });
+
+                    updateThresholdDisplay();
+                    updateRetrainingDisplay();
+                    document.getElementById('profileModal').classList.add('active');
+                })
+                .catch(err => showAlert('Error loading profile: ' + err, 'error'));
+        }
+
+        function closeModal() {
+            document.getElementById('profileModal').classList.remove('active');
+            currentProfileId = null;
+        }
+
+        function updateThresholdDisplay() {
+            const value = parseFloat(document.getElementById('confidenceThreshold').value);
+            document.getElementById('thresholdValue').textContent = value.toFixed(2);
+            document.getElementById('thresholdPercent').textContent = (value * 100).toFixed(0) + '%';
+        }
+
+        function updateRetrainingDisplay() {
+            const value = parseFloat(document.getElementById('retrainingThreshold').value);
+            document.getElementById('retrainingValue').textContent = value.toFixed(2);
+            document.getElementById('retrainingPercent').textContent = (value * 100).toFixed(0) + '%';
+        }
+
+        function handleSaveProfile(event) {
+            event.preventDefault();
+
+            const selectedCategories = Array.from(document.querySelectorAll('input[name="yoloCategories"]:checked'))
+                .map(cb => cb.value);
+
+            if (selectedCategories.length === 0) {
+                showAlert('Please select at least one YOLO category', 'error');
+                return;
+            }
+
+            const profileData = {
+                name: document.getElementById('profileName').value,
+                yolo_categories: selectedCategories,
+                text_description: document.getElementById('textDescription').value,
+                confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
+                auto_approval_enabled: !document.getElementById('manualConfirmation').checked,
+                retraining_threshold: parseFloat(document.getElementById('retrainingThreshold').value),
+                confirmation_count_recommendation: parseInt(document.getElementById('confirmationCountRecommendation').value)
+            };
+
+            const url = currentProfileId 
+                ? `/api/animal-profiles/${currentProfileId}`
+                : '/api/animal-profiles';
+            
+            const method = currentProfileId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profileData)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        closeModal();
+                        loadProfiles();
+                    } else {
+                        showAlert('Error: ' + data.detail, 'error');
+                    }
+                })
+                .catch(err => showAlert('Error saving profile: ' + err, 'error'));
+        }
+
+        function loadProfiles() {
+            fetch('/api/animal-profiles')
+                .then(r => r.json())
+                .then(data => {
+                    const profiles = data.profiles || [];
+                    const container = document.getElementById('profilesList');
+
+                    if (profiles.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📋</div>
+                                <h3>No profiles yet</h3>
+                                <p>Create your first animal profile to get started.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    container.innerHTML = profiles.map(profile => `
+                        <div class="card profile-card">
+                            <div class="profile-info">
+                                <h3>${profile.name}</h3>
+                                <div class="profile-categories">
+                                    ${profile.yolo_categories.map(cat => 
+                                        `<span class="badge">${cat}</span>`
+                                    ).join('')}
+                                </div>
+                                <div class="profile-stats">
+                                    <div class="stat">
+                                        <div class="stat-value">${profile.accuracy_percentage.toFixed(0)}</div>
+                                        <div class="stat-label">Accuracy</div>
+                                    </div>
+                                    <div class="stat">
+                                        <div class="stat-value">${profile.confirmed_count + profile.rejected_count}</div>
+                                        <div class="stat-label">Feedback</div>
+                                    </div>
+                                    <div class="stat">
+                                        <div class="stat-value">${profile.confidence_threshold.toFixed(2)}</div>
+                                        <div class="stat-label">Threshold</div>
+                                    </div>
+                                </div>
+                                ${profile.should_recommend_retraining ? 
+                                    `<div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--warning-color);">
+                                        <strong>⚠️ Retraining Recommended</strong>
+                                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                            ${profile.retraining_message}
+                                        </p>
+                                    </div>` 
+                                    : ''}
+                            </div>
+                            <div class="profile-actions">
+                                <button class="btn btn-small" onclick="openEditModal('${profile.id}')">Edit</button>
+                                <button class="btn btn-small" onclick="toggleProfile('${profile.id}', ${!profile.enabled})">
+                                    ${profile.enabled ? 'Disable' : 'Enable'}
+                                </button>
+                                <button class="btn btn-small btn-danger" onclick="deleteProfile('${profile.id}')">Delete</button>
+                            </div>
+                        </div>
+                    `).join('');
+                })
+                .catch(err => showAlert('Error loading profiles: ' + err, 'error'));
+        }
+
+        function toggleProfile(profileId, enable) {
+            const endpoint = enable ? 'enable' : 'disable';
+            fetch(`/api/animal-profiles/${profileId}/${endpoint}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        loadProfiles();
+                    } else {
+                        showAlert('Error: ' + data.detail, 'error');
+                    }
+                })
+                .catch(err => showAlert('Error: ' + err, 'error'));
+        }
+
+        function deleteProfile(profileId) {
+            if (confirm('Are you sure you want to delete this profile? This cannot be undone.')) {
+                fetch(`/api/animal-profiles/${profileId}`, { method: 'DELETE' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showAlert(data.message, 'success');
+                            loadProfiles();
+                        } else {
+                            showAlert('Error: ' + data.detail, 'error');
+                        }
+                    })
+                    .catch(err => showAlert('Error: ' + err, 'error'));
+            }
+        }
+
+        function loadStatistics() {
+            fetch('/api/animal-profiles')
+                .then(r => r.json())
+                .then(data => {
+                    const profiles = data.profiles || [];
+                    const container = document.getElementById('statsList');
+
+                    if (profiles.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <p>No profiles to display statistics for</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    container.innerHTML = profiles.map(profile => `
+                        <div class="card">
+                            <h3>${profile.name}</h3>
+                            <div class="profile-stats">
+                                <div class="stat">
+                                    <div class="stat-value">${profile.accuracy_percentage.toFixed(1)}</div>
+                                    <div class="stat-label">Accuracy</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${profile.confirmed_count}</div>
+                                    <div class="stat-label">Confirmed</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${profile.rejected_count}</div>
+                                    <div class="stat-label">Rejected</div>
+                                </div>
+                            </div>
+                            <p><strong>Categories:</strong> ${profile.yolo_categories.join(', ')}</p>
+                            <p><strong>Status:</strong> ${profile.enabled ? '✅ Enabled' : '❌ Disabled'}</p>
+                        </div>
+                    `).join('');
+                })
+                .catch(err => showAlert('Error loading statistics: ' + err, 'error'));
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert active alert-${type}`;
+            setTimeout(() => alert.classList.remove('active'), 5000);
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('profileModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'profileModal') closeModal();
+        });
+    </script>
+</body>
+</html>
