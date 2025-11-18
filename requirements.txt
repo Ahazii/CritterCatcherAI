@@ -1,0 +1,36 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+sse-starlette==1.6.1
+
+# AI/ML Core
+transformers==4.35.2
+Pillow==10.1.0
+numpy==1.24.3
+opencv-python==4.8.1.78
+
+# YOLO Object Detection
+ultralytics==8.0.228
+
+# CLIP/ViT for Second-Stage Classification
+# Note: transformers includes CLIP model support
+# torch and torchvision installed separately in Dockerfile
+
+# Scheduler
+schedule==1.2.0
+APScheduler==3.10.4
+
+# Configuration
+pyyaml==6.0.1
+
+# Utilities
+requests==2.31.0
+python-dateutil==2.8.2
+
+# Logging and Monitoring
+python-json-logger==2.0.7
+
+# Development/Testing (optional, comment out for production)
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
