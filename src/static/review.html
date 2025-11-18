@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Images - CritterCatcherAI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --danger-color: #f56565;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --accent-color: #63b3ed;
+            --accent-hover: #4299e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-title {
+            color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        /* Tabs */
+        .profile-tabs {
+            display: flex;
+            gap: 1rem;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 2rem;
+            overflow-x: auto;
+        }
+
+        .profile-tab {
+            background: none;
+            border: none;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .profile-tab.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Controls */
+        .controls {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #e53e3e;
+        }
+
+        .selection-info {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .selection-info strong {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        /* Gallery */
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .image-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+        }
+
+        .image-item:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .image-item.selected {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0);
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding: 0.75rem;
+            transition: background 0.3s ease;
+        }
+
+        .image-item:hover .image-overlay {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .image-confidence {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text-primary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .image-checkbox {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .image-item:hover .image-checkbox,
+        .image-item.selected .image-checkbox {
+            opacity: 1;
+        }
+
+        .image-checkbox-custom {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 24px;
+            height: 24px;
+            border: 2px solid white;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+
+        .image-item.selected .image-checkbox-custom {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        .image-item.selected .image-checkbox-custom::after {
+            content: "✓";
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-top: 0.5rem;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert.active {
+            display: block;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 1px solid #90cdf4;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Dragging */
+        .drag-selecting .image-item {
+            user-select: none;
+        }
+
+        .image-item.drag-over {
+            background: var(--accent-color);
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="logo">
+                <span class="logo-title">🦡 CritterCatcherAI</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Profile Tabs -->
+        <div id="profileTabs" class="profile-tabs"></div>
+
+        <!-- Alerts -->
+        <div id="alert" class="alert"></div>
+
+        <!-- Stats -->
+        <div id="stats" class="stats"></div>
+
+        <!-- Controls -->
+        <div id="controls" class="controls" style="display: none;">
+            <div class="selection-info">
+                <strong id="selectionCount">0</strong> of <strong id="totalCount">0</strong> selected
+            </div>
+            <div class="control-group">
+                <button class="btn" onclick="selectAll()">Select All</button>
+                <button class="btn" onclick="deselectAll()">Deselect All</button>
+                <button class="btn btn-success" onclick="confirmSelected()" id="confirmBtn" disabled>
+                    ✓ Confirm Selected
+                </button>
+                <button class="btn btn-danger" onclick="rejectSelected()" id="rejectBtn" disabled>
+                    ✗ Reject Selected
+                </button>
+            </div>
+        </div>
+
+        <!-- Gallery Tabs -->
+        <div id="galleryContainer"></div>
+    </div>
+
+    <script>
+        let currentProfile = null;
+        let selectedFrames = new Set();
+        let dragStart = null;
+        let allFrames = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProfiles();
+            setupDragSelection();
+        });
+
+        function setupDragSelection() {
+            document.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.image-item')) {
+                    dragStart = e.target.closest('.image-item');
+                    document.body.classList.add('drag-selecting');
+                }
+            });
+
+            document.addEventListener('mouseover', (e) => {
+                if (!dragStart) return;
+                const item = e.target.closest('.image-item');
+                if (item) {
+                    item.classList.add('drag-over');
+                }
+            });
+
+            document.addEventListener('mouseout', (e) => {
+                if (!dragStart) return;
+                const item = e.target.closest('.image-item');
+                if (item) {
+                    item.classList.remove('drag-over');
+                }
+            });
+
+            document.addEventListener('mouseup', (e) => {
+                if (!dragStart) return;
+                document.querySelectorAll('.drag-over').forEach(item => {
+                    item.classList.remove('drag-over');
+                    toggleFrameSelection(item.dataset.frameId);
+                });
+                document.body.classList.remove('drag-selecting');
+                dragStart = null;
+            });
+        }
+
+        function loadProfiles() {
+            fetch('/api/animal-profiles')
+                .then(r => r.json())
+                .then(data => {
+                    const profiles = data.profiles || [];
+                    const tabsContainer = document.getElementById('profileTabs');
+
+                    if (profiles.length === 0) {
+                        tabsContainer.innerHTML = '<p style="color: var(--text-secondary);">No profiles created yet</p>';
+                        document.getElementById('galleryContainer').innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📋</div>
+                                <h3>No profiles</h3>
+                                <p>Create an animal profile to start reviewing images</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    tabsContainer.innerHTML = profiles.map((p, idx) => `
+                        <button class="profile-tab ${idx === 0 ? 'active' : ''}" 
+                                onclick="switchProfile('${p.id}', this)">
+                            ${p.name} <span style="font-size: 0.875rem;">(${p.pending_count || 0})</span>
+                        </button>
+                    `).join('');
+
+                    // Load first profile
+                    currentProfile = profiles[0];
+                    loadReviewFrames(profiles[0].id);
+                })
+                .catch(err => showAlert('Error loading profiles: ' + err, 'error'));
+        }
+
+        function switchProfile(profileId, button) {
+            // Update active tab
+            document.querySelectorAll('.profile-tab').forEach(b => b.classList.remove('active'));
+            button.classList.add('active');
+
+            // Load profile
+            fetch(`/api/animal-profiles/${profileId}`)
+                .then(r => r.json())
+                .then(data => {
+                    currentProfile = data.profile;
+                    selectedFrames.clear();
+                    updateControlsVisibility();
+                    loadReviewFrames(profileId);
+                })
+                .catch(err => showAlert('Error loading profile: ' + err, 'error'));
+        }
+
+        function loadReviewFrames(profileId) {
+            // Get pending frames list
+            fetch(`/api/animal-profiles/${profileId}/pending-reviews`)
+                .then(r => {
+                    if (r.status === 404) {
+                        throw new Error('Profile not found');
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    const frames = data.frames || [];
+                    allFrames = frames;
+                    selectedFrames.clear();
+                    updateControlsVisibility();
+                    renderGallery(frames, profileId);
+                    updateStats(data.stats || {});
+                })
+                .catch(err => {
+                    // Endpoint might not exist yet, show placeholder
+                    renderGallery([], profileId);
+                    showAlert('Review endpoint not yet implemented', 'info');
+                });
+        }
+
+        function renderGallery(frames, profileId) {
+            const container = document.getElementById('galleryContainer');
+
+            if (frames.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
+                        <h3>All caught up!</h3>
+                        <p>No frames pending review for this animal</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="gallery">
+                    ${frames.map(frame => `
+                        <div class="image-item" 
+                             data-frame-id="${frame.filename}"
+                             onclick="toggleFrameSelection(this, event)">
+                            <img src="/api/animal-profiles/${profileId}/frame/${frame.filename}" 
+                                 alt="${frame.filename}"
+                                 loading="lazy"
+                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22%3E%3Crect fill=%22%23e0e0e0%22 width=%22180%22 height=%22180%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-family=%22sans-serif%22 font-size=%2214%22 fill=%22%23999%22%3EImage Not Found%3C/text%3E%3C/svg%3E'">
+                            <div class="image-checkbox-custom"></div>
+                            <div class="image-overlay">
+                                <span class="image-confidence">${(frame.confidence * 100).toFixed(0)}%</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function toggleFrameSelection(frameIdOrElement, event) {
+            let frameId;
+            if (typeof frameIdOrElement === 'string') {
+                frameId = frameIdOrElement;
+            } else {
+                frameId = frameIdOrElement.dataset.frameId;
+            }
+
+            const item = document.querySelector(`[data-frame-id="${frameId}"]`);
+
+            // Handle Ctrl+Click for multiple selection
+            if (event && event.ctrlKey) {
+                if (selectedFrames.has(frameId)) {
+                    selectedFrames.delete(frameId);
+                    item.classList.remove('selected');
+                } else {
+                    selectedFrames.add(frameId);
+                    item.classList.add('selected');
+                }
+            } else if (event && event.shiftKey && allFrames.length > 0) {
+                // Range selection
+                const items = Array.from(document.querySelectorAll('.image-item'));
+                const currentIdx = items.findIndex(el => el.dataset.frameId === frameId);
+                const lastSelected = Array.from(selectedFrames)[selectedFrames.size - 1];
+                const lastIdx = items.findIndex(el => el.dataset.frameId === lastSelected);
+
+                const start = Math.min(currentIdx, lastIdx);
+                const end = Math.max(currentIdx, lastIdx);
+
+                for (let i = start; i <= end; i++) {
+                    selectedFrames.add(items[i].dataset.frameId);
+                    items[i].classList.add('selected');
+                }
+            } else {
+                // Single selection - toggle
+                if (selectedFrames.has(frameId)) {
+                    selectedFrames.delete(frameId);
+                    item.classList.remove('selected');
+                } else {
+                    selectedFrames.add(frameId);
+                    item.classList.add('selected');
+                }
+            }
+
+            updateControlsVisibility();
+        }
+
+        function selectAll() {
+            document.querySelectorAll('.image-item').forEach(item => {
+                selectedFrames.add(item.dataset.frameId);
+                item.classList.add('selected');
+            });
+            updateControlsVisibility();
+        }
+
+        function deselectAll() {
+            selectedFrames.clear();
+            document.querySelectorAll('.image-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            updateControlsVisibility();
+        }
+
+        function updateControlsVisibility() {
+            const hasSelection = selectedFrames.size > 0;
+            document.getElementById('controls').style.display = hasSelection ? 'flex' : 'none';
+            document.getElementById('selectionCount').textContent = selectedFrames.size;
+            document.getElementById('totalCount').textContent = allFrames.length;
+            document.getElementById('confirmBtn').disabled = !hasSelection;
+            document.getElementById('rejectBtn').disabled = !hasSelection;
+        }
+
+        function confirmSelected() {
+            if (!currentProfile || selectedFrames.size === 0) return;
+
+            const frameList = Array.from(selectedFrames);
+            fetch(`/api/animal-profiles/${currentProfile.id}/confirm-images`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame_filenames: frameList })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(`✓ Confirmed ${data.confirmed_count || frameList.length} images. Accuracy: ${data.accuracy_percentage?.toFixed(1)}%`, 'success');
+                        deselectAll();
+                        loadReviewFrames(currentProfile.id);
+                    } else {
+                        showAlert('Error: ' + (data.detail || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(err => showAlert('Error confirming images: ' + err, 'error'));
+        }
+
+        function rejectSelected() {
+            if (!currentProfile || selectedFrames.size === 0) return;
+
+            const frameList = Array.from(selectedFrames);
+            fetch(`/api/animal-profiles/${currentProfile.id}/reject-images`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame_filenames: frameList })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(`✗ Rejected ${data.rejected_count || frameList.length} images. Accuracy: ${data.accuracy_percentage?.toFixed(1)}%`, 'success');
+                        deselectAll();
+                        loadReviewFrames(currentProfile.id);
+                    } else {
+                        showAlert('Error: ' + (data.detail || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(err => showAlert('Error rejecting images: ' + err, 'error'));
+        }
+
+        function updateStats(stats) {
+            const statsContainer = document.getElementById('stats');
+            if (!stats || Object.keys(stats).length === 0) {
+                statsContainer.innerHTML = '';
+                return;
+            }
+
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.pending_count || 0}</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${(stats.accuracy_percentage || 0).toFixed(0)}%</div>
+                    <div class="stat-label">Accuracy</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.confirmed_count || 0}</div>
+                    <div class="stat-label">Confirmed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.rejected_count || 0}</div>
+                    <div class="stat-label">Rejected</div>
+                </div>
+            `;
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert active alert-${type}`;
+            setTimeout(() => alert.classList.remove('active'), 5000);
+        }
+    </script>
+</body>
+</html>
