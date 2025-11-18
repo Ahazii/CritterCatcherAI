@@ -22,6 +22,7 @@ import numpy as np
 
 from taxonomy_tree import TaxonomyTree, TaxonomyNode
 from object_detector import YOLO_COCO_CLASSES
+from animal_profile import AnimalProfile, AnimalProfileManager
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +115,14 @@ taxonomy_tree: Optional[TaxonomyTree] = None
 # Global training manager (shared instance to track training status)
 training_manager = None
 
+# Global animal profile manager
+animal_profile_manager: Optional[AnimalProfileManager] = None
+
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize taxonomy tree and training manager on startup."""
-    global taxonomy_tree, training_manager
+    global taxonomy_tree, training_manager, animal_profile_manager
     
     try:
         # Load or create taxonomy tree
@@ -139,6 +143,13 @@ async def startup_event():
         logger.info("Training manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize training manager: {e}")
+    
+    # Initialize animal profile manager
+    try:
+        animal_profile_manager = AnimalProfileManager(Path("/data"))
+        logger.info("Animal profile manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize animal profile manager: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -2738,6 +2749,378 @@ async def upload_node_training_data(
         raise
     except Exception as e:
         logger.error(f"Failed to upload training data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= Animal Profile API Endpoints =============
+
+@app.post("/api/animal-profiles")
+async def create_animal_profile(request: dict):
+    """Create new animal profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        name = request.get('name', '').strip()
+        yolo_categories = request.get('yolo_categories', [])
+        text_description = request.get('text_description', '')
+        confidence_threshold = request.get('confidence_threshold', 0.80)
+        auto_approval_enabled = request.get('auto_approval_enabled', True)
+        retraining_threshold = request.get('retraining_threshold', 0.85)
+        confirmation_count_recommendation = request.get('confirmation_count_recommendation', 50)
+        
+        if not name:
+            raise HTTPException(status_code=400, detail="Animal name is required")
+        if not yolo_categories:
+            raise HTTPException(status_code=400, detail="At least one YOLO category is required")
+        
+        # Create profile
+        profile = animal_profile_manager.create_profile(
+            name=name,
+            yolo_categories=yolo_categories,
+            text_description=text_description if text_description else None
+        )
+        
+        # Set optional parameters
+        profile = animal_profile_manager.update_profile(
+            profile.id,
+            confidence_threshold=confidence_threshold,
+            auto_approval_enabled=auto_approval_enabled,
+            retraining_threshold=retraining_threshold,
+            confirmation_count_recommendation=confirmation_count_recommendation
+        )
+        
+        # Create data directories
+        profile_id = profile.id
+        base_path = Path("/data")
+        dirs_to_create = [
+            base_path / "sorted" / profile_id,
+            base_path / "review" / profile_id,
+            base_path / "training" / profile_id / "confirmed",
+            base_path / "training" / profile_id / "rejected",
+            base_path / "models" / profile_id
+        ]
+        
+        for dir_path in dirs_to_create:
+            dir_path.mkdir(parents=True, exist_ok=True)
+            # Set permissions (rule: folders created by AI should have full permissions)
+            try:
+                import stat
+                dir_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
+            except Exception as e:
+                logger.warning(f"Could not set permissions on {dir_path}: {e}")
+        
+        logger.info(f"Created animal profile: {name} with categories {yolo_categories}")
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "yolo_categories": profile.yolo_categories,
+                "text_description": profile.text_description,
+                "confidence_threshold": profile.confidence_threshold,
+                "auto_approval_enabled": profile.auto_approval_enabled,
+                "enabled": profile.enabled,
+                "accuracy_percentage": profile.accuracy_percentage,
+                "retraining_threshold": profile.retraining_threshold,
+                "confirmation_count_recommendation": profile.confirmation_count_recommendation
+            },
+            "message": f"Created profile '{name}'"
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to create animal profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/animal-profiles")
+async def list_animal_profiles():
+    """List all animal profiles."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profiles = animal_profile_manager.list_profiles()
+        
+        return {
+            "status": "success",
+            "profiles": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "yolo_categories": p.yolo_categories,
+                    "text_description": p.text_description,
+                    "confidence_threshold": p.confidence_threshold,
+                    "auto_approval_enabled": p.auto_approval_enabled,
+                    "enabled": p.enabled,
+                    "confirmed_count": p.confirmed_count,
+                    "rejected_count": p.rejected_count,
+                    "accuracy_percentage": p.accuracy_percentage,
+                    "retraining_threshold": p.retraining_threshold,
+                    "confirmation_count_recommendation": p.confirmation_count_recommendation,
+                    "should_recommend_retraining": p.should_recommend_retraining[0],
+                    "retraining_message": p.should_recommend_retraining[1]
+                }
+                for p in profiles
+            ],
+            "count": len(profiles)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list animal profiles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/animal-profiles/{profile_id}")
+async def get_animal_profile(profile_id: str):
+    """Get specific animal profile details."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "yolo_categories": profile.yolo_categories,
+                "text_description": profile.text_description,
+                "confidence_threshold": profile.confidence_threshold,
+                "auto_approval_enabled": profile.auto_approval_enabled,
+                "enabled": profile.enabled,
+                "confirmed_count": profile.confirmed_count,
+                "rejected_count": profile.rejected_count,
+                "accuracy_percentage": profile.accuracy_percentage,
+                "retraining_threshold": profile.retraining_threshold,
+                "confirmation_count_recommendation": profile.confirmation_count_recommendation,
+                "should_recommend_retraining": profile.should_recommend_retraining[0],
+                "retraining_message": profile.should_recommend_retraining[1]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get animal profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/animal-profiles/{profile_id}")
+async def update_animal_profile(profile_id: str, request: dict):
+    """Update animal profile settings."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Prepare update data
+        update_data = {}
+        if 'name' in request:
+            update_data['name'] = request['name']
+        if 'yolo_categories' in request:
+            update_data['yolo_categories'] = request['yolo_categories']
+        if 'text_description' in request:
+            update_data['text_description'] = request['text_description']
+        if 'confidence_threshold' in request:
+            update_data['confidence_threshold'] = float(request['confidence_threshold'])
+        if 'auto_approval_enabled' in request:
+            update_data['auto_approval_enabled'] = bool(request['auto_approval_enabled'])
+        if 'retraining_threshold' in request:
+            update_data['retraining_threshold'] = float(request['retraining_threshold'])
+        if 'confirmation_count_recommendation' in request:
+            update_data['confirmation_count_recommendation'] = int(request['confirmation_count_recommendation'])
+        
+        profile = animal_profile_manager.update_profile(profile_id, **update_data)
+        
+        logger.info(f"Updated animal profile: {profile.name}")
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "yolo_categories": profile.yolo_categories,
+                "text_description": profile.text_description,
+                "confidence_threshold": profile.confidence_threshold,
+                "auto_approval_enabled": profile.auto_approval_enabled,
+                "enabled": profile.enabled,
+                "accuracy_percentage": profile.accuracy_percentage,
+                "retraining_threshold": profile.retraining_threshold,
+                "confirmation_count_recommendation": profile.confirmation_count_recommendation
+            },
+            "message": f"Updated profile '{profile.name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update animal profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/animal-profiles/{profile_id}")
+async def delete_animal_profile(profile_id: str):
+    """Delete animal profile and all associated data."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        profile_name = profile.name
+        
+        # Delete profile from storage
+        animal_profile_manager.delete_profile(profile_id)
+        
+        # Optionally clean up associated directories
+        # Note: We don't delete them by default to preserve review/training data
+        logger.info(f"Deleted animal profile: {profile_name}")
+        
+        return {
+            "status": "success",
+            "message": f"Deleted profile '{profile_name}'. Associated data directories remain for manual cleanup if needed."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete animal profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/enable")
+async def enable_animal_profile(profile_id: str):
+    """Enable an animal profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.update_profile(profile_id, enabled=True)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        logger.info(f"Enabled animal profile: {profile.name}")
+        
+        return {
+            "status": "success",
+            "message": f"Enabled profile '{profile.name}'",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "enabled": profile.enabled
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enable animal profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/disable")
+async def disable_animal_profile(profile_id: str):
+    """Disable an animal profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.update_profile(profile_id, enabled=False)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        logger.info(f"Disabled animal profile: {profile.name}")
+        
+        return {
+            "status": "success",
+            "message": f"Disabled profile '{profile.name}'",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "enabled": profile.enabled
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to disable animal profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/animal-profiles/{profile_id}/model-stats")
+async def get_model_stats(profile_id: str):
+    """Get model accuracy statistics and retraining recommendations."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        should_retrain, retrain_message = profile.should_recommend_retraining
+        
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "profile_name": profile.name,
+            "accuracy_percentage": profile.accuracy_percentage,
+            "confirmed_count": profile.confirmed_count,
+            "rejected_count": profile.rejected_count,
+            "total_feedback": profile.confirmed_count + profile.rejected_count,
+            "accuracy_threshold": profile.retraining_threshold * 100,
+            "confirmation_count_recommendation": profile.confirmation_count_recommendation,
+            "should_recommend_retraining": should_retrain,
+            "retraining_message": retrain_message
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get model stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/update-accuracy")
+async def update_profile_accuracy(profile_id: str, request: dict):
+    """Update model accuracy counters."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        confirmed = int(request.get('confirmed', 0))
+        rejected = int(request.get('rejected', 0))
+        
+        animal_profile_manager.update_accuracy(profile_id, confirmed, rejected)
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        logger.info(f"Updated accuracy for {profile.name}: {confirmed} confirmed, {rejected} rejected")
+        
+        should_retrain, retrain_message = profile.should_recommend_retraining
+        
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "accuracy_percentage": profile.accuracy_percentage,
+            "confirmed_count": profile.confirmed_count,
+            "rejected_count": profile.rejected_count,
+            "should_recommend_retraining": should_retrain,
+            "retraining_message": retrain_message,
+            "message": f"Updated accuracy for '{profile.name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update profile accuracy: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
