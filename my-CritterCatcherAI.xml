@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>CritterCatcherAI</Name>
-  <Repository>ghcr.io/ahazii/crittercatcherai:latest</Repository>
-  <Registry>https://ghcr.io/</Registry>
+  <Repository>crittercatcher:latest</Repository>
+  <Registry/>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
   <Support>https://github.com/Ahazii/CritterCatcherAI</Support>
   <Project>https://github.com/Ahazii/CritterCatcherAI</Project>
-  <Overview>CritterCatcherAI automatically downloads Ring doorbell videos, analyzes them with YOLOv8 AI (object detection and face recognition), and organizes them into categorized folders. Detect birds, cats, dogs, people, vehicles, and 75+ other COCO objects automatically. Identify specific people with face recognition.</Overview>
+  <Overview>CritterCatcherAI v2.0 - Advanced animal detection system using two-stage pipeline (YOLO + CLIP/ViT). Download Ring videos, detect animals, review with multi-select UI, provide feedback to improve accuracy, and retrain models. Supports Hedgehogs, Birds, and 80+ COCO object categories.</Overview>
   <Category>MediaApp:Video Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/my-CritterCatcherAI.xml</TemplateURL>
@@ -17,28 +17,14 @@
   <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
   <CPUset/>
-  <DateInstalled></DateInstalled>
+  <DateInstalled>1761733662</DateInstalled>
   <DonateText/>
   <DonateLink/>
   <Requires/>
-  <Config Name="Ring Username" Target="RING_USERNAME" Default="" Mode="" Description="Your Ring account email address" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="Ring Password" Target="RING_PASSWORD" Default="" Mode="" Description="Your Ring account password" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, ERROR" Type="Variable" Display="always" Required="false" Mask="false">INFO</Config>
-  <Config Name="Run Once" Target="RUN_ONCE" Default="false" Mode="" Description="Set to 'true' to run once and exit, 'false' for continuous operation" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
-  <Config Name="Timezone" Target="TZ" Default="Europe/London" Mode="" Description="Container timezone (e.g., Europe/London, America/New_York)" Type="Variable" Display="always" Required="false" Mask="false">Europe/London</Config>
-  <Config Name="Web Interface Port" Target="8080" Default="8080" Mode="tcp" Description="Web GUI port (change if 8080 conflicts). Container always uses 8080 internally." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="Config Path" Target="/app/config" Default="/mnt/user/appdata/crittercatcher/config" Mode="rw" Description="Configuration files directory (read-write for web UI updates)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/config</Config>
-  <Config Name="Downloads Path" Target="/data/downloads" Default="/mnt/user/appdata/crittercatcher/downloads" Mode="rw" Description="Temporary storage for downloaded Ring videos" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/downloads</Config>
-  <Config Name="Sorted Videos Path" Target="/data/sorted" Default="/mnt/user/Videos/CritterCatcher/sorted" Mode="rw" Description="Final destination for organized videos by category" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Videos/CritterCatcher/sorted</Config>
-  <Config Name="Face Database Path" Target="/data/faces" Default="/mnt/user/appdata/crittercatcher/faces" Mode="rw" Description="Face encodings database, training images, and unknown faces" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/faces</Config>
-  <Config Name="Objects Detection Path" Target="/data/objects" Default="/mnt/user/appdata/crittercatcher/objects" Mode="rw" Description="Detected objects, discoveries, and detection images for Review &amp; Label feature" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/objects</Config>
-  <Config Name="Token Storage Path" Target="/data/tokens" Default="/mnt/user/appdata/crittercatcher/tokens" Mode="rw" Description="Ring API authentication token storage directory" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/tokens</Config>
-  <Config Name="Training Data Path" Target="/data/training_data" Default="/mnt/user/appdata/crittercatcher/training_data" Mode="rw" Description="Training images for specialized species classifiers (hierarchical taxonomy)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/training_data</Config>
-  <Config Name="Models Path" Target="/data/models" Default="/mnt/user/appdata/crittercatcher/models" Mode="rw" Description="Trained species classifier models for specialized detection" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher/models</Config>
-  <Config Name="Download Hours" Target="DOWNLOAD_HOURS" Default="24" Mode="" Description="How many hours back to download Ring videos" Type="Variable" Display="advanced" Required="false" Mask="false">24</Config>
-  <Config Name="Check Interval (minutes)" Target="INTERVAL_MINUTES" Default="60" Mode="" Description="Minutes between processing runs (continuous mode only)" Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
-  <Config Name="Confidence Threshold" Target="CONFIDENCE_THRESHOLD" Default="0.35" Mode="" Description="YOLOv8 detection confidence (0.0-1.0, lower=more detections). Recommended: 0.25-0.5" Type="Variable" Display="advanced" Required="false" Mask="false">0.35</Config>
-  <Config Name="Face Tolerance" Target="FACE_TOLERANCE" Default="0.6" Mode="" Description="Face recognition tolerance (0.0-1.0, lower=stricter matching)" Type="Variable" Display="advanced" Required="false" Mask="false">0.6</Config>
-  <Config Name="Detection Priority" Target="DETECTION_PRIORITY" Default="people" Mode="" Description="Sorting priority: 'people' or 'objects'" Type="Variable" Display="advanced" Required="false" Mask="false">people</Config>
-  <Config Name="GPU Support Info" Target="" Default="" Mode="" Description="YOLOv8 works on CPU. For NVIDIA GPU (faster): Install Nvidia-Driver plugin, add environment variable NVIDIA_VISIBLE_DEVICES=all" Type="Label" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Web Interface Port" Target="8080" Default="8080" Mode="tcp" Description="Web GUI port - Animal Profiles, Review Images, Model Management" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/crittercatcher" Mode="rw" Description="Main data directory - stores profiles, review frames, training data" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher</Config>
+  <Config Name="Config Path" Target="/app/config" Default="/mnt/user/appdata/crittercatcher/config" Mode="rw" Description="Configuration files directory" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/crittercatcher/config</Config>
+  <Config Name="Performance" Target="" Default="" Mode="" Description="Expected Performance: CPU (4-core): 3-5 frames/sec. With GPU: 15-20 frames/sec" Type="Label" Display="always" Required="false" Mask="false"/>
+  <TailscaleStateDir/>
 </Container>
