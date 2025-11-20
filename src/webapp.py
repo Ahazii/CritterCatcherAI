@@ -1052,6 +1052,8 @@ async def get_detected_objects():
                     if metadata_file.exists():
                         with open(metadata_file, 'r') as f:
                             metadata = json.load(f)
+                            # Override metadata label with directory name for consistent grouping
+                            metadata['label'] = label_dir.name
                             metadata['path'] = f"{label_dir.name}/{img_file.name}"
                             label_objects.append(metadata)
                 

@@ -689,7 +689,6 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.95);
-            backdrop-filter: blur(5px);
             animation: fadeIn 0.2s ease;
         }
         
@@ -707,14 +706,30 @@
             flex-direction: column;
             align-items: center;
             padding-bottom: 2rem;
+            overflow: hidden;
+        }
+        
+        .zoom-modal-img-container {
+            position: relative;
+            overflow: auto;
+            max-width: 90vw;
+            max-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+        }
+        
+        .zoom-modal-img-container:active {
+            cursor: grabbing;
         }
         
         .zoom-modal img {
-            max-width: 100%;
-            max-height: 70vh;
-            object-fit: contain;
+            display: block;
             border-radius: 8px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            transition: transform 0.1s ease;
+            transform-origin: 0 0;
         }
         
         .zoom-modal-info {
@@ -1385,7 +1400,9 @@
     <div id="zoomModal" class="zoom-modal" onclick="closeZoomModal(event)">
         <span class="zoom-modal-close" onclick="closeZoomModal(event)">&times;</span>
         <div class="zoom-modal-content" onclick="event.stopPropagation()">
-            <img id="zoomModalImage" src="" alt="Zoomed view">
+            <div class="zoom-modal-img-container" id="zoomModalImgContainer">
+                <img id="zoomModalImage" src="" alt="Zoomed view">
+            </div>
             <div id="zoomModalInfo" class="zoom-modal-info"></div>
             <div id="zoomModalActions" class="zoom-modal-actions" style="display: none;">
                 <button class="btn btn-success" onclick="confirmFromZoom(event)" style="padding: 0.75rem 1.5rem;">✓ Confirm</button>
@@ -2949,12 +2966,23 @@
             }
         }
         
-        // Image zoom modal functions
+        // Image zoom modal functions with zoom and pan support
+        let zoomScale = 1;
+        let isPanning = false;
+        let panStart = {x: 0, y: 0};
+        let panOffset = {x: 0, y: 0};
+        
         function openZoomModal(imageSrc, label, confidence, detectionId = null) {
             const modal = document.getElementById('zoomModal');
             const modalImg = document.getElementById('zoomModalImage');
+            const modalImgContainer = document.getElementById('zoomModalImgContainer');
             const modalInfo = document.getElementById('zoomModalInfo');
             const modalActions = document.getElementById('zoomModalActions');
+            
+            // Reset zoom and pan
+            zoomScale = 1;
+            panOffset = {x: 0, y: 0};
+            modalImg.style.transform = 'scale(1) translate(0px, 0px)';
             
             modal.classList.add('show');
             modalImg.src = imageSrc;
@@ -2965,7 +2993,7 @@
                 const conf = (confidence * 100).toFixed(1);
                 infoHTML += `<br><strong>Confidence:</strong> ${conf}%`;
             }
-            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Click anywhere to close | ESC to close</em>`;
+            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Scroll to zoom | Drag to pan | Click anywhere to close | ESC to close</em>`;
             
             modalInfo.innerHTML = infoHTML;
             
@@ -2980,16 +3008,84 @@
                 modalActions.style.display = 'none';
             }
             
+            // Enable zoom on mouse wheel
+            modalImgContainer.addEventListener('wheel', handleZoomWheel, {passive: false});
+            
+            // Enable pan on drag
+            modalImgContainer.addEventListener('mousedown', handlePanStart);
+            document.addEventListener('mousemove', handlePanMove);
+            document.addEventListener('mouseup', handlePanEnd);
+            
             // Enable ESC key to close
             document.addEventListener('keydown', handleZoomModalEscape);
+        }
+        
+        function handleZoomWheel(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const modalImg = document.getElementById('zoomModalImage');
+            const container = document.getElementById('zoomModalImgContainer');
+            
+            // Get mouse position relative to image
+            const rect = modalImg.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Calculate zoom delta
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.5, Math.min(5, zoomScale * delta));
+            
+            // Calculate new pan offset to keep mouse position stable
+            const scaleDiff = newScale / zoomScale;
+            panOffset.x = mouseX - (mouseX - panOffset.x) * scaleDiff;
+            panOffset.y = mouseY - (mouseY - panOffset.y) * scaleDiff;
+            
+            zoomScale = newScale;
+            
+            // Apply transform
+            modalImg.style.transform = `scale(${zoomScale}) translate(${panOffset.x / zoomScale}px, ${panOffset.y / zoomScale}px)`;
+        }
+        
+        function handlePanStart(e) {
+            if (zoomScale <= 1) return; // Only pan when zoomed in
+            e.preventDefault();
+            e.stopPropagation();
+            isPanning = true;
+            panStart = {x: e.clientX - panOffset.x, y: e.clientY - panOffset.y};
+        }
+        
+        function handlePanMove(e) {
+            if (!isPanning) return;
+            e.preventDefault();
+            const modalImg = document.getElementById('zoomModalImage');
+            panOffset.x = e.clientX - panStart.x;
+            panOffset.y = e.clientY - panStart.y;
+            modalImg.style.transform = `scale(${zoomScale}) translate(${panOffset.x / zoomScale}px, ${panOffset.y / zoomScale}px)`;
+        }
+        
+        function handlePanEnd(e) {
+            isPanning = false;
         }
         
         function closeZoomModal(event) {
             if (event) event.stopPropagation();
             const modal = document.getElementById('zoomModal');
+            const modalImgContainer = document.getElementById('zoomModalImgContainer');
+            
             modal.classList.remove('show');
             currentZoomDetectionId = null;
+            
+            // Cleanup event listeners
+            modalImgContainer.removeEventListener('wheel', handleZoomWheel);
+            modalImgContainer.removeEventListener('mousedown', handlePanStart);
+            document.removeEventListener('mousemove', handlePanMove);
+            document.removeEventListener('mouseup', handlePanEnd);
             document.removeEventListener('keydown', handleZoomModalEscape);
+            
+            // Reset zoom
+            zoomScale = 1;
+            isPanning = false;
         }
         
         async function confirmFromZoom(event) {
@@ -3003,23 +3099,16 @@
                     body: JSON.stringify({ detections: [currentZoomDetectionId] })
                 });
                 
-                const data = await response.json();
-                alert(data.message);
                 closeZoomModal();
                 loadDetectedObjects();
             } catch (error) {
                 console.error('Failed to confirm:', error);
-                alert('Failed to confirm detection');
             }
         }
         
         async function deleteFromZoom(event) {
             event.stopPropagation();
             if (!currentZoomDetectionId) return;
-            
-            if (!confirm('Delete this detection?\n\nThis is incorrectly identified and will be removed.')) {
-                return;
-            }
             
             try {
                 const [label, filename] = currentZoomDetectionId.split(':');
@@ -3035,15 +3124,13 @@
                 });
                 
                 if (response.ok) {
-                    alert('Detection deleted');
                     closeZoomModal();
                     loadDetectedObjects();
                 } else {
-                    alert('Failed to delete detection');
+                    // Keep error alert for failure cases
                 }
             } catch (error) {
                 console.error('Failed to delete:', error);
-                alert('Failed to delete detection');
             }
         }
         
@@ -3051,8 +3138,14 @@
         function openZoomModalDiscovery(imageSrc, label, confidence, detectionId) {
             const modal = document.getElementById('zoomModal');
             const modalImg = document.getElementById('zoomModalImage');
+            const modalImgContainer = document.getElementById('zoomModalImgContainer');
             const modalInfo = document.getElementById('zoomModalInfo');
             const modalActions = document.getElementById('zoomModalActions');
+            
+            // Reset zoom and pan
+            zoomScale = 1;
+            panOffset = {x: 0, y: 0};
+            modalImg.style.transform = 'scale(1) translate(0px, 0px)';
             
             modal.classList.add('show');
             modalImg.src = imageSrc;
@@ -3063,7 +3156,7 @@
                 const conf = (confidence * 100).toFixed(1);
                 infoHTML += `<br><strong>Confidence:</strong> ${conf}%`;
             }
-            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Click anywhere to close | ESC to close</em>`;
+            infoHTML += `<br><em style="font-size: 0.875rem; color: var(--text-secondary);">Scroll to zoom | Drag to pan | Click anywhere to close | ESC to close</em>`;
             
             modalInfo.innerHTML = infoHTML;
             
@@ -3074,6 +3167,14 @@
                 <button class="btn" onclick="blacklistFromZoom(event)" style="background: var(--danger-color); padding: 0.75rem 1.5rem;">✗ Blacklist</button>
             `;
             modalActions.style.display = 'flex';
+            
+            // Enable zoom on mouse wheel
+            modalImgContainer.addEventListener('wheel', handleZoomWheel, {passive: false});
+            
+            // Enable pan on drag
+            modalImgContainer.addEventListener('mousedown', handlePanStart);
+            document.addEventListener('mousemove', handlePanMove);
+            document.addEventListener('mouseup', handlePanEnd);
             
             document.addEventListener('keydown', handleZoomModalEscape);
         }
@@ -3094,17 +3195,13 @@
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Enable failed:', errorText);
-                    alert(`Failed to enable discovery: ${response.status} ${response.statusText}`);
                     return;
                 }
                 
-                const data = await response.json();
-                alert(data.message || 'Discovery enabled successfully');
                 closeZoomModal();
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to enable:', error);
-                alert('Failed to enable discovery: ' + error.message);
             }
         }
         
@@ -3168,8 +3265,6 @@
             
             const [label] = currentZoomDetectionId.split(':');
             
-            if (!confirm(`Blacklist "${label}"?\n\nThis object won't be suggested again.`)) return;
-            
             try {
                 const response = await fetch('/api/discoveries/ignore', {
                     method: 'POST',
@@ -3180,17 +3275,13 @@
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Blacklist failed:', errorText);
-                    alert(`Failed to blacklist discovery: ${response.status} ${response.statusText}`);
                     return;
                 }
                 
-                const data = await response.json();
-                alert(data.message || 'Discovery blacklisted successfully');
                 closeZoomModal();
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to blacklist:', error);
-                alert('Failed to blacklist discovery: ' + error.message);
             }
         }
         
@@ -3212,14 +3303,7 @@
         }
         
         async function confirmSelectedObjects() {
-            if (selectedObjects.size === 0) {
-                alert('Please select at least one object detection');
-                return;
-            }
-            
-            if (!confirm(`Confirm ${selectedObjects.size} detection(s) as correct?\n\nThese will be moved to confirmed folder and removed from review list.`)) {
-                return;
-            }
+            if (selectedObjects.size === 0) return;
             
             try {
                 const response = await fetch('/api/detected_objects/confirm', {
@@ -3228,26 +3312,15 @@
                     body: JSON.stringify({ detections: Array.from(selectedObjects) })
                 });
                 
-                const data = await response.json();
-                alert(data.message);
-                
                 selectedObjects.clear();
                 loadDetectedObjects();
             } catch (error) {
                 console.error('Failed to confirm objects:', error);
-                alert('Failed to confirm some objects');
             }
         }
         
         async function deleteSelectedObjects() {
-            if (selectedObjects.size === 0) {
-                alert('Please select at least one object detection');
-                return;
-            }
-            
-            if (!confirm(`Delete ${selectedObjects.size} detection(s)?\n\nThese are incorrectly identified and will be removed.`)) {
-                return;
-            }
+            if (selectedObjects.size === 0) return;
             
             try {
                 // Parse label:filename format and group by label
@@ -3259,10 +3332,9 @@
                 }
                 
                 // Delete each group
-                let deleted = 0;
                 for (const [label, filenames] of Object.entries(byLabel)) {
                     for (const filename of filenames) {
-                        const response = await fetch('/api/detected_objects/relabel', {
+                        await fetch('/api/detected_objects/relabel', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -3272,31 +3344,23 @@
                                 action: 'delete'
                             })
                         });
-                        if (response.ok) deleted++;
                     }
                 }
                 
-                alert(`Deleted ${deleted} detection(s)`);
                 selectedObjects.clear();
                 loadDetectedObjects();
                 
             } catch (error) {
                 console.error('Failed to delete objects:', error);
-                alert('Failed to delete some objects');
             }
         }
         
         async function relabelSelectedObjects() {
-            if (selectedObjects.size === 0) {
-                alert('Please select at least one object detection');
-                return;
-            }
+            if (selectedObjects.size === 0) return;
             
             const newLabel = prompt(`Relabel ${selectedObjects.size} detection(s)\n\nEnter the CORRECT label for these objects:`);
             
-            if (newLabel === null || newLabel.trim() === '') {
-                return; // Cancelled or empty
-            }
+            if (newLabel === null || newLabel.trim() === '') return;
             
             const correctedLabel = newLabel.trim().toLowerCase();
             
@@ -3309,10 +3373,9 @@
                     byLabel[label].push(filename);
                 }
                 
-                let relabeled = 0;
                 for (const [oldLabel, filenames] of Object.entries(byLabel)) {
                     for (const filename of filenames) {
-                        const response = await fetch('/api/detected_objects/relabel', {
+                        await fetch('/api/detected_objects/relabel', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -3322,17 +3385,14 @@
                                 action: 'relabel'
                             })
                         });
-                        if (response.ok) relabeled++;
                     }
                 }
                 
-                alert(`Relabeled ${relabeled} detection(s) to "${correctedLabel}"`);
                 selectedObjects.clear();
                 loadDetectedObjects();
                 
             } catch (error) {
                 console.error('Failed to relabel objects:', error);
-                alert('Failed to relabel some objects');
             }
         }
         
@@ -3358,18 +3418,14 @@
                     }
                     throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
                 }
-                const data = await response.json();
-                console.log('Response data:', data);
-                alert(data.message);
+                console.log('Enabled successfully');
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to track discovery:', error);
-                alert('Failed to track discovery: ' + error.message);
             }
         }
         
         async function blacklistSingleDiscovery(label) {
-            if (!confirm(`Blacklist "${label}"?\n\nThis object won't be suggested again.`)) return;
             try {
                 const response = await fetch('/api/discoveries/ignore', {
                     method: 'POST',
@@ -3380,12 +3436,9 @@
                     const errorData = await response.json();
                     throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
                 }
-                const data = await response.json();
-                alert(data.message);
                 loadDiscoveries();
             } catch (error) {
                 console.error('Failed to blacklist discovery:', error);
-                alert('Failed to blacklist discovery: ' + error.message);
             }
         }
         

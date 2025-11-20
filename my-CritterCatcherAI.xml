@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>CritterCatcherAI</Name>
-  <Repository>crittercatcher:latest</Repository>
-  <Registry/>
+  <Repository>ghcr.io/ahazii/crittercatcherai:latest</Repository>
+  <Registry>https://ghcr.io/</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
@@ -11,7 +11,7 @@
   <Project>https://github.com/Ahazii/CritterCatcherAI</Project>
   <Overview>CritterCatcherAI v2.0 - Advanced animal detection system using two-stage pipeline (YOLO + CLIP/ViT). Download Ring videos, detect animals, review with multi-select UI, provide feedback to improve accuracy, and retrain models. Supports Hedgehogs, Birds, and 80+ COCO object categories.</Overview>
   <Category>MediaApp:Video Tools:</Category>
-  <WebUI>http://[IP]:[PORT:8089]/</WebUI>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/my-CritterCatcherAI.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/icon.png</Icon>
   <ExtraParams>--restart=unless-stopped</ExtraParams>
