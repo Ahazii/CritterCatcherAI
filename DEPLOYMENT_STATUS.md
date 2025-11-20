@@ -1,0 +1,243 @@
+# CritterCatcherAI v2.0 - Deployment Status
+
+**Last Updated**: 2025-11-20
+
+## Overall Status: ✅ READY FOR TESTING ON UNRAID
+
+All critical backend and frontend components are implemented and ready for testing. Some backend API endpoints for Phase 8 are still pending but won't block UI testing.
+
+---
+
+## Completed Components
+
+### Backend (Python)
+✅ **Phase 1**: Animal Profile Management
+- `src/animal_profile.py` - Profile CRUD, accuracy tracking, retraining recommendations
+- 9 FastAPI endpoints implemented in `src/webapp.py`
+- Tests: `test_animal_profiles.py` (100% pass)
+
+✅ **Phase 2**: CLIP/ViT Classification
+- `src/clip_vit_classifier.py` - CLIP model integration, image scoring
+- `CLIPVitClassifier` class for single/batch scoring
+- `AnimalIdentifier` class for high-level identification
+- Tests: `test_clip_classifier.py` (requires PyTorch)
+
+✅ **Phase 3**: Processing Pipeline
+- `src/processing_pipeline.py` - Two-stage detection (YOLO + CLIP)
+- Frame extraction from videos
+- Directory organization (sorted/review/training)
+- Metadata preservation
+- Tests: `test_processing_pipeline.py` (100% pass)
+
+✅ **Phase 4**: Review & Feedback API
+- `src/review_feedback.py` - Frame confirmation/rejection
+- Bulk operations support
+- Accuracy tracking
+- Tests: `test_review_feedback.py` (100% pass)
+
+### Frontend (HTML/CSS/JavaScript)
+✅ **Phase 5**: Animal Profiles UI (`src/static/profiles.html`)
+- Create/edit/delete profiles
+- YOLO category selection (11 categories with descriptions)
+- Text description editor
+- Confidence threshold slider
+- Retraining settings
+- Profile list with statistics
+- Enable/disable profiles
+
+✅ **Phase 6**: Review Tab UI (`src/static/review.html`)
+- Image gallery with thumbnails
+- Multi-select: Single click, Ctrl+click, Shift+click, drag selection
+- Select All / Deselect All
+- Bulk confirm/reject
+- Real-time accuracy updates
+- Per-profile pending counts
+- Statistics cards
+
+### Dependencies
+✅ `requirements.txt` - All Python packages specified
+✅ `Dockerfile` - Docker build configured with all system dependencies
+✅ `docker-compose.yml` or volume setup ready
+
+---
+
+## What You Can Test Now on Unraid
+
+### API Testing
+```bash
+# Animal Profiles
+curl http://localhost:8080/api/animal-profiles              # List all
+curl http://localhost:8080/api/animal-profiles -X POST      # Create
+curl http://localhost:8080/api/animal-profiles/{id}         # Get one
+curl http://localhost:8080/api/animal-profiles/{id} -X PUT  # Update
+curl http://localhost:8080/api/animal-profiles/{id} -X DELETE # Delete
+curl http://localhost:8080/api/animal-profiles/{id}/enable  -X POST
+curl http://localhost:8080/api/animal-profiles/{id}/disable -X POST
+curl http://localhost:8080/api/animal-profiles/{id}/model-stats
+```
+
+### UI Testing
+- Visit `http://<unraid-ip>:8080/static/profiles.html` → Create/manage profiles
+- Visit `http://<unraid-ip>:8080/static/review.html` → Multi-select gallery UI
+- Create test profiles with different YOLO categories
+- Test threshold sliders and toggles
+- Test profile enable/disable
+
+### End-to-End Testing (Limited)
+- Create profiles via API ✅
+- View profiles in UI ✅
+- Confirm/reject frames via Python API ✅
+- Check accuracy updates ✅
+
+---
+
+## Not Yet Implemented (Phase 7-8)
+
+⏳ **Phase 7**: Model Management UI
+- Retraining trigger button
+- Model accuracy charts
+- History view
+
+⏳ **Phase 8**: Integration & API Endpoints
+- `GET /api/animal-profiles/{id}/pending-reviews` - List pending frames
+- `GET /api/animal-profiles/{id}/frame/{filename}` - Serve frame images
+- `POST /api/animal-profiles/{id}/confirm-images` - Confirm multiple
+- `POST /api/animal-profiles/{id}/reject-images` - Reject multiple
+- Integration tests
+- End-to-end pipeline testing
+
+⏳ **Phase 9**: Docker & Deployment
+- Docker optimization
+- Test in Unraid container
+- Performance tuning
+
+---
+
+## Docker Deployment Instructions
+
+### 1. Build Image
+```bash
+cd /path/to/CritterCatcherAI
+docker build -t crittercatcher:latest .
+```
+
+### 2. Run Container (Docker CLI)
+```bash
+docker run -d \
+  --name crittercatcher \
+  -p 8080:8080 \
+  -v /mnt/data:/data \
+  -e LOG_LEVEL=INFO \
+  crittercatcher:latest
+```
+
+### 3. Docker Compose
+```yaml
+version: '3.8'
+services:
+  crittercatcher:
+    image: crittercatcher:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/data:/data
+    environment:
+      - LOG_LEVEL=INFO
+      - WEB_PORT=8080
+    restart: unless-stopped
+```
+
+### 4. Access
+- Dashboard: `http://localhost:8080/`
+- Profiles: `http://localhost:8080/static/profiles.html`
+- Review: `http://localhost:8080/static/review.html`
+
+---
+
+## Pre-Deployment Checklist
+
+- [x] All backend components implemented
+- [x] All frontend UIs created
+- [x] Requirements.txt configured
+- [x] Dockerfile updated
+- [x] Unit tests passing (Phase 1-4)
+- [x] Logging configured
+- [x] Error handling in place
+- [x] Git commits clean
+
+- [ ] Phase 8 API endpoints implemented
+- [ ] Phase 8 integration tests passing
+- [ ] Performance testing on Unraid
+- [ ] Documentation complete
+
+---
+
+## Known Limitations for Testing
+
+1. **Frame serving not implemented yet** - Review tab will show placeholder until Phase 8
+2. **Processing pipeline not auto-triggered** - Use Python API to test manually
+3. **No retraining UI** - Will be in Phase 7
+4. **No video download integration** - Ring camera integration still in old code path
+
+---
+
+## Testing Recommendations
+
+1. **Start with UI Testing**
+   - Create 2-3 profiles with different YOLO categories
+   - Test all UI interactions (sliders, toggles, buttons)
+   - Check form validation
+
+2. **API Testing**
+   - Use curl or Postman to test all endpoints
+   - Create/update/delete profiles programmatically
+   - Verify responses
+
+3. **Data Integrity**
+   - Check `/data/animal_profiles/` for stored profile JSON files
+   - Verify permissions (should be 777)
+   - Check no errors in Docker logs
+
+4. **Next Phase**
+   - After confirming UI/API work, proceed to Phase 8
+   - Implement frame serving endpoints
+   - Test full pipeline with sample images
+
+---
+
+## Useful Commands
+
+```bash
+# View logs
+docker logs crittercatcher -f
+
+# List profiles
+curl http://localhost:8080/api/animal-profiles | jq
+
+# Create test profile
+curl -X POST http://localhost:8080/api/animal-profiles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Hedgehog",
+    "yolo_categories": ["cat", "dog", "sheep"],
+    "text_description": "a small hedgehog"
+  }'
+
+# Check file permissions
+docker exec crittercatcher ls -la /data/animal_profiles/
+
+# SSH into container
+docker exec -it crittercatcher /bin/bash
+```
+
+---
+
+## Questions for Testing?
+
+If you encounter issues on Unraid:
+1. Check Docker logs: `docker logs crittercatcher`
+2. Verify volume mounts: `docker inspect crittercatcher`
+3. Test API connectivity: `curl http://localhost:8080/api/animal-profiles`
+4. Check data directory: `/mnt/data/` should have proper permissions
+
+Good luck! 🦡
