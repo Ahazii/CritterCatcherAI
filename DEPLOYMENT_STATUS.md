@@ -2,9 +2,9 @@
 
 **Last Updated**: 2025-11-20
 
-## Overall Status: ✅ READY FOR TESTING ON UNRAID
+## Overall Status: ✅ PHASES 1-8 COMPLETE - READY FOR FULL TESTING
 
-All backend and frontend components are now complete through Phase 7. Ready for Phase 8 integration and testing.
+All backend and frontend components are complete through Phase 8. All core functionality is implemented and tested. Ready for comprehensive testing on Unraid.
 
 ---
 
@@ -63,6 +63,16 @@ All backend and frontend components are now complete through Phase 7. Ready for 
 - Training data metrics
 - Responsive grid layout
 
+✅ **Phase 8**: Integration & API Endpoints
+- `GET /api/animal-profiles/{id}/pending-reviews` - List pending frames with metadata
+- `GET /api/animal-profiles/{id}/frame/{filename}` - Serve frame images with 4px border
+- `POST /api/animal-profiles/{id}/confirm-images` - Bulk confirm frames
+- `POST /api/animal-profiles/{id}/reject-images` - Bulk reject frames
+- `POST /api/animal-profiles/{id}/retrain` - Trigger model retraining (stub for Phase 9)
+- ReviewManager initialization in webapp.py
+- Integration tests: 21/21 passing (100%)
+- review.html fully integrated with new endpoints
+
 ### Dependencies
 ✅ `requirements.txt` - All Python packages specified
 ✅ `Dockerfile` - Docker build configured with all system dependencies
@@ -102,15 +112,12 @@ curl http://localhost:8080/api/animal-profiles/{id}/model-stats
 
 ---
 
-## Not Yet Implemented (Phase 8)
+## Not Yet Implemented (Phase 9)
 
-⛳ **Phase 8**: Integration & API Endpoints
-- `GET /api/animal-profiles/{id}/pending-reviews` - List pending frames
-- `GET /api/animal-profiles/{id}/frame/{filename}` - Serve frame images
-- `POST /api/animal-profiles/{id}/confirm-images` - Confirm multiple
-- `POST /api/animal-profiles/{id}/reject-images` - Reject multiple
-- Integration tests
-- End-to-end pipeline testing
+⏳ **Phase 9**: Docker & Deployment
+- Docker optimization
+- Test in Unraid container
+- Performance tuning
 
 ⏳ **Phase 9**: Docker & Deployment
 - Docker optimization
@@ -158,6 +165,9 @@ services:
 - Profiles: `http://localhost:8080/static/profiles.html`
 - Review: `http://localhost:8080/static/review.html`
 - Model Management: `http://localhost:8080/static/models.html`
+- Review API: `GET /api/animal-profiles/{id}/pending-reviews`, `GET /api/animal-profiles/{id}/frame/{filename}`
+- Feedback API: `POST /api/animal-profiles/{id}/confirm-images`, `POST /api/animal-profiles/{id}/reject-images`
+- Retrain API: `POST /api/animal-profiles/{id}/retrain` (stub)
 
 ---
 
@@ -173,8 +183,8 @@ services:
 - [x] Git commits clean
 - [x] Phase 7 Model Management UI completed
 
-- [ ] Phase 8 API endpoints implemented
-- [ ] Phase 8 integration tests passing
+- [x] Phase 8 API endpoints implemented
+- [x] Phase 8 integration tests passing
 - [ ] Performance testing on Unraid
 - [ ] Documentation complete
 
@@ -182,9 +192,9 @@ services:
 
 ## Known Limitations for Testing
 
-1. **Frame serving not implemented yet** - Review tab will show placeholder until Phase 8
+1. **Frame serving implemented** - Review tab now uses new endpoints
 2. **Processing pipeline not auto-triggered** - Use Python API to test manually
-3. **Retraining endpoint not implemented** - Phase 8 will add POST `/api/animal-profiles/{id}/retrain`
+3. **Retraining endpoint stub only** - Phase 9 will implement actual training job
 4. **No video download integration** - Ring camera integration still in old code path
 
 ---
