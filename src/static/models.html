@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Management - CritterCatcherAI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --danger-color: #f56565;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --accent-color: #63b3ed;
+            --accent-hover: #4299e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-title {
+            color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .page-title {
+            margin-bottom: 2rem;
+        }
+
+        .page-title h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-title p {
+            color: var(--text-secondary);
+        }
+
+        /* Grid */
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .model-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+        }
+
+        .model-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .model-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        .model-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-disabled {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        /* Metrics */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-top: 0.5rem;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), var(--accent-color));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Recommendation */
+        .recommendation {
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--warning-color);
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+
+        .recommendation.active {
+            display: block;
+        }
+
+        .recommendation-title {
+            font-weight: 600;
+            color: var(--warning-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .recommendation-text {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Actions */
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            flex: 1;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #dd6b20;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            flex: auto;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert.active {
+            display: block;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 1px solid #90cdf4;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .training-data-list {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .training-data-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        .training-data-label {
+            color: var(--text-secondary);
+        }
+
+        .training-data-value {
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="logo">
+                <span class="logo-title">🦡 CritterCatcherAI</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="page-title">
+            <h1>Model Management</h1>
+            <p>Monitor and manage your animal detection models</p>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alert" class="alert"></div>
+
+        <!-- Models Grid -->
+        <div id="modelsGrid" class="models-grid"></div>
+    </div>
+
+    <!-- Retraining Modal -->
+    <div id="retrainingModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Retrain Model</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+
+            <div id="retrainingContent">
+                <div class="training-data-list">
+                    <div class="training-data-item">
+                        <span class="training-data-label">Confirmed Images:</span>
+                        <span class="training-data-value" id="confirmedCount">0</span>
+                    </div>
+                    <div class="training-data-item">
+                        <span class="training-data-label">Rejected Images:</span>
+                        <span class="training-data-value" id="rejectedCount">0</span>
+                    </div>
+                    <div class="training-data-item">
+                        <span class="training-data-label">Total Training Data:</span>
+                        <span class="training-data-value" id="totalTrainingData">0</span>
+                    </div>
+                </div>
+
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
+                    Retraining will fine-tune the CLIP/ViT model on your confirmed and rejected images.
+                    This process may take several minutes depending on the amount of training data.
+                </p>
+
+                <div class="modal-footer">
+                    <button class="btn" onclick="closeModal()">Cancel</button>
+                    <button class="btn btn-warning" onclick="startRetraining()" id="retrainBtn">
+                        Start Retraining
+                    </button>
+                </div>
+            </div>
+
+            <div id="retrainingProgress" style="display: none;">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p id="progressText">Retraining in progress...</p>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 1rem;">
+                        This may take several minutes. Please don't close this dialog.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRetrainingProfile = null;
+        let modelsData = {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+            // Refresh every 30 seconds
+            setInterval(loadModels, 30000);
+        });
+
+        function loadModels() {
+            fetch('/api/animal-profiles')
+                .then(r => r.json())
+                .then(data => {
+                    const profiles = data.profiles || [];
+                    
+                    if (profiles.length === 0) {
+                        renderEmptyState();
+                        return;
+                    }
+
+                    // Load stats for each profile
+                    Promise.all(profiles.map(p => 
+                        fetch(`/api/animal-profiles/${p.id}/model-stats`)
+                            .then(r => r.json())
+                            .then(stats => ({ ...p, stats: stats }))
+                            .catch(err => ({ ...p, stats: null }))
+                    )).then(profilesWithStats => {
+                        modelsData = profilesWithStats;
+                        renderModels(profilesWithStats);
+                    });
+                })
+                .catch(err => showAlert('Error loading models: ' + err, 'error'));
+        }
+
+        function renderEmptyState() {
+            document.getElementById('modelsGrid').innerHTML = `
+                <div style="grid-column: 1 / -1;">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🤖</div>
+                        <h3>No Models Yet</h3>
+                        <p>Create an animal profile to start managing models</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderModels(profiles) {
+            document.getElementById('modelsGrid').innerHTML = profiles.map(profile => `
+                <div class="model-card">
+                    <div class="model-header">
+                        <div class="model-name">${profile.name}</div>
+                        <div class="model-status ${profile.enabled ? 'status-active' : 'status-disabled'}">
+                            ${profile.enabled ? '✓ Active' : '✗ Disabled'}
+                        </div>
+                    </div>
+
+                    <div class="metrics">
+                        <div class="metric">
+                            <div class="metric-value">${profile.stats?.accuracy_percentage?.toFixed(1) || 0}%</div>
+                            <div class="metric-label">Accuracy</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${profile.stats?.total_feedback || 0}</div>
+                            <div class="metric-label">Feedback</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${profile.stats?.confirmed_count || 0}</div>
+                            <div class="metric-label">Confirmed</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${profile.stats?.rejected_count || 0}</div>
+                            <div class="metric-label">Rejected</div>
+                        </div>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Training Progress</span>
+                            <span>${profile.stats?.total_feedback || 0} / ${profile.stats?.confirmation_count_recommendation || 50}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${Math.min(100, ((profile.stats?.total_feedback || 0) / (profile.stats?.confirmation_count_recommendation || 50) * 100))}%"></div>
+                        </div>
+                    </div>
+
+                    ${profile.stats?.should_recommend_retraining ? `
+                        <div class="recommendation active">
+                            <div class="recommendation-title">⚠️ Retraining Recommended</div>
+                            <div class="recommendation-text">${profile.stats?.retraining_message}</div>
+                        </div>
+                    ` : ''}
+
+                    <div class="actions">
+                        <button class="btn btn-success btn-sm" onclick="openRetrainingModal('${profile.id}', '${profile.name}')" 
+                                ${!profile.enabled ? 'disabled' : ''}>
+                            🔄 Retrain
+                        </button>
+                        <button class="btn btn-sm" onclick="viewDetails('${profile.id}')">
+                            📊 Details
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openRetrainingModal(profileId, profileName) {
+            currentRetrainingProfile = profileId;
+            const profile = modelsData.find(p => p.id === profileId);
+            
+            if (profile?.stats) {
+                document.getElementById('confirmedCount').textContent = profile.stats.confirmed_count || 0;
+                document.getElementById('rejectedCount').textContent = profile.stats.rejected_count || 0;
+                document.getElementById('totalTrainingData').textContent = (profile.stats.total_feedback || 0);
+            }
+
+            document.getElementById('retrainingProgress').style.display = 'none';
+            document.getElementById('retrainingContent').style.display = 'block';
+            document.getElementById('retrainingModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('retrainingModal').classList.remove('active');
+            currentRetrainingProfile = null;
+        }
+
+        function startRetraining() {
+            if (!currentRetrainingProfile) return;
+
+            document.getElementById('retrainingContent').style.display = 'none';
+            document.getElementById('retrainingProgress').style.display = 'block';
+            document.getElementById('progressText').textContent = 'Retraining in progress...';
+            document.getElementById('retrainBtn').disabled = true;
+
+            // Simulate retraining - in Phase 8 this will call the backend
+            setTimeout(() => {
+                showAlert('✓ Model retraining started. Check back in a few minutes for results.', 'info');
+                closeModal();
+                loadModels();
+            }, 2000);
+        }
+
+        function viewDetails(profileId) {
+            const profile = modelsData.find(p => p.id === profileId);
+            if (!profile) return;
+
+            const stats = profile.stats || {};
+            const details = `
+                Profile: ${profile.name}
+                
+                Accuracy: ${stats.accuracy_percentage?.toFixed(1) || 0}%
+                Total Feedback: ${stats.total_feedback || 0}
+                Confirmed: ${stats.confirmed_count || 0}
+                Rejected: ${stats.rejected_count || 0}
+                
+                Retraining Threshold: ${stats.accuracy_threshold?.toFixed(0) || 85}%
+                Recommendation Count: ${stats.confirmation_count_recommendation || 50}
+                
+                Status: ${profile.enabled ? 'Active' : 'Disabled'}
+                ${stats.should_recommend_retraining ? `\n⚠️ ${stats.retraining_message}` : ''}
+            `;
+            
+            showAlert(details, 'info');
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert active alert-${type}`;
+            setTimeout(() => alert.classList.remove('active'), 5000);
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('retrainingModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'retrainingModal') closeModal();
+        });
+    </script>
+</body>
+</html>
