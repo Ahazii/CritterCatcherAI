@@ -23,6 +23,7 @@ import numpy as np
 from taxonomy_tree import TaxonomyTree, TaxonomyNode
 from object_detector import YOLO_COCO_CLASSES
 from animal_profile import AnimalProfile, AnimalProfileManager
+from review_feedback import ReviewManager
 
 logger = logging.getLogger(__name__)
 
@@ -118,11 +119,14 @@ training_manager = None
 # Global animal profile manager
 animal_profile_manager: Optional[AnimalProfileManager] = None
 
+# Global review manager
+review_manager: Optional[ReviewManager] = None
+
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize taxonomy tree and training manager on startup."""
-    global taxonomy_tree, training_manager, animal_profile_manager
+    global taxonomy_tree, training_manager, animal_profile_manager, review_manager
     
     try:
         # Load or create taxonomy tree
@@ -150,6 +154,14 @@ async def startup_event():
         logger.info("Animal profile manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize animal profile manager: {e}")
+    
+    # Initialize review manager
+    try:
+        if animal_profile_manager:
+            review_manager = ReviewManager(animal_profile_manager, Path("/data"))
+            logger.info("Review manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize review manager: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -3121,6 +3133,197 @@ async def update_profile_accuracy(profile_id: str, request: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to update profile accuracy: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= Phase 8: Review & Retraining Endpoints =============
+
+@app.get("/api/animal-profiles/{profile_id}/pending-reviews")
+async def get_pending_reviews(profile_id: str):
+    """Get list of pending frames for review."""
+    try:
+        if animal_profile_manager is None or review_manager is None:
+            raise HTTPException(status_code=500, detail="Managers not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        pending_frames = review_manager.list_pending_reviews(profile_id)
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "pending_count": len(pending_frames),
+            "frames": [
+                {
+                    "filename": frame.frame_path.name,
+                    "confidence": frame.get_confidence(),
+                    "description": frame.get_description(),
+                    "timestamp": frame.metadata.get("timestamp", "")
+                }
+                for frame in pending_frames
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get pending reviews: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/animal-profiles/{profile_id}/frame/{filename}")
+async def get_frame_image(profile_id: str, filename: str):
+    """Serve frame image with border."""
+    try:
+        from PIL import Image, ImageOps
+        import io
+        
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Construct frame path
+        frame_path = Path("/data") / "review" / profile_id / filename
+        
+        if not frame_path.exists():
+            raise HTTPException(status_code=404, detail=f"Frame '{filename}' not found")
+        
+        # Load image and add border
+        image = Image.open(frame_path)
+        
+        # Add 4px border (using ImageOps)
+        border_color = (100, 150, 200)  # Light blue
+        bordered_image = ImageOps.expand(image, border=4, fill=border_color)
+        
+        # Convert to bytes
+        img_bytes = io.BytesIO()
+        bordered_image.save(img_bytes, format='JPEG')
+        img_bytes.seek(0)
+        
+        logger.debug(f"Serving frame: {profile_id}/{filename}")
+        
+        return StreamingResponse(
+            iter([img_bytes.getvalue()]),
+            media_type="image/jpeg",
+            headers={"Content-Disposition": f"inline; filename={filename}"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get frame image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/confirm-images")
+async def confirm_images(profile_id: str, request: dict):
+    """Confirm multiple frames as correct."""
+    try:
+        if animal_profile_manager is None or review_manager is None:
+            raise HTTPException(status_code=500, detail="Managers not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        filenames = request.get('filenames', [])
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        # Bulk confirm frames
+        results = review_manager.bulk_confirm_frames(profile_id, filenames)
+        
+        logger.info(f"Confirmed {len(results['confirmed'])} frames for {profile.name}")
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "confirmed_count": len(results['confirmed']),
+            "failed_count": len(results['failed']),
+            "results": results,
+            "message": f"Confirmed {len(results['confirmed'])} frames"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to confirm images: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/reject-images")
+async def reject_images(profile_id: str, request: dict):
+    """Reject multiple frames."""
+    try:
+        if animal_profile_manager is None or review_manager is None:
+            raise HTTPException(status_code=500, detail="Managers not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        filenames = request.get('filenames', [])
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        save_as_negative = request.get('save_as_negative', False)
+        
+        # Bulk reject frames
+        results = review_manager.bulk_reject_frames(profile_id, filenames, save_as_negative)
+        
+        logger.info(f"Rejected {len(results['rejected'])} frames for {profile.name}")
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "rejected_count": len(results['rejected']),
+            "failed_count": len(results['failed']),
+            "results": results,
+            "message": f"Rejected {len(results['rejected'])} frames"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject images: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/retrain")
+async def trigger_retrain(profile_id: str, request: dict = None):
+    """Trigger model retraining for a profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        logger.info(f"Retraining triggered for profile: {profile.name}")
+        
+        # TODO: Phase 9 - Implement actual retraining logic
+        # This would involve:
+        # 1. Loading training data from /data/training/{profile_id}/
+        # 2. Fine-tuning the CLIP/ViT model
+        # 3. Saving the updated model
+        # 4. Updating model metadata
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "message": f"Retraining started for '{profile.name}'. This will run in the background.",
+            "note": "Actual model retraining implementation pending for Phase 9"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to trigger retrain: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

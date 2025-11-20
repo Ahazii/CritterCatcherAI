@@ -550,7 +550,18 @@
                     selectedFrames.clear();
                     updateControlsVisibility();
                     renderGallery(frames, profileId);
-                    updateStats(data.stats || {});
+                    // Load stats for this profile
+                    fetch(`/api/animal-profiles/${profileId}/model-stats`)
+                        .then(r => r.json())
+                        .then(stats => {
+                            updateStats({
+                                pending_count: data.pending_count,
+                                accuracy_percentage: stats.accuracy_percentage,
+                                confirmed_count: stats.confirmed_count,
+                                rejected_count: stats.rejected_count
+                            });
+                        })
+                        .catch(() => updateStats(data));
                 })
                 .catch(err => {
                     // Endpoint might not exist yet, show placeholder
@@ -672,12 +683,12 @@
             fetch(`/api/animal-profiles/${currentProfile.id}/confirm-images`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ frame_filenames: frameList })
+                body: JSON.stringify({ filenames: frameList })
             })
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        showAlert(`✓ Confirmed ${data.confirmed_count || frameList.length} images. Accuracy: ${data.accuracy_percentage?.toFixed(1)}%`, 'success');
+                        showAlert(`✓ Confirmed ${data.confirmed_count || frameList.length} images`, 'success');
                         deselectAll();
                         loadReviewFrames(currentProfile.id);
                     } else {
@@ -694,12 +705,12 @@
             fetch(`/api/animal-profiles/${currentProfile.id}/reject-images`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ frame_filenames: frameList })
+                body: JSON.stringify({ filenames: frameList })
             })
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        showAlert(`✗ Rejected ${data.rejected_count || frameList.length} images. Accuracy: ${data.accuracy_percentage?.toFixed(1)}%`, 'success');
+                        showAlert(`✗ Rejected ${data.rejected_count || frameList.length} images`, 'success');
                         deselectAll();
                         loadReviewFrames(currentProfile.id);
                     } else {
