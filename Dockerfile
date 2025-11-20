@@ -24,7 +24,8 @@ COPY requirements.txt .
 
 # Install Python dependencies
 # Install torch first with CPU-only version to save space and time
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Pin to torch 2.5.1 for compatibility with ultralytics (torch 2.6+ has breaking changes)
+RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 
 # Install dlib with optimizations
 RUN pip install --no-cache-dir dlib
