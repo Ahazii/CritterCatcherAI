@@ -58,8 +58,10 @@ RUN groupadd -g ${PGID} appgroup || true && \
     useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser || true
 
 # Create volume mount points with proper permissions
-RUN mkdir -p /data/downloads /data/sorted /data/faces /data/tokens /config && \
-    chown -R ${PUID}:${PGID} /data /config /app
+# Include all subdirectories that the application will need
+RUN mkdir -p /data/downloads /data/sorted /data/faces/unknown /data/tokens /data/animal_profiles /data/review /data/training /data/models /config && \
+    chown -R ${PUID}:${PGID} /data /config /app && \
+    chmod -R 777 /data
 
 VOLUME ["/data", "/config"]
 
@@ -75,5 +77,9 @@ ENV UMASK=0000
 # Switch to application user
 USER ${PUID}:${PGID}
 
+# Copy startup script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Run the main application
-CMD ["sh", "-c", "umask 0000 && python -u src/main.py"]
+CMD ["/app/entrypoint.sh"]
