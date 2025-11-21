@@ -14,8 +14,6 @@ from ring_downloader import RingDownloader
 from object_detector import ObjectDetector
 from face_recognizer import FaceRecognizer
 from video_sorter import VideoSorter
-from taxonomy_tree import TaxonomyTree
-from object_detector import YOLO_COCO_CLASSES
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -72,16 +70,6 @@ def process_videos(config: dict):
     download_path = config.get('paths', {}).get('downloads', '/data/downloads')
     sorted_path = config.get('paths', {}).get('sorted', '/data/sorted')
     
-    # Load taxonomy tree for specialized detection
-    taxonomy_file = Path("/app/config/taxonomy.json")
-    taxonomy_tree = None
-    try:
-        taxonomy_tree = TaxonomyTree.load_from_file(taxonomy_file, YOLO_COCO_CLASSES)
-        logger.info(f"Taxonomy tree loaded with {len(taxonomy_tree.roots)} root classes")
-    except Exception as e:
-        logger.warning(f"Failed to load taxonomy tree: {e}. Specialized detection will be unavailable.")
-        taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
-    
     ring_config = config.get('ring', {})
     detection_config = config.get('detection', {})
     
@@ -103,11 +91,9 @@ def process_videos(config: dict):
     ring_downloader = RingDownloader(download_path)
     video_sorter = VideoSorter(sorted_path)
     
-    # Initialize object detector with configured labels
+    # V2: Object detection now happens in Animal Profile processing
+    # Initialize object detector with configured labels (for backward compatibility)
     object_labels = detection_config.get('object_labels', ['bird', 'cat', 'dog', 'person'])
-    discovery_mode = detection_config.get('discovery_mode', False)
-    discovery_threshold = detection_config.get('discovery_threshold', 0.30)
-    ignored_labels = detection_config.get('ignored_labels', [])
     yolo_model = detection_config.get('yolo_model', 'yolov8n')  # Default to nano model
     
     # Add .pt extension if not present
@@ -118,16 +104,8 @@ def process_videos(config: dict):
         labels=object_labels,
         confidence_threshold=detection_config.get('confidence_threshold', 0.25),
         num_frames=detection_config.get('object_frames', 5),
-        discovery_mode=discovery_mode,
-        discovery_threshold=discovery_threshold,
-        ignored_labels=ignored_labels,
         model_name=yolo_model
     )
-    
-    if discovery_mode:
-        logger.info("Discovery mode is ENABLED - will automatically detect new objects")
-    else:
-        logger.info("Discovery mode is DISABLED - only tracking specified objects")
     
     # Initialize face recognizer
     face_recognizer = FaceRecognizer(
@@ -246,31 +224,9 @@ def process_videos(config: dict):
             except:
                 pass
             
-            # Run object detection - use specialized detection if enabled
-            specialized_enabled = config.get('specialized_detection', {}).get('enabled', False)
-            
-            if specialized_enabled and taxonomy_tree:
-                logger.debug("Using specialized detection (Stage 1 + Stage 2)")
-                
-                # Update for Stage 2
-                try:
-                    from webapp import app_state
-                    app_state["processing_progress"]["current_step"] = f"Running specialized species detection on {video_path.name}..."
-                except:
-                    pass
-                
-                detected_objects, species_results = object_detector.detect_objects_with_specialization(
-                    video_path, config, taxonomy_tree
-                )
-                
-            # Merge species results for deduplication tracking
-                # Keep species_results separate for specialized sorting
-                if species_results:
-                    logger.info(f"Specialized detections: {list(species_results.keys())}")
-            else:
-                logger.debug("Using standard YOLO detection only (Stage 1)")
-                detected_objects = object_detector.detect_objects_in_video(video_path)
-                species_results = {}
+            # V2: Run standard YOLO detection
+            logger.debug("Running YOLO object detection")
+            detected_objects = object_detector.detect_objects_in_video(video_path)
             
             # Run face recognition ONLY if enabled and conditions are met
             priority = detection_config.get('priority', 'objects')
@@ -296,27 +252,13 @@ def process_videos(config: dict):
             except:
                 pass
             
-            # Sort video using specialized detection-aware sorting
-            if specialized_enabled and species_results:
-                # Use new specialized sorting with species-specific folders
-                detected_objects_path = Path("/data/objects/detected")
-                result = video_sorter.sort_with_specialization(
-                    video_path,
-                    yolo_detections=detected_objects,
-                    species_results={name: conf for name, (conf, _) in species_results.items()},
-                    config=config,
-                    detected_objects_path=detected_objects_path,
-                    recognized_people=recognized_people
-                )
-                sorted_path = result.get("video_path", video_path)
-            else:
-                # Use standard sorting
-                sorted_path = video_sorter.sort_video(
-                    video_path,
-                    detected_objects=detected_objects,
-                    recognized_people=recognized_people,
-                    priority=priority
-                )
+            # V2: Use standard sorting
+            sorted_path = video_sorter.sort_video(
+                video_path,
+                detected_objects=detected_objects,
+                recognized_people=recognized_people,
+                priority=priority
+            )
             
             logger.info(f"Video processed and sorted to: {sorted_path}")
             
