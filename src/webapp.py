@@ -1036,14 +1036,6 @@ async def return_videos_to_downloads(background_tasks: BackgroundTasks):
             try:
                 import shutil
                 
-                # Clear detected objects folder for fresh detection images
-                if DETECTED_OBJECTS_PATH.exists():
-                    for item in DETECTED_OBJECTS_PATH.iterdir():
-                        if item.is_dir():
-                            shutil.rmtree(item)
-                            logger.debug(f"Deleted detected objects: {item.name}")
-                    logger.info("Cleared detected objects folder")
-                
                 # Move all videos back
                 DOWNLOADS_PATH.mkdir(parents=True, exist_ok=True)
                 moved_count = 0
@@ -1220,12 +1212,7 @@ async def get_analytics_stats():
                             stats["specialized_stats"]["total"] += video_count
                             stats["specialized_stats"]["by_species"][category_dir.name] = video_count
         
-        # Count detections
-        if DETECTED_OBJECTS_PATH.exists():
-            for label_dir in DETECTED_OBJECTS_PATH.iterdir():
-                if label_dir.is_dir():
-                    count = len(list(label_dir.glob("*.jpg")))
-                    stats["total_detections"] += count
+        # V2: detections are now tracked per animal profile in review folders
         
         # Top detections
         sorted_categories = sorted(stats["categories"].items(), key=lambda x: x[1], reverse=True)
@@ -1363,12 +1350,6 @@ async def delete_category(category_path: str):
         shutil.rmtree(full_path)
         logger.info(f"Deleted category '{category_path}' with {video_count} videos")
         
-        # Delete associated metadata from detected objects
-        metadata_dir = DETECTED_OBJECTS_PATH / category_path.split("/")[-1]
-        if metadata_dir.exists():
-            shutil.rmtree(metadata_dir)
-            logger.info(f"Deleted metadata for '{category_path}'")
-        
         return {
             "status": "success",
             "message": f"Deleted {video_count} video(s) from {category_path}",
@@ -1420,7 +1401,9 @@ async def get_metrics():
         metrics["storage"]["downloads"] = get_dir_size(DOWNLOADS_PATH) // (1024 * 1024)  # MB
         metrics["storage"]["sorted"] = get_dir_size(SORTED_PATH) // (1024 * 1024)
         metrics["storage"]["faces"] = get_dir_size(FACE_TRAINING_PATH) // (1024 * 1024)
-        metrics["storage"]["objects"] = get_dir_size(DETECTED_OBJECTS_PATH) // (1024 * 1024)
+        # V2: review data tracked per profile
+        review_path = Path("/data/review")
+        metrics["storage"]["objects"] = get_dir_size(review_path) // (1024 * 1024) if review_path.exists() else 0
         
         return metrics
     except Exception as e:
@@ -1430,23 +1413,24 @@ async def get_metrics():
 
 @app.get("/api/export/detections")
 async def export_detections(format: str = "json"):
-    """Export detection data in JSON or CSV format."""
+    """Export detection data in JSON or CSV format (V2: from animal profiles)."""
     try:
         detections = []
         
-        # Collect all detection data
-        if DETECTED_OBJECTS_PATH.exists():
-            for label_dir in DETECTED_OBJECTS_PATH.iterdir():
-                if label_dir.is_dir():
-                    for img_file in label_dir.glob("*.jpg"):
-                        metadata_file = label_dir / f"{img_file.name}.json"
+        # V2: Collect detection data from animal profile review folders
+        review_path = Path("/data/review")
+        if review_path.exists():
+            for profile_dir in review_path.iterdir():
+                if profile_dir.is_dir():
+                    for img_file in profile_dir.glob("*.jpg"):
+                        metadata_file = img_file.with_suffix(".json")
                         if metadata_file.exists():
                             with open(metadata_file, 'r') as f:
                                 metadata = json.load(f)
                                 detections.append({
-                                    "label": metadata.get('label', label_dir.name),
+                                    "label": profile_dir.name,
                                     "confidence": metadata.get('confidence', 0),
-                                    "filename": metadata.get('filename', ''),
+                                    "filename": img_file.name,
                                     "timestamp": metadata.get('timestamp', ''),
                                     "video": metadata.get('video', '')
                                 })
