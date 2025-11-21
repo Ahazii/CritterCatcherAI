@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import logging
+import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import yaml
@@ -244,23 +245,51 @@ def process_videos(config: dict):
                 
                 recognized_people = face_recognizer.recognize_faces_in_video(video_path)
             
-            # Update progress: sorting
+            # Update progress: moving to review
             try:
                 from webapp import app_state
-                app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name}..."
-                app_state["processing_progress"]["phase"] = "sorting"
+                app_state["processing_progress"]["current_step"] = f"Moving {video_path.name} to review..."
+                app_state["processing_progress"]["phase"] = "review"
             except:
                 pass
             
-            # V2: Use standard sorting
-            sorted_path = video_sorter.sort_video(
-                video_path,
-                detected_objects=detected_objects,
-                recognized_people=recognized_people,
-                priority=priority
-            )
+            # V2 Review Workflow: Move videos to review folder with metadata
+            # Determine primary detection for review categorization
+            review_category = "unknown"
+            if detected_objects:
+                review_category = max(detected_objects, key=detected_objects.get)
+            elif recognized_people:
+                review_category = f"people_{sorted(recognized_people)[0]}"
             
-            logger.info(f"Video processed and sorted to: {sorted_path}")
+            # Create review directory for this category
+            review_dir = Path("/data/review") / review_category
+            review_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Move video to review
+            review_path = review_dir / video_path.name
+            if review_path.exists():
+                # Handle duplicates
+                counter = 1
+                while review_path.exists():
+                    review_path = review_dir / f"{video_path.stem}_{counter}{video_path.suffix}"
+                    counter += 1
+            
+            import shutil
+            shutil.move(str(video_path), str(review_path))
+            
+            # Save detection metadata alongside video
+            metadata = {
+                "detected_objects": detected_objects if detected_objects else {},
+                "recognized_people": list(recognized_people) if recognized_people else [],
+                "timestamp": datetime.now().isoformat(),
+                "video_name": video_path.name,
+                "category": review_category
+            }
+            metadata_path = review_path.with_suffix(review_path.suffix + ".json")
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            logger.info(f"Video moved to review: {review_path} (category: {review_category})")
             
         except Exception as e:
             logger.error(f"Failed to process video {video_path.name}: {e}", exc_info=True)
