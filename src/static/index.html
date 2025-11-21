@@ -2179,14 +2179,6 @@
                 `;
                 
                 // No longer need multi-select - object labels are managed in Species Training page
-                
-                // Dim Discovery Mode tab if discovery mode is disabled
-                const discoveryTab = document.getElementById('discoveryTab');
-                if (discoveryMode) {
-                    discoveryTab.classList.remove('disabled');
-                } else {
-                    discoveryTab.classList.add('disabled');
-                }
             } catch (error) {
                 console.error('Failed to load config:', error);
                 document.getElementById('configForm').innerHTML = `
@@ -2272,15 +2264,6 @@
                 
                 const result = await response.json();
                 const message = result.message || 'Configuration saved successfully';
-                
-                // Update Discovery Mode tab dimming immediately
-                const discoveryMode = document.getElementById('discoveryMode').checked;
-                const discoveryTab = document.getElementById('discoveryTab');
-                if (discoveryMode) {
-                    discoveryTab.classList.remove('disabled');
-                } else {
-                    discoveryTab.classList.add('disabled');
-                }
                 
                 const msgDiv = document.getElementById('configMessage');
                 msgDiv.innerHTML = `<div style="color: var(--success-color); padding: 1rem; background: rgba(72, 187, 120, 0.1); border-radius: 6px;">
