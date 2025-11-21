@@ -272,6 +272,27 @@ def process_videos(config: dict):
 
 def main():
     """Main entry point."""
+    # Ensure all required directories exist with proper permissions
+    # This must happen before logging setup or any other operations
+    required_dirs = [
+        "/data/downloads",
+        "/data/sorted",
+        "/data/faces",
+        "/data/faces/unknown",
+        "/data/tokens",
+        "/data/animal_profiles",
+        "/data/review",
+        "/data/training",
+        "/data/models",
+        "/config"
+    ]
+    
+    for dir_path in required_dirs:
+        try:
+            Path(dir_path).mkdir(parents=True, exist_ok=True, mode=0o777)
+        except Exception as e:
+            print(f"Warning: Could not create {dir_path}: {e}")
+    
     # Setup logging
     log_level = os.environ.get('LOG_LEVEL', 'INFO')
     setup_logging(log_level)
