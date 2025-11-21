@@ -34,7 +34,15 @@ class FaceRecognizer:
         self.num_frames = num_frames
         self.model = model
         self.unknown_faces_path = Path(unknown_faces_path)
-        self.unknown_faces_path.mkdir(parents=True, exist_ok=True)
+        
+        # Try to create unknown faces directory, but don't fail if we can't
+        try:
+            self.unknown_faces_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            logger.warning(f"Cannot create {unknown_faces_path} due to permissions - unknown face saving disabled: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to create {unknown_faces_path}: {e}")
+        
         self.known_faces = {}  # Dict mapping name -> list of encodings
         
         # Load existing encodings if available

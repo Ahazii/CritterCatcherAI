@@ -289,7 +289,13 @@ def main():
     
     for dir_path in required_dirs:
         try:
-            Path(dir_path).mkdir(parents=True, exist_ok=True, mode=0o777)
+            dir_obj = Path(dir_path)
+            dir_obj.mkdir(parents=True, exist_ok=True)
+            # Explicitly set permissions after creation
+            os.chmod(dir_path, 0o777)
+        except PermissionError:
+            # If we can't set permissions, that's okay - continue anyway
+            pass
         except Exception as e:
             print(f"Warning: Could not create {dir_path}: {e}")
     
