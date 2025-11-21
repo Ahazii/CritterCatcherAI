@@ -33,9 +33,23 @@ def setup_logging(log_level: str = "INFO"):
     )
 
 
-def load_config(config_path: str = "/app/config/config.yaml") -> dict:
+def load_config(config_path: str = "/data/config/config.yaml") -> dict:
     """Load configuration from YAML file."""
     logger = logging.getLogger(__name__)
+    
+    # Ensure config directory exists
+    config_dir = Path(config_path).parent
+    config_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copy default config if it doesn't exist
+    if not Path(config_path).exists():
+        default_config = Path("/app/config/config.yaml")
+        if default_config.exists():
+            import shutil
+            shutil.copy(default_config, config_path)
+            logger.info(f"Copied default config to {config_path}")
+        else:
+            logger.warning(f"Default config not found at {default_config}")
     
     try:
         with open(config_path, 'r') as f:
