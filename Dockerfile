@@ -57,6 +57,10 @@ ARG PGID=100
 RUN groupadd -g ${PGID} appgroup || true && \
     useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser || true
 
+# Copy startup script before changing user
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create volume mount points with proper permissions
 # Include all subdirectories that the application will need
 RUN mkdir -p /data/downloads /data/sorted /data/faces/unknown /data/tokens /data/animal_profiles /data/review /data/training /data/models /config && \
@@ -76,10 +80,6 @@ ENV UMASK=0000
 
 # Switch to application user
 USER ${PUID}:${PGID}
-
-# Copy startup script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # Run the main application
 CMD ["/app/entrypoint.sh"]
