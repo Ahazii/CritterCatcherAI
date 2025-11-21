@@ -1116,7 +1116,6 @@
             <button class="tab" onclick="switchTab('metrics')">📊 Metrics</button>
             <button class="tab" onclick="switchTab('storage')">💾 Storage</button>
             <button class="tab" onclick="switchTab('videos')">🎥 Videos</button>
-            <button class="tab" id="discoveryTab" onclick="switchTab('review')">🔍 Discovery Mode</button>
             <button class="tab" onclick="window.location.href='/static/profiles.html'">🦔 Animal Profiles</button>
             <button class="tab" onclick="window.location.href='/static/models.html'">🤖 Model Management</button>
             <button class="tab" onclick="switchTab('ring')">🔔 Ring Setup</button>
@@ -1253,68 +1252,6 @@
                     <button class="btn" onclick="loadVideos()" style="padding: 0.4rem 1rem; font-size: 0.875rem;">🔄 Refresh</button>
                 </div>
                 <div class="video-grid" id="videoGrid"></div>
-            </div>
-        </div>
-        
-        <!-- Review & Label Tab -->
-        <div id="review" class="tab-content">
-            <!-- Discoveries Section -->
-            <div class="card" style="background: rgba(66, 153, 225, 0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="card-title" style="margin-bottom: 0;">🔍 Discovered Objects <span id="discoveryBadge" class="status-badge" style="margin-left: 0.5rem; display: none;"></span></div>
-                    <button class="btn btn-small" onclick="loadDiscoveries()">🔄 Refresh</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Discovery Mode found these objects in your videos. Choose what to do with each:
-                    <br><strong>✓ Enable</strong> = Add to Species Training page and start tracking
-                    <br><strong>✗ Blacklist</strong> = Stop suggesting this (AI is correct, but you don't care)
-                    <br><strong>❌ Wrong Label</strong> = AI misidentified this object
-                </p>
-                <div class="filter-controls" id="discoveryFilters" style="display: none;">
-                    <label>Search: <input type="text" id="discoverySearchInput" placeholder="Filter by label..." oninput="filterDiscoveries()" /></label>
-                    <label>Min Confidence: <input type="number" id="discoveryMinConfidence" min="0" max="1" step="0.1" value="0" oninput="filterDiscoveries()" /></label>
-                    <label>Sort: <select id="discoverySortBy" onchange="filterDiscoveries()">
-                        <option value="label">Label</option>
-                        <option value="confidence">Confidence</option>
-                        <option value="date">First Seen</option>
-                    </select></label>
-                    <button class="btn btn-small" onclick="resetDiscoveryFilters()" style="margin-left: auto;">🔄 Reset</button>
-                </div>
-                <div id="discoveriesContainer"></div>
-            </div>
-            
-            <!-- Unknown Faces Section -->
-            <div class="card" style="margin-top: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="card-title" style="margin-bottom: 0;">Unknown Faces</div>
-                    <button class="btn btn-small" onclick="loadUnknownFaces()">🔄 Refresh</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Click faces to select them, then enter a name and click "Label Selected" to train the AI.
-                </p>
-                <div id="unknownFacesContainer"></div>
-            </div>
-            
-            <!-- Detected Objects Section -->
-            <div class="card" style="margin-top: 1.5rem; background: rgba(72, 187, 120, 0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="card-title" style="margin-bottom: 0;">Detected Objects</div>
-                    <button class="btn btn-small" onclick="loadDetectedObjects()">🔄 Refresh</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Review AI detections and correct any misclassifications or add new object types.
-                    <br><em style="font-size: 0.875rem;">Tip: Ctrl+Click to select multiple, Shift+Click for range, Ctrl+A to select all</em>
-                </p>
-                <div class="filter-controls" id="detectedFilters" style="display: none;">
-                    <label>Search: <input type="text" id="detectedSearchInput" placeholder="Filter by label..." oninput="filterDetectedObjects()" /></label>
-                    <label>Min Confidence: <input type="number" id="detectedMinConfidence" min="0" max="1" step="0.1" value="0" oninput="filterDetectedObjects()" /></label>
-                    <label>Sort: <select id="detectedSortBy" onchange="filterDetectedObjects()">
-                        <option value="label">Label</option>
-                        <option value="confidence">Confidence</option>
-                    </select></label>
-                    <button class="btn btn-small" onclick="resetDetectedFilters()" style="margin-left: auto;">🔄 Reset</button>
-                </div>
-                <div id="detectedObjectsContainer"></div>
             </div>
         </div>
 
@@ -2613,7 +2550,6 @@
             loadFaces();
         }
 
-        // Review & Label Tab Functions
         
         async function loadDiscoveries() {
             try {
@@ -3970,9 +3906,6 @@
             lazyImages.forEach(img => imageObserver.observe(img));
         }
         
-        // Enhanced zoom modal with keyboard navigation - handled by earlier definition
-        
-        // ===== END PHASE 2 =====
         
         // ===== PHASE 3: Analytics, Metrics, Export, Training Management =====
         
