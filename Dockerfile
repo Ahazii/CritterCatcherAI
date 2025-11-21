@@ -58,10 +58,10 @@ RUN groupadd -g ${PGID} appgroup || true && \
     useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser || true
 
 # Create volume mount points with proper permissions
-RUN mkdir -p /data/downloads /data/sorted /data/faces /data/tokens /data/config && \
-    chown -R ${PUID}:${PGID} /data /app
+RUN mkdir -p /data/downloads /data/sorted /data/faces /data/tokens /config && \
+    chown -R ${PUID}:${PGID} /data /config /app
 
-VOLUME ["/data"]
+VOLUME ["/data", "/config"]
 
 # Expose web interface port
 EXPOSE 8080

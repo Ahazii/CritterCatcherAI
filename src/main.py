@@ -33,7 +33,7 @@ def setup_logging(log_level: str = "INFO"):
     )
 
 
-def load_config(config_path: str = "/data/config/config.yaml") -> dict:
+def load_config(config_path: str = "/config/config.yaml") -> dict:
     """Load configuration from YAML file."""
     logger = logging.getLogger(__name__)
     

@@ -101,8 +101,8 @@ app_state = {
     }
 }
 
-CONFIG_PATH = Path("/data/config/config.yaml")
-TAXONOMY_FILE = Path("/app/config/taxonomy.json")
+CONFIG_PATH = Path("/config/config.yaml")
+TAXONOMY_FILE = Path("/config/taxonomy.json")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
@@ -128,10 +128,12 @@ async def startup_event():
     """Initialize taxonomy tree and training manager on startup."""
     global taxonomy_tree, training_manager, animal_profile_manager, review_manager
     
-    # Ensure config file exists (copy from default if needed)
+    # Ensure config directory and files exist (copy from defaults if needed)
     try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Copy config.yaml if it doesn't exist
         if not CONFIG_PATH.exists():
-            CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
             default_config = Path("/app/config/config.yaml")
             if default_config.exists():
                 import shutil
@@ -139,6 +141,14 @@ async def startup_event():
                 logger.info(f"Copied default config to {CONFIG_PATH}")
             else:
                 logger.warning(f"Default config not found at {default_config}")
+        
+        # Copy taxonomy.json if it doesn't exist
+        if not TAXONOMY_FILE.exists():
+            default_taxonomy = Path("/app/config/taxonomy.json")
+            if default_taxonomy.exists():
+                import shutil
+                shutil.copy(default_taxonomy, TAXONOMY_FILE)
+                logger.info(f"Copied default taxonomy to {TAXONOMY_FILE}")
     except Exception as e:
         logger.error(f"Failed to initialize config: {e}")
     
