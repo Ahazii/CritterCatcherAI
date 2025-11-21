@@ -20,8 +20,6 @@ import uvicorn
 import requests
 import numpy as np
 
-from taxonomy_tree import TaxonomyTree, TaxonomyNode
-from object_detector import YOLO_COCO_CLASSES
 from animal_profile import AnimalProfile, AnimalProfileManager
 from review_feedback import ReviewManager
 
@@ -102,19 +100,10 @@ app_state = {
 }
 
 CONFIG_PATH = Path("/config/config.yaml")
-TAXONOMY_FILE = Path("/config/taxonomy.json")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
-DETECTED_OBJECTS_PATH = Path("/data/objects/detected")
-DISCOVERIES_FILE = Path("/data/objects/discoveries.json")
 SORTED_PATH = Path("/data/sorted")
 DOWNLOADS_PATH = Path("/data/downloads")
-
-# Global taxonomy tree
-taxonomy_tree: Optional[TaxonomyTree] = None
-
-# Global training manager (shared instance to track training status)
-training_manager = None
 
 # Global animal profile manager
 animal_profile_manager: Optional[AnimalProfileManager] = None
@@ -125,10 +114,10 @@ review_manager: Optional[ReviewManager] = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize taxonomy tree and training manager on startup."""
-    global taxonomy_tree, training_manager, animal_profile_manager, review_manager
+    """Initialize Animal Profile Manager and Review Manager on startup."""
+    global animal_profile_manager, review_manager
     
-    # Ensure config directory and files exist (copy from defaults if needed)
+    # Ensure config directory exists (copy from defaults if needed)
     try:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         
@@ -141,36 +130,8 @@ async def startup_event():
                 logger.info(f"Copied default config to {CONFIG_PATH}")
             else:
                 logger.warning(f"Default config not found at {default_config}")
-        
-        # Copy taxonomy.json if it doesn't exist
-        if not TAXONOMY_FILE.exists():
-            default_taxonomy = Path("/app/config/taxonomy.json")
-            if default_taxonomy.exists():
-                import shutil
-                shutil.copy(default_taxonomy, TAXONOMY_FILE)
-                logger.info(f"Copied default taxonomy to {TAXONOMY_FILE}")
     except Exception as e:
         logger.error(f"Failed to initialize config: {e}")
-    
-    try:
-        # Load or create taxonomy tree
-        taxonomy_tree = TaxonomyTree.load_from_file(TAXONOMY_FILE, YOLO_COCO_CLASSES)
-        logger.info(f"Taxonomy tree initialized with {len(taxonomy_tree.roots)} root classes")
-    except Exception as e:
-        logger.error(f"Failed to initialize taxonomy tree: {e}")
-        # Create new tree as fallback
-        taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
-        logger.info("Created new taxonomy tree")
-    
-    # Initialize training manager
-    try:
-        from training_manager import TrainingManager
-        from main import load_config
-        config = load_config()
-        training_manager = TrainingManager(config)
-        logger.info("Training manager initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize training manager: {e}")
     
     # Initialize animal profile manager
     try:
