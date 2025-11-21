@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Ahazii/CritterCatcherAI</Support>
   <Project>https://github.com/Ahazii/CritterCatcherAI</Project>
-  <Overview>CritterCatcherAI v2.0 - Advanced animal detection system using two-stage pipeline (YOLO + CLIP/ViT). Download Ring videos, detect animals, review with multi-select UI, provide feedback to improve accuracy, and retrain models. Supports Hedgehogs, Birds, and 80+ COCO object categories.</Overview>
+  <Overview>CritterCatcherAI v2.0 - Simplified animal detection using YOLO + CLIP. Create Animal Profiles, process Ring videos, review pending frames with multi-select UI, and optionally retrain models. Clean workflow: Profile → Process → Review → Confirm/Reject.</Overview>
   <Category>MediaApp:Video Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ahazii/CritterCatcherAI/master/my-CritterCatcherAI.xml</TemplateURL>
@@ -26,7 +26,7 @@
   <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, ERROR" Type="Variable" Display="always" Required="false" Mask="false">INFO</Config>
   <Config Name="Timezone" Target="TZ" Default="Europe/London" Mode="" Description="Container timezone (e.g., Europe/London, America/New_York, UTC). Important for correct timestamps" Type="Variable" Display="always" Required="false" Mask="false">Europe/London</Config>
   <Config Name="Web Interface Port" Target="8080" Default="8080" Mode="tcp" Description="Web GUI port - Animal Profiles, Review Images, Model Management" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="AppData Config" Target="/config" Default="/mnt/user/appdata/crittercatcher" Mode="rw" Description="Configuration files, taxonomy tree, application settings" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher</Config>
-  <Config Name="Data Directory" Target="/data" Default="/mnt/user/data/CritterCatcher" Mode="rw" Description="Working data directory - stores profiles, review frames, training data, downloads, sorted videos" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/CritterCatcher</Config>
+  <Config Name="AppData Config" Target="/config" Default="/mnt/user/appdata/crittercatcher" Mode="rw" Description="Configuration files and application settings (config.yaml, logs)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/crittercatcher</Config>
+  <Config Name="Data Directory" Target="/data" Default="/mnt/user/data/CritterCatcher" Mode="rw" Description="Working data directory - animal profiles, review frames, training data, models, downloads, sorted videos" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/CritterCatcher</Config>
   <TailscaleStateDir/>
 </Container>
