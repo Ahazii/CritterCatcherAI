@@ -62,62 +62,7 @@ detection:
   # "people" = prioritize face recognition over object detection
   # "objects" = prioritize object detection over face recognition
   priority: people
-  
-  # Discovery mode: automatically find objects not in your tracked list
-  # Note: YOLO only detects its 80 COCO classes, but discovery mode will alert you
-  # to other COCO objects appearing in videos (e.g., horse, cow, bear, etc.)
-  discovery_mode: true
-  
-  # Confidence threshold for discovering new objects (higher than regular threshold)
-  discovery_threshold: 0.40
-  
-  # Objects to ignore (blacklist) - YOLO COCO classes to not track
-  ignored_labels:
-    - potted plant
-    - chair
-    - bench
-    - traffic light
-  
-  # Discovered objects pending user confirmation (managed by system)
-  discovered_labels: []
 
-# Specialized species detection (Stage 2 - fine-grained classification)
-specialized_detection:
-  # Enable specialized species classifiers
-  enabled: false  # Set to true once models are trained
-  
-  # Target species definitions
-  species: []
-    # Example configuration (uncomment and modify when ready):
-    # - name: hedgehog
-    #   parent_yolo_class: [cat, dog]  # YOLO classes to check
-    #   model_path: /data/models/hedgehog_classifier.pt
-    #   confidence_threshold: 0.75
-    # 
-    # - name: finch
-    #   parent_yolo_class: [bird]
-    #   model_path: /data/models/finch_classifier.pt
-    #   confidence_threshold: 0.70
-    #   sub_classifiers:
-    #     - name: goldfinch
-    #       model_path: /data/models/goldfinch_classifier.pt
-    #       confidence_threshold: 0.65
-  
-  # Clip extraction settings
-  clip_extraction:
-    enabled: false  # Enable clip extraction mode
-    padding_seconds: 10  # Seconds before/after detection to include
-    merge_overlapping: true  # Merge nearby detections into one clip
-    auto_delete_non_matches: false  # DELETE non-matching videos (CAUTION!)
-    output_path: /data/clips  # Extracted clips for Plex
-  
-  # Training settings
-  training:
-    data_augmentation: true
-    validation_split: 0.2
-    epochs: 50
-    batch_size: 32
-    learning_rate: 0.001
 
 # Scheduler settings
 scheduler:
