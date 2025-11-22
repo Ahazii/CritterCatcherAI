@@ -2180,6 +2180,220 @@ async def trigger_retrain(profile_id: str, request: dict = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============= Video-Based Review Endpoints =============
+
+@app.get("/api/review/categories")
+async def list_review_categories():
+    """List all YOLO categories with pending videos in review."""
+    try:
+        review_base = Path("/data/review")
+        if not review_base.exists():
+            return {"status": "success", "categories": []}
+        
+        categories = []
+        for category_dir in review_base.iterdir():
+            if category_dir.is_dir():
+                # Count videos in this category
+                video_count = len(list(category_dir.glob("*.mp4")))
+                if video_count > 0:
+                    categories.append({
+                        "name": category_dir.name,
+                        "video_count": video_count
+                    })
+        
+        # Sort by name
+        categories.sort(key=lambda x: x["name"])
+        
+        return {
+            "status": "success",
+            "categories": categories,
+            "total_videos": sum(c["video_count"] for c in categories)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list review categories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/review/categories/{category}/videos")
+async def list_category_videos(category: str):
+    """List all videos in a review category."""
+    try:
+        category_dir = Path("/data/review") / category
+        if not category_dir.exists():
+            return {"status": "success", "videos": []}
+        
+        videos = []
+        for video_file in sorted(category_dir.glob("*.mp4")):
+            # Try to load metadata
+            metadata = {}
+            metadata_file = video_file.with_suffix(video_file.suffix + ".json")
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                except Exception as e:
+                    logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
+            
+            videos.append({
+                "filename": video_file.name,
+                "category": category,
+                "detected_objects": metadata.get("detected_objects", {}),
+                "timestamp": metadata.get("timestamp", ""),
+                "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+            })
+        
+        return {
+            "status": "success",
+            "category": category,
+            "video_count": len(videos),
+            "videos": videos
+        }
+    except Exception as e:
+        logger.error(f"Failed to list category videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/review/video/{category}/{filename}")
+async def serve_review_video(category: str, filename: str):
+    """Serve a video file from review folder."""
+    try:
+        video_path = Path("/data/review") / category / filename
+        
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
+        
+        # Return video file
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/assign-to-profile")
+async def assign_videos_to_profile(request: dict):
+    """Assign videos from review to an animal profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        category = request.get('category')
+        filenames = request.get('filenames', [])
+        profile_id = request.get('profile_id')
+        
+        if not category or not filenames or not profile_id:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Move videos from review to profile's training folder
+        import shutil
+        results = {"moved": [], "failed": []}
+        
+        for filename in filenames:
+            try:
+                source_path = Path("/data/review") / category / filename
+                if not source_path.exists():
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+                    continue
+                
+                # Create destination directory
+                dest_dir = Path("/data/training") / profile_id / "confirmed"
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                
+                dest_path = dest_dir / filename
+                
+                # Move video
+                shutil.move(str(source_path), str(dest_path))
+                
+                # Move metadata if exists
+                metadata_source = source_path.with_suffix(source_path.suffix + ".json")
+                if metadata_source.exists():
+                    metadata_dest = dest_path.with_suffix(dest_path.suffix + ".json")
+                    shutil.move(str(metadata_source), str(metadata_dest))
+                
+                results["moved"].append(filename)
+                
+                # Increment confirmed count
+                profile.confirmed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to move {filename}: {e}")
+                results["failed"].append({"filename": filename, "error": str(e)})
+        
+        # Save updated profile
+        animal_profile_manager._save_profile(profile)
+        
+        logger.info(f"Assigned {len(results['moved'])} videos to {profile.name}")
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "moved_count": len(results["moved"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Assigned {len(results['moved'])} videos to '{profile.name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to assign videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/delete-videos")
+async def delete_review_videos(request: dict):
+    """Delete videos from review (reject without saving)."""
+    try:
+        category = request.get('category')
+        filenames = request.get('filenames', [])
+        
+        if not category or not filenames:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        results = {"deleted": [], "failed": []}
+        
+        for filename in filenames:
+            try:
+                video_path = Path("/data/review") / category / filename
+                if video_path.exists():
+                    video_path.unlink()
+                    results["deleted"].append(filename)
+                    
+                    # Delete metadata if exists
+                    metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                    if metadata_path.exists():
+                        metadata_path.unlink()
+                else:
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+            except Exception as e:
+                logger.error(f"Failed to delete {filename}: {e}")
+                results["failed"].append({"filename": filename, "error": str(e)})
+        
+        logger.info(f"Deleted {len(results['deleted'])} videos from review")
+        
+        return {
+            "status": "success",
+            "deleted_count": len(results["deleted"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Deleted {len(results['deleted'])} videos"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def start_web_server(host: str = "0.0.0.0", port: int = None):
     """Start the web server."""
     if port is None:
