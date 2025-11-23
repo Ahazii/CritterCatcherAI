@@ -109,7 +109,7 @@ class ObjectDetector:
         logger.debug(f"Extracted {len(frames)} frames from {video_path.name}")
         return frames
     
-    def detect_objects_in_frame(self, frame: np.ndarray, video_name: str = None, frame_idx: int = None, save_detections: bool = True) -> Dict[str, float]:
+    def detect_objects_in_frame(self, frame: np.ndarray, video_name: str = None, frame_idx: int = None, save_detections: bool = True, return_bboxes: bool = False) -> Dict[str, float]:
         """
         Detect objects in a single frame.
         
@@ -118,9 +118,10 @@ class ObjectDetector:
             video_name: Name of the video being processed
             frame_idx: Frame index in the video
             save_detections: Whether to save detected object images
+            return_bboxes: Whether to return bbox coordinates
             
         Returns:
-            Dictionary mapping label to confidence score
+            Dictionary mapping label to confidence score (or to dict with confidence and bbox if return_bboxes=True)
         """
         # Run YOLO inference
         results = self.model(frame, verbose=False)
@@ -217,21 +218,29 @@ class ObjectDetector:
             
             # Process focused labels - keep highest confidence
             if is_focused and confidence >= self.confidence_threshold:
-                if label not in detections or confidence > detections[label]:
-                    detections[label] = confidence
+                if return_bboxes:
+                    if label not in detections or confidence > detections[label].get('confidence', 0):
+                        detections[label] = {
+                            'confidence': confidence,
+                            'bbox': {'x1': bbox[0], 'y1': bbox[1], 'x2': bbox[2], 'y2': bbox[3]}
+                        }
+                else:
+                    if label not in detections or confidence > detections[label]:
+                        detections[label] = confidence
         
         return detections
     
-    def detect_objects_in_video(self, video_path: Path, num_frames: int = None) -> Dict[str, float]:
+    def detect_objects_in_video(self, video_path: Path, num_frames: int = None, return_bboxes: bool = False) -> Dict[str, float]:
         """
         Detect objects across entire video.
         
         Args:
             video_path: Path to video file
             num_frames: Number of frames to analyze (defaults to instance setting)
+            return_bboxes: Whether to return bbox coordinates
             
         Returns:
-            Dictionary mapping label to max confidence score across all frames
+            Dictionary mapping label to max confidence score (or to dict with confidence and bbox if return_bboxes=True)
         """
         if num_frames is None:
             num_frames = self.num_frames
@@ -252,14 +261,20 @@ class ObjectDetector:
                 frame,
                 video_name=video_path.name,
                 frame_idx=i,
-                save_detections=True
+                save_detections=True,
+                return_bboxes=return_bboxes
             )
             logger.debug(f"Frame {i+1}/{len(frames)}: {frame_detections}")
             
             # Keep the maximum confidence for each label
-            for label, confidence in frame_detections.items():
-                if label not in all_detections or confidence > all_detections[label]:
-                    all_detections[label] = confidence
+            if return_bboxes:
+                for label, data in frame_detections.items():
+                    if label not in all_detections or data['confidence'] > all_detections[label]['confidence']:
+                        all_detections[label] = data
+            else:
+                for label, confidence in frame_detections.items():
+                    if label not in all_detections or confidence > all_detections[label]:
+                        all_detections[label] = confidence
         
         logger.info(f"Detections for {video_path.name}: {all_detections}")
         return all_detections

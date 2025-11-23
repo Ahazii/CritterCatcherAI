@@ -537,7 +537,11 @@
             metadata.className = 'video-metadata';
             
             const detections = Object.entries(video.detected_objects || {})
-                .map(([label, conf]) => `${label}: ${(conf * 100).toFixed(0)}%`)
+                .map(([label, data]) => {
+                    // Handle both old format (just confidence) and new format (with bbox)
+                    const conf = typeof data === 'number' ? data : data.confidence;
+                    return `${label}: ${(conf * 100).toFixed(0)}%`;
+                })
                 .join(', ');
             
             metadata.innerHTML = `
@@ -566,8 +570,6 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Draw a placeholder box in center (since we don't have actual bbox coordinates)
-            // In real implementation, this would use actual YOLO bbox data
             const colors = {
                 'bird': '#48bb78',
                 'cat': '#ed8936',
@@ -576,19 +578,62 @@
                 'default': '#63b3ed'
             };
             
-            let yOffset = 20;
-            Object.entries(detectedObjects).forEach(([label, confidence]) => {
+            // Draw bounding boxes and labels
+            Object.entries(detectedObjects).forEach(([label, data]) => {
                 const color = colors[label] || colors['default'];
                 
-                // Draw label with confidence
-                ctx.fillStyle = color;
-                ctx.fillRect(10, yOffset, 120, 25);
+                // Handle both old format (just confidence) and new format (with bbox)
+                let confidence, bbox;
+                if (typeof data === 'number') {
+                    // Old format: {"label": 0.95}
+                    confidence = data;
+                    bbox = null;
+                } else {
+                    // New format: {"label": {"confidence": 0.95, "bbox": {...}}}
+                    confidence = data.confidence || data;
+                    bbox = data.bbox;
+                }
                 
-                ctx.fillStyle = 'white';
-                ctx.font = 'bold 12px sans-serif';
-                ctx.fillText(`${label} ${(confidence * 100).toFixed(0)}%`, 15, yOffset + 17);
-                
-                yOffset += 30;
+                if (bbox) {
+                    // Draw actual bounding box rectangle
+                    // Scale bbox coordinates to canvas size (280x200)
+                    // Assuming bbox is from a frame extracted at video resolution
+                    const scaleX = canvas.width / 1920;  // Approximate, will be scaled by video
+                    const scaleY = canvas.height / 1080;
+                    
+                    const x1 = bbox.x1 * scaleX;
+                    const y1 = bbox.y1 * scaleY;
+                    const x2 = bbox.x2 * scaleX;
+                    const y2 = bbox.y2 * scaleY;
+                    
+                    // Draw rectangle
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                    
+                    // Draw label background
+                    const labelText = `${label} ${(confidence * 100).toFixed(0)}%`;
+                    ctx.font = 'bold 12px sans-serif';
+                    const metrics = ctx.measureText(labelText);
+                    const textWidth = metrics.width;
+                    const textHeight = 16;
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x1, y1 - textHeight - 4, textWidth + 8, textHeight + 4);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(labelText, x1 + 4, y1 - 6);
+                } else {
+                    // Fallback: draw label badges (old style)
+                    let yOffset = 20 + (Object.keys(detectedObjects).indexOf(label) * 30);
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(10, yOffset, 120, 25);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText(`${label} ${(confidence * 100).toFixed(0)}%`, 15, yOffset + 17);
+                }
             });
         }
 

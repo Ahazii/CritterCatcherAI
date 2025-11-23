@@ -225,9 +225,9 @@ def process_videos(config: dict):
             except:
                 pass
             
-            # V2: Run standard YOLO detection
+            # V2: Run standard YOLO detection with bbox coordinates
             logger.debug("Running YOLO object detection")
-            detected_objects = object_detector.detect_objects_in_video(video_path)
+            detected_objects = object_detector.detect_objects_in_video(video_path, return_bboxes=True)
             
             # Run face recognition ONLY if enabled and conditions are met
             priority = detection_config.get('priority', 'objects')
@@ -257,7 +257,8 @@ def process_videos(config: dict):
             # Determine primary detection for review categorization
             review_category = "unknown"
             if detected_objects:
-                review_category = max(detected_objects, key=detected_objects.get)
+                # detected_objects now has format: {'label': {'confidence': float, 'bbox': {...}}}
+                review_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
             elif recognized_people:
                 review_category = f"people_{sorted(recognized_people)[0]}"
             
