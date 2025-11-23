@@ -248,14 +248,22 @@
             position: absolute;
             top: 10px;
             left: 10px;
-            width: 24px;
-            height: 24px;
-            background: rgba(255, 255, 255, 0.9);
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.95);
             border: 2px solid var(--accent-color);
-            border-radius: 4px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s ease;
+        }
+
+        .select-checkbox:hover {
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .video-card.selected .select-checkbox {
@@ -302,6 +310,24 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        /* Bounding Box Styles */
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            background: #000;
+        }
+
+        .bbox-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
         }
     </style>
 </head>
@@ -464,13 +490,41 @@
             card.className = 'video-card';
             card.dataset.filename = video.filename;
             
+            // Create video container with canvas overlay
+            const videoContainer = document.createElement('div');
+            videoContainer.className = 'video-container';
+            
             const videoElement = document.createElement('video');
             videoElement.src = `/api/review/video/${currentCategory}/${video.filename}`;
             videoElement.controls = true;
             videoElement.preload = 'metadata';
+            videoElement.style.width = '100%';
+            videoElement.style.height = '100%';
+            videoElement.style.objectFit = 'cover';
             
+            // Canvas for bounding boxes
+            const canvas = document.createElement('canvas');
+            canvas.className = 'bbox-canvas';
+            canvas.width = 280;
+            canvas.height = 200;
+            
+            // Draw bounding boxes when video loads metadata
+            videoElement.addEventListener('loadedmetadata', () => {
+                if (video.detected_objects && Object.keys(video.detected_objects).length > 0) {
+                    drawBoundingBoxes(canvas, video.detected_objects);
+                }
+            });
+            
+            videoContainer.appendChild(videoElement);
+            videoContainer.appendChild(canvas);
+            
+            // Checkbox with better click handling
             const checkbox = document.createElement('div');
             checkbox.className = 'select-checkbox';
+            checkbox.onclick = (e) => {
+                e.stopPropagation();
+                toggleSelection(video.filename);
+            };
             
             const info = document.createElement('div');
             info.className = 'video-info';
@@ -495,16 +549,47 @@
             info.appendChild(metadata);
             
             card.appendChild(checkbox);
-            card.appendChild(videoElement);
+            card.appendChild(videoContainer);
             card.appendChild(info);
             
+            // Card click handler (exclude video and checkbox)
             card.onclick = (e) => {
-                if (e.target.tagName !== 'VIDEO') {
+                if (e.target.tagName !== 'VIDEO' && !e.target.classList.contains('select-checkbox')) {
                     toggleSelection(video.filename);
                 }
             };
             
             return card;
+        }
+
+        function drawBoundingBoxes(canvas, detectedObjects) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw a placeholder box in center (since we don't have actual bbox coordinates)
+            // In real implementation, this would use actual YOLO bbox data
+            const colors = {
+                'bird': '#48bb78',
+                'cat': '#ed8936',
+                'dog': '#4299e1',
+                'person': '#f56565',
+                'default': '#63b3ed'
+            };
+            
+            let yOffset = 20;
+            Object.entries(detectedObjects).forEach(([label, confidence]) => {
+                const color = colors[label] || colors['default'];
+                
+                // Draw label with confidence
+                ctx.fillStyle = color;
+                ctx.fillRect(10, yOffset, 120, 25);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText(`${label} ${(confidence * 100).toFixed(0)}%`, 15, yOffset + 17);
+                
+                yOffset += 30;
+            });
         }
 
         function toggleSelection(filename) {

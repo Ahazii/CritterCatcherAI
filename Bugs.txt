@@ -1,0 +1,1 @@
+1: There are no bounding boxes to help me to know what has been identified in the video. 2:the checkbox in the top left of the video icons is not working well. 3:in the review section, person tab, how do i tell the system what face is being identified? (there are no profiles to assign them to) 4: the metrics and analytics do not seem to work well. 5:
