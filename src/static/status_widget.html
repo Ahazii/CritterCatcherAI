@@ -395,7 +395,8 @@ function updateStatusWidget() {
 }
 
 // Load tasks from storage and show widget if there are active tasks
-document.addEventListener('DOMContentLoaded', () => {
+// Execute immediately since this script loads dynamically after DOMContentLoaded
+(function() {
     // Load persisted tasks first
     loadTasksFromStorage();
     
@@ -409,5 +410,5 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusWidget();
         }
     }
-});
+})();
 </script>
