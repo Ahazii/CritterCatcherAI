@@ -2291,6 +2291,28 @@ async def serve_review_video(category: str, filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/review/image/{filename}")
+async def serve_face_image(filename: str):
+    """Serve a face image file from unassigned faces folder."""
+    try:
+        image_path = Path("/data/training/faces/unassigned") / filename
+        
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail=f"Image not found: {filename}")
+        
+        # Return image file
+        return FileResponse(
+            path=str(image_path),
+            media_type="image/jpeg",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/review/assign-to-profile")
 async def assign_videos_to_profile(request: dict):
     """Assign videos from review to an animal profile."""

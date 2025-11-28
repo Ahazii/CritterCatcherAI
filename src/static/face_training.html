@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Training - CritterCatcherAI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --danger-color: #f56565;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --accent-color: #63b3ed;
+            --accent-hover: #4299e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .logo img {
+            width: 40px;
+            height: 40px;
+        }
+
+        .logo-title {
+            color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #e53e3e;
+        }
+
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.875rem;
+        }
+
+        .controls {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .selection-info {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        input[type="text"] {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 1rem;
+            min-width: 200px;
+        }
+
+        select {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .face-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .face-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .face-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .face-card.selected {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.3);
+        }
+
+        .face-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: #000;
+        }
+
+        .face-info {
+            padding: 0.75rem;
+        }
+
+        .face-source {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            word-break: break-word;
+        }
+
+        .select-checkbox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 28px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid var(--accent-color);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s ease;
+        }
+
+        .select-checkbox:hover {
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .face-card.selected .select-checkbox {
+            background: var(--accent-color);
+        }
+
+        .select-checkbox::after {
+            content: '✓';
+            color: white;
+            font-weight: bold;
+            display: none;
+        }
+
+        .face-card.selected .select-checkbox::after {
+            display: block;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .info-banner {
+            background: #edf2f7;
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 6px;
+        }
+
+        [data-theme="dark"] .info-banner {
+            background: #2d3748;
+        }
+
+        .info-banner h3 {
+            margin-bottom: 0.5rem;
+            color: var(--accent-color);
+        }
+
+        .info-banner p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="logo">
+                <img src="/static/android-chrome-192x192.png" alt="Logo">
+                <div class="logo-title">Face Training</div>
+            </a>
+            <div class="header-actions">
+                <button class="btn btn-small" onclick="window.location.href='/'">← Back to Dashboard</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="info-banner">
+            <h3>👤 Face Training</h3>
+            <p>Assign face images to people. Once trained, the system will automatically recognize these people in future videos.</p>
+        </div>
+
+        <div class="controls" id="controls" style="display: none;">
+            <div class="control-group">
+                <span class="selection-info" id="selectionInfo">0 selected</span>
+                <button class="btn btn-small" onclick="selectAll()">Select All</button>
+                <button class="btn btn-small" onclick="deselectAll()">Deselect All</button>
+            </div>
+            <div class="control-group">
+                <label for="personInput">Person name:</label>
+                <input type="text" id="personInput" placeholder="Enter name or select existing" list="personList">
+                <datalist id="personList"></datalist>
+                <button class="btn btn-success btn-small" onclick="assignFaces()" id="assignBtn" disabled>✓ Assign to Person</button>
+                <button class="btn btn-danger btn-small" onclick="rejectFaces()" id="rejectBtn" disabled>✗ Reject</button>
+            </div>
+        </div>
+
+        <div id="faceGallery" class="face-gallery"></div>
+
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">✅</div>
+            <h3>No faces to assign</h3>
+            <p>Go to the Review tab and click "Confirm Person" on person videos to extract faces.</p>
+        </div>
+    </div>
+
+    <script>
+        let faces = [];
+        let selectedFaces = new Set();
+        let profiles = [];
+
+        async function init() {
+            await loadFaceProfiles();
+            await loadUnassignedFaces();
+        }
+
+        async function loadFaceProfiles() {
+            try {
+                const response = await fetch('/api/face-profiles');
+                const data = await response.json();
+                profiles = data.profiles || [];
+                
+                // Populate datalist with existing person names
+                const datalist = document.getElementById('personList');
+                datalist.innerHTML = '';
+                profiles.forEach(profile => {
+                    const option = document.createElement('option');
+                    option.value = profile.name;
+                    datalist.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load face profiles:', error);
+            }
+        }
+
+        async function loadUnassignedFaces() {
+            const gallery = document.getElementById('faceGallery');
+            const emptyState = document.getElementById('emptyState');
+            const controls = document.getElementById('controls');
+            
+            gallery.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading faces...</p></div>';
+            emptyState.style.display = 'none';
+            controls.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/faces/unassigned');
+                const data = await response.json();
+                faces = data.faces || [];
+                
+                gallery.innerHTML = '';
+                
+                if (faces.length === 0) {
+                    emptyState.style.display = 'block';
+                    return;
+                }
+                
+                controls.style.display = 'flex';
+                
+                faces.forEach(face => {
+                    const card = createFaceCard(face);
+                    gallery.appendChild(card);
+                });
+                
+                updateSelectionInfo();
+            } catch (error) {
+                console.error('Failed to load faces:', error);
+                gallery.innerHTML = '<div class="empty-state"><p>Failed to load faces</p></div>';
+            }
+        }
+
+        function createFaceCard(face) {
+            const card = document.createElement('div');
+            card.className = 'face-card';
+            card.dataset.filename = face.filename;
+            
+            const checkbox = document.createElement('div');
+            checkbox.className = 'select-checkbox';
+            checkbox.onclick = (e) => {
+                e.stopPropagation();
+                toggleSelection(face.filename);
+            };
+            
+            const img = document.createElement('img');
+            img.src = `/api/review/image/${face.filename}`;
+            img.alt = 'Face';
+            img.onerror = () => {
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ccc" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3ENo Image%3C/text%3E%3C/svg%3E';
+            };
+            
+            const info = document.createElement('div');
+            info.className = 'face-info';
+            
+            const source = document.createElement('div');
+            source.className = 'face-source';
+            source.textContent = `From: ${face.source_video}`;
+            
+            info.appendChild(source);
+            
+            card.appendChild(checkbox);
+            card.appendChild(img);
+            card.appendChild(info);
+            
+            card.onclick = (e) => {
+                if (e.target.tagName !== 'IMG' && !e.target.classList.contains('select-checkbox')) {
+                    toggleSelection(face.filename);
+                }
+            };
+            
+            return card;
+        }
+
+        function toggleSelection(filename) {
+            if (selectedFaces.has(filename)) {
+                selectedFaces.delete(filename);
+            } else {
+                selectedFaces.add(filename);
+            }
+            
+            const card = document.querySelector(`[data-filename="${filename}"]`);
+            if (card) {
+                card.classList.toggle('selected', selectedFaces.has(filename));
+            }
+            
+            updateSelectionInfo();
+        }
+
+        function selectAll() {
+            faces.forEach(face => selectedFaces.add(face.filename));
+            document.querySelectorAll('.face-card').forEach(card => card.classList.add('selected'));
+            updateSelectionInfo();
+        }
+
+        function deselectAll() {
+            selectedFaces.clear();
+            document.querySelectorAll('.face-card').forEach(card => card.classList.remove('selected'));
+            updateSelectionInfo();
+        }
+
+        function updateSelectionInfo() {
+            const count = selectedFaces.size;
+            document.getElementById('selectionInfo').textContent = `${count} of ${faces.length} selected`;
+            document.getElementById('assignBtn').disabled = count === 0;
+            document.getElementById('rejectBtn').disabled = count === 0;
+        }
+
+        async function assignFaces() {
+            const personName = document.getElementById('personInput').value.trim();
+            
+            if (!personName) {
+                alert('Please enter a person name');
+                return;
+            }
+            
+            if (selectedFaces.size === 0) {
+                alert('No faces selected');
+                return;
+            }
+            
+            const filenames = Array.from(selectedFaces);
+            
+            try {
+                const response = await fetch('/api/faces/assign', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        person_name: personName,
+                        filenames: filenames
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    alert(`✓ ${data.message}`);
+                    document.getElementById('personInput').value = '';
+                    await loadFaceProfiles();
+                    await loadUnassignedFaces();
+                } else {
+                    alert('Failed to assign faces');
+                }
+            } catch (error) {
+                console.error('Failed to assign faces:', error);
+                alert('Error assigning faces');
+            }
+        }
+
+        async function rejectFaces() {
+            if (selectedFaces.size === 0) {
+                alert('No faces selected');
+                return;
+            }
+            
+            if (!confirm(`Reject ${selectedFaces.size} face(s)? These will be permanently deleted.`)) {
+                return;
+            }
+            
+            const filenames = Array.from(selectedFaces);
+            
+            try {
+                const response = await fetch('/api/faces/reject', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        filenames: filenames
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    alert(`✓ Rejected ${data.deleted_count} face(s)`);
+                    await loadUnassignedFaces();
+                } else {
+                    alert('Failed to reject faces');
+                }
+            } catch (error) {
+                console.error('Failed to reject faces:', error);
+                alert('Error rejecting faces');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
