@@ -390,16 +390,40 @@
     </div>
 
     <!-- Status Widget (embedded for non-blocking progress) -->
-    <iframe src="/static/status_widget.html" style="display:none;"></iframe>
     <div id="statusWidgetContainer"></div>
     
     <script>
-        // Load status widget component
+        // Load status widget component and make functions globally available
+        let widgetLoaded = false;
+        
         fetch('/static/status_widget.html')
             .then(response => response.text())
             .then(html => {
                 document.getElementById('statusWidgetContainer').innerHTML = html;
+                widgetLoaded = true;
+            })
+            .catch(error => {
+                console.error('Failed to load status widget:', error);
             });
+        
+        // Fallback function if widget not loaded yet
+        function startTaskTracking(taskId, taskName) {
+            if (window.startTaskTracking && window.startTaskTracking !== startTaskTracking) {
+                // Widget loaded, use its function
+                window.startTaskTracking(taskId, taskName);
+            } else {
+                // Widget not loaded yet, wait and retry
+                console.log('Waiting for status widget to load...');
+                setTimeout(() => {
+                    if (window.startTaskTracking && window.startTaskTracking !== startTaskTracking) {
+                        window.startTaskTracking(taskId, taskName);
+                    } else {
+                        console.error('Status widget failed to load');
+                        alert('Task started in background (ID: ' + taskId + ')');
+                    }
+                }, 500);
+            }
+        }
     </script>
 
     <script>
