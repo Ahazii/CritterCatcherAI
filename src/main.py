@@ -17,6 +17,7 @@ from video_sorter import VideoSorter
 from face_recognizer import FaceRecognizer
 from animal_profile import AnimalProfileManager
 from clip_vit_classifier import CLIPVitClassifier
+from face_profile import FaceProfileManager
 import cv2
 import tempfile
 
@@ -98,6 +99,7 @@ def process_videos(config: dict):
     
     # Initialize Animal Profile Manager and CLIP Classifier for Stage 2
     profile_manager = AnimalProfileManager(Path("/data"))
+    face_profile_manager = FaceProfileManager(Path("/data"))
     clip_classifier = None  # Lazy load when needed
     
     # V2: Object detection now happens in Animal Profile processing
@@ -250,12 +252,31 @@ def process_videos(config: dict):
             logger.debug("Running YOLO object detection (Stage 1)")
             detected_objects = object_detector.detect_objects_in_video(video_path, return_bboxes=True)
             
-            # Run face recognition ONLY if enabled and conditions are met
-            priority = detection_config.get('priority', 'objects')
+            # Check if Face Recognition routing should be triggered
+            # Conditions:
+            # 1. YOLO detected "person"
+            # 2. An Animal Profile with "person" in yolo_categories is enabled
+            # 3. Face Recognition is enabled in config
             face_recognition_enabled = config.get('face_recognition', {}).get('enabled', False)
+            should_run_face_recognition = False
             recognized_people = set()
             
-            if face_recognition_enabled and (priority == "people" or not detected_objects):
+            if face_recognition_enabled and detected_objects and 'person' in detected_objects:
+                # Check if any enabled Animal Profile includes "person" category
+                try:
+                    all_profiles = profile_manager.list_profiles()
+                    person_profile_exists = any(
+                        p.enabled and 'person' in p.yolo_categories
+                        for p in all_profiles
+                    )
+                    
+                    if person_profile_exists:
+                        should_run_face_recognition = True
+                        logger.info("Face Recognition routing triggered (person detected + profile enabled + FR enabled)")
+                except Exception as e:
+                    logger.error(f"Error checking Animal Profiles for face recognition: {e}")
+            
+            if should_run_face_recognition:
                 # Update progress: face recognition
                 try:
                     from webapp import app_state
@@ -264,6 +285,7 @@ def process_videos(config: dict):
                 except:
                     pass
                 
+                logger.debug("Running face recognition")
                 recognized_people = face_recognizer.recognize_faces_in_video(video_path)
             
             # CLIP Stage 2: Check for matching Animal Profiles
