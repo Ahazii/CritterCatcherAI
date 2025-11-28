@@ -13,8 +13,12 @@ import yaml
 
 from ring_downloader import RingDownloader
 from object_detector import ObjectDetector
-from face_recognizer import FaceRecognizer
 from video_sorter import VideoSorter
+from face_recognizer import FaceRecognizer
+from animal_profile import AnimalProfileManager
+from clip_vit_classifier import CLIPVitClassifier
+import cv2
+import tempfile
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -91,6 +95,10 @@ def process_videos(config: dict):
     
     ring_downloader = RingDownloader(download_path)
     video_sorter = VideoSorter(sorted_path)
+    
+    # Initialize Animal Profile Manager and CLIP Classifier for Stage 2
+    profile_manager = AnimalProfileManager(Path("/data"))
+    clip_classifier = None  # Lazy load when needed
     
     # V2: Object detection now happens in Animal Profile processing
     # Initialize object detector with configured labels (for backward compatibility)
@@ -239,7 +247,7 @@ def process_videos(config: dict):
                 pass
             
             # V2: Run standard YOLO detection with bbox coordinates
-            logger.debug("Running YOLO object detection")
+            logger.debug("Running YOLO object detection (Stage 1)")
             detected_objects = object_detector.detect_objects_in_video(video_path, return_bboxes=True)
             
             # Run face recognition ONLY if enabled and conditions are met
@@ -258,65 +266,204 @@ def process_videos(config: dict):
                 
                 recognized_people = face_recognizer.recognize_faces_in_video(video_path)
             
-            # Update progress: moving to review
+            # CLIP Stage 2: Check for matching Animal Profiles
+            clip_stage2_result = None
+            final_destination = None
+            
+            if detected_objects:
+                # Get YOLO categories that were detected
+                detected_categories = list(detected_objects.keys())
+                logger.debug(f"YOLO detected categories: {detected_categories}")
+                
+                # Load all enabled Animal Profiles
+                try:
+                    all_profiles = profile_manager.list_profiles()
+                    enabled_profiles = [p for p in all_profiles if p.enabled]
+                    
+                    # Find profiles with matching YOLO categories
+                    matching_profiles = []
+                    for profile in enabled_profiles:
+                        # Check if any detected category matches profile's YOLO categories
+                        if any(cat in profile.yolo_categories for cat in detected_categories):
+                            matching_profiles.append(profile)
+                    
+                    if matching_profiles:
+                        logger.info(f"Found {len(matching_profiles)} matching profiles: {[p.name for p in matching_profiles]}")
+                        
+                        # Update progress: CLIP Stage 2
+                        try:
+                            from webapp import app_state
+                            app_state["processing_progress"]["current_step"] = f"Running CLIP Stage 2 for {video_path.name}..."
+                            app_state["processing_progress"]["phase"] = "clip_classification"
+                        except:
+                            pass
+                        
+                        # Lazy load CLIP classifier
+                        if clip_classifier is None:
+                            logger.info("Initializing CLIP classifier for Stage 2")
+                            clip_classifier = CLIPVitClassifier()
+                        
+                        # Extract frames from video for CLIP analysis
+                        temp_dir = None
+                        try:
+                            temp_dir = tempfile.mkdtemp(prefix="clip_stage2_")
+                            logger.debug(f"Extracting frames to {temp_dir}")
+                            
+                            # Extract frames (1 fps, max 10 frames)
+                            cap = cv2.VideoCapture(str(video_path))
+                            fps = cap.get(cv2.CAP_PROP_FPS)
+                            frame_interval = int(fps) if fps > 0 else 30
+                            max_frames = 10
+                            
+                            frame_paths = []
+                            frame_count = 0
+                            extracted_count = 0
+                            
+                            while extracted_count < max_frames:
+                                ret, frame = cap.read()
+                                if not ret:
+                                    break
+                                
+                                if frame_count % frame_interval == 0:
+                                    frame_path = Path(temp_dir) / f"frame_{extracted_count:04d}.jpg"
+                                    cv2.imwrite(str(frame_path), frame)
+                                    frame_paths.append(str(frame_path))
+                                    extracted_count += 1
+                                
+                                frame_count += 1
+                            
+                            cap.release()
+                            logger.info(f"Extracted {len(frame_paths)} frames for CLIP analysis")
+                            
+                            # Run CLIP for each matching profile
+                            profile_results = []
+                            for profile in matching_profiles:
+                                logger.debug(f"Running CLIP for profile: {profile.name} ({profile.text_description})")
+                                
+                                scores = clip_classifier.score_batch(frame_paths, profile.text_description)
+                                avg_confidence = sum(scores) / len(scores) if scores else 0.0
+                                
+                                profile_results.append({
+                                    "profile_id": profile.id,
+                                    "profile_name": profile.name,
+                                    "confidence": avg_confidence,
+                                    "threshold": profile.confidence_threshold,
+                                    "auto_approval_enabled": profile.auto_approval_enabled
+                                })
+                                
+                                logger.info(f"CLIP result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
+                            
+                            # Select profile with highest confidence
+                            if profile_results:
+                                best_result = max(profile_results, key=lambda x: x['confidence'])
+                                
+                                clip_stage2_result = {
+                                    "matched_profiles": [p.id for p in matching_profiles],
+                                    "clip_results": profile_results,
+                                    "selected_profile": best_result['profile_id'],
+                                    "final_confidence": best_result['confidence'],
+                                    "auto_approved": False
+                                }
+                                
+                                # Determine final destination
+                                if best_result['confidence'] >= best_result['threshold']:
+                                    if best_result['auto_approval_enabled']:
+                                        # High confidence + auto-approval -> sorted
+                                        final_destination = Path("/data/sorted") / best_result['profile_id']
+                                        clip_stage2_result['auto_approved'] = True
+                                        logger.info(f"CLIP Stage 2: Auto-approving to sorted/{best_result['profile_name']}")
+                                    else:
+                                        # High confidence but no auto-approval -> review
+                                        final_destination = Path("/data/review") / best_result['profile_id']
+                                        logger.info(f"CLIP Stage 2: Sending to review/{best_result['profile_name']} (auto-approval disabled)")
+                                else:
+                                    # Below threshold -> review
+                                    final_destination = Path("/data/review") / best_result['profile_id']
+                                    logger.info(f"CLIP Stage 2: Below threshold, sending to review/{best_result['profile_name']}")
+                        
+                        except Exception as clip_err:
+                            logger.error(f"CLIP Stage 2 failed: {clip_err}", exc_info=True)
+                            # Fall back to YOLO-only workflow
+                        
+                        finally:
+                            # Clean up temp frames
+                            if temp_dir and Path(temp_dir).exists():
+                                import shutil
+                                try:
+                                    shutil.rmtree(temp_dir)
+                                    logger.debug(f"Cleaned up temp directory: {temp_dir}")
+                                except Exception as cleanup_err:
+                                    logger.warning(f"Failed to cleanup temp directory: {cleanup_err}")
+                    
+                    else:
+                        logger.debug("No matching Animal Profiles found for detected categories")
+                
+                except Exception as profile_err:
+                    logger.error(f"Error checking Animal Profiles: {profile_err}", exc_info=True)
+            
+            # Update progress: moving to destination
             try:
                 from webapp import app_state
-                app_state["processing_progress"]["current_step"] = f"Moving {video_path.name} to review..."
-                app_state["processing_progress"]["phase"] = "review"
+                app_state["processing_progress"]["current_step"] = f"Moving {video_path.name} to destination..."
+                app_state["processing_progress"]["phase"] = "moving"
             except:
                 pass
             
-            # V2 Review Workflow: Move videos to review folder with metadata
-            # Determine primary detection for review categorization
-            review_category = "unknown"
-            if detected_objects:
-                # detected_objects now has format: {'label': {'confidence': float, 'bbox': {...}}}
-                review_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
-            elif recognized_people:
-                review_category = f"people_{sorted(recognized_people)[0]}"
+            # Determine final destination if not set by CLIP Stage 2
+            if final_destination is None:
+                # Fall back to YOLO-only review workflow
+                review_category = "unknown"
+                if detected_objects:
+                    review_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
+                elif recognized_people:
+                    review_category = f"people_{sorted(recognized_people)[0]}"
+                
+                final_destination = Path("/data/review") / review_category
             
-            # Create review directory for this category
-            review_dir = Path("/data/review") / review_category
-            review_dir.mkdir(parents=True, exist_ok=True)
+            # Create destination directory
+            final_destination.mkdir(parents=True, exist_ok=True)
             
-            # Move video to review
-            review_path = review_dir / video_path.name
-            if review_path.exists():
+            # Move video to destination
+            dest_path = final_destination / video_path.name
+            if dest_path.exists():
                 # Handle duplicates
                 counter = 1
-                while review_path.exists():
-                    review_path = review_dir / f"{video_path.stem}_{counter}{video_path.suffix}"
+                while dest_path.exists():
+                    dest_path = final_destination / f"{video_path.stem}_{counter}{video_path.suffix}"
                     counter += 1
             
             import shutil
-            shutil.move(str(video_path), str(review_path))
+            shutil.move(str(video_path), str(dest_path))
             
             # Update download tracker status to 'processed'
-            # Extract event ID from filename if possible
             try:
-                # Filename format: {device_name}_{timestamp}_{event_id}.mp4
                 parts = video_path.stem.split('_')
                 if len(parts) >= 3:
                     event_id = parts[-1]
                     ring_downloader.download_tracker.update_status(
-                        event_id, 'processed', str(review_path)
+                        event_id, 'processed', str(dest_path)
                     )
             except Exception as track_err:
                 logger.debug(f"Could not update download tracker: {track_err}")
             
-            # Save detection metadata alongside video
+            # Save metadata alongside video
             metadata = {
                 "detected_objects": detected_objects if detected_objects else {},
                 "recognized_people": list(recognized_people) if recognized_people else [],
                 "timestamp": datetime.now().isoformat(),
                 "video_name": video_path.name,
-                "category": review_category
+                "category": final_destination.name
             }
-            metadata_path = review_path.with_suffix(review_path.suffix + ".json")
+            
+            # Add CLIP Stage 2 results if available
+            if clip_stage2_result:
+                metadata["clip_stage2"] = clip_stage2_result
+            
+            metadata_path = dest_path.with_suffix(dest_path.suffix + ".json")
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
             
-            logger.info(f"Video moved to review: {review_path} (category: {review_category})")
+            logger.info(f"Video moved to: {dest_path}")
             
         except Exception as e:
             logger.error(f"Failed to process video {video_path.name}: {e}", exc_info=True)
