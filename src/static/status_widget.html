@@ -205,9 +205,66 @@
 </div>
 
 <script>
-// Global task tracking
+// Global task tracking with persistence
 window.activeTasks = new Map();
 window.pollIntervals = new Map();
+
+// Load tasks from sessionStorage on page load
+function loadTasksFromStorage() {
+    try {
+        const stored = sessionStorage.getItem('activeTasks');
+        if (stored) {
+            const tasks = JSON.parse(stored);
+            tasks.forEach(task => {
+                window.activeTasks.set(task.id, {
+                    name: task.name,
+                    status: task.status,
+                    progress: task.progress,
+                    message: task.message,
+                    details: task.details,
+                    error: task.error
+                });
+                // Resume polling for active tasks
+                if (task.status === 'running' || task.status === 'pending') {
+                    startPolling(task.id);
+                }
+            });
+            console.log(`Restored ${tasks.length} task(s) from storage`);
+        }
+    } catch (error) {
+        console.error('Failed to load tasks from storage:', error);
+    }
+}
+
+// Save tasks to sessionStorage
+function saveTasksToStorage() {
+    try {
+        const tasks = Array.from(window.activeTasks.entries()).map(([id, task]) => ({
+            id,
+            name: task.name,
+            status: task.status,
+            progress: task.progress,
+            message: task.message,
+            details: task.details,
+            error: task.error
+        }));
+        sessionStorage.setItem('activeTasks', JSON.stringify(tasks));
+    } catch (error) {
+        console.error('Failed to save tasks to storage:', error);
+    }
+}
+
+// Start polling for a task
+function startPolling(taskId) {
+    // Don't start if already polling
+    if (window.pollIntervals.has(taskId)) return;
+    
+    const pollInterval = setInterval(() => {
+        pollTaskProgress(taskId);
+    }, 500);
+    
+    window.pollIntervals.set(taskId, pollInterval);
+}
 
 function showStatusWidget() {
     document.getElementById('statusWidget').style.display = 'block';
@@ -244,15 +301,14 @@ function startTaskTracking(taskId, taskName = "Processing") {
         details: ''
     });
     
+    // Save to sessionStorage for cross-page persistence
+    saveTasksToStorage();
+    
     // Update UI
     updateStatusWidget();
     
-    // Start polling for this task
-    const pollInterval = setInterval(() => {
-        pollTaskProgress(taskId);
-    }, 500);
-    
-    window.pollIntervals.set(taskId, pollInterval);
+    // Start polling
+    startPolling(taskId);
 }
 
 async function pollTaskProgress(taskId) {
@@ -269,6 +325,9 @@ async function pollTaskProgress(taskId) {
             task.details = data.details || '';
             task.error = data.error;
             
+            // Save updated task state
+            saveTasksToStorage();
+            
             updateStatusWidget();
             
             // If completed or failed, stop polling after a delay
@@ -279,6 +338,7 @@ async function pollTaskProgress(taskId) {
                 // Remove from active tasks after 5 seconds
                 setTimeout(() => {
                     window.activeTasks.delete(taskId);
+                    saveTasksToStorage(); // Update storage after removal
                     updateStatusWidget();
                     
                     // Hide indicator if no more active tasks
@@ -334,10 +394,20 @@ function updateStatusWidget() {
     }).join('');
 }
 
-// Auto-show indicator if there are active tasks on page load
+// Load tasks from storage and show widget if there are active tasks
 document.addEventListener('DOMContentLoaded', () => {
+    // Load persisted tasks first
+    loadTasksFromStorage();
+    
+    // Show widget/indicator if there are active tasks
     if (window.activeTasks.size > 0) {
-        document.getElementById('statusWidgetIndicator').style.display = 'block';
+        const hasActiveTasks = Array.from(window.activeTasks.values())
+            .some(t => t.status === 'running' || t.status === 'pending');
+        
+        if (hasActiveTasks) {
+            document.getElementById('statusWidgetIndicator').style.display = 'block';
+            updateStatusWidget();
+        }
     }
 });
 </script>
