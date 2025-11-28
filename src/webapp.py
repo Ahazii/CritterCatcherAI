@@ -646,8 +646,13 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
                 return
             
             # Download all videos
-            downloaded = rd.download_all_videos(hours=hours, skip_existing=True)
-            logger.info(f"Download All Complete: {len(downloaded)} new videos downloaded")
+            stats = rd.download_all_videos(hours=hours, skip_existing=True)
+            logger.info(
+                f"Download All Complete: {stats['new_downloads']} new, "
+                f"{stats['already_downloaded']} already downloaded, "
+                f"{stats['unavailable']} unavailable (404), "
+                f"{stats['failed']} failed"
+            )
             
         except Exception as e:
             logger.error(f"Download all failed: {e}", exc_info=True)

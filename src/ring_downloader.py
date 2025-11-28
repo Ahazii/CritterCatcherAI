@@ -16,6 +16,7 @@ from ring_doorbell.exceptions import Requires2FAError
 from oauthlib.oauth2 import MissingTokenError
 
 from datetime_utils import parse_timestamp, format_timestamp
+from download_tracker import DownloadTracker
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ class RingDownloader:
         self.token_file = Path(token_file)
         self.ring = None
         self.auth = None
+        self.download_tracker = DownloadTracker()
         
         logger.info(f"Initialized RingDownloader with download path: {download_path}")
     
@@ -367,6 +369,11 @@ class RingDownloader:
             except Exception as e:
                 error_str = str(e).lower()
                 
+                # Check if this is a 404 error (video not available)
+                if '404' in error_str or 'not found' in error_str:
+                    logger.warning(f"Video {video_id} not available (404) - motion event without recording")
+                    return False, "404_NOT_FOUND"
+                
                 # Check if this is a rate limit error (HTTP 429)
                 is_rate_limit = (
                     '429' in error_str or 
@@ -388,24 +395,25 @@ class RingDownloader:
         
         return False, "Max retries exceeded"
     
-    def download_all_videos(self, hours: Optional[int] = None, skip_existing: bool = True) -> List[Path]:
+    def download_all_videos(self, hours: Optional[int] = None, skip_existing: bool = True) -> dict:
         """
         Download all available videos from Ring, optionally filtered by time.
-        This ignores the last_processed.json tracking.
+        Uses download tracker to prevent duplicate downloads.
         
         Args:
             hours: Number of hours to look back (None = all available)
-            skip_existing: If True, skip videos that already exist on disk
+            skip_existing: If True, skip videos that already exist on disk or in database
             
         Returns:
-            List of downloaded video file paths
+            dict: Statistics with keys: new_downloads, already_downloaded, unavailable, failed
         """
         if not self.ring:
             logger.error("Not authenticated with Ring")
-            return []
+            return {'new_downloads': 0, 'already_downloaded': 0, 'unavailable': 0, 'failed': 0}
         
         downloaded_files = []
-        skipped_files = []
+        already_downloaded_count = 0
+        unavailable_count = 0
         failed_files = []
         rate_limited_count = 0
         devices = self.get_devices()
@@ -444,6 +452,14 @@ class RingDownloader:
                     
                     # Get video info
                     video_id = event['id']
+                    event_id_str = str(video_id)
+                    
+                    # Check if already downloaded in database
+                    if skip_existing and self.download_tracker.is_downloaded(event_id_str):
+                        logger.debug(f"Event {video_id} already in database - skipping")
+                        already_downloaded_count += 1
+                        continue
+                    
                     video_url = device.recording_url(video_id)
                     
                     if not video_url:
@@ -455,14 +471,38 @@ class RingDownloader:
                     filename = f"{device.name}_{timestamp_str}_{video_id}.mp4"
                     filepath = self.download_path / filename
                     
-                    # Check if already exists
+                    # Check if already exists on filesystem
                     if filepath.exists():
                         if skip_existing:
-                            logger.debug(f"Skipping existing video: {filename}")
-                            skipped_files.append(filepath)
+                            logger.debug(f"Skipping existing video on disk: {filename}")
+                            # Track in database if not already there
+                            if not self.download_tracker.is_downloaded(event_id_str):
+                                self.download_tracker.mark_downloaded(
+                                    event_id_str, filename, device.name, str(filepath)
+                                )
+                            already_downloaded_count += 1
                             continue
                         else:
                             logger.info(f"Re-downloading existing video: {filename}")
+                    
+                    # Also check review folders
+                    review_base = Path("/data/review")
+                    found_in_review = False
+                    if review_base.exists():
+                        for root, _, files in os.walk(review_base):
+                            if filename in files:
+                                logger.debug(f"Video already in review: {filename}")
+                                # Track in database if not already there
+                                if not self.download_tracker.is_downloaded(event_id_str):
+                                    review_path = os.path.join(root, filename)
+                                    self.download_tracker.mark_downloaded(
+                                        event_id_str, filename, device.name, review_path, "processed"
+                                    )
+                                already_downloaded_count += 1
+                                found_in_review = True
+                                break
+                        if found_in_review:
+                            continue
                     
                     # Download the video with rate limiting
                     logger.info(f"Downloading: {filename}")
@@ -470,19 +510,29 @@ class RingDownloader:
                     
                     if success:
                         downloaded_files.append(filepath)
+                        # Track in database
+                        self.download_tracker.mark_downloaded(
+                            event_id_str, filename, device.name, str(filepath)
+                        )
                         logger.info(f"✓ Downloaded: {filename}")
                         
                         # Add delay between downloads to respect rate limits
                         if DELAY_BETWEEN_DOWNLOADS > 0:
                             time.sleep(DELAY_BETWEEN_DOWNLOADS)
                     else:
-                        failed_files.append(filename)
-                        # Check if it was a rate limit error
-                        if '429' in error_msg or 'too many requests' in error_msg.lower():
-                            rate_limited_count += 1
-                            logger.error(f"Rate limited downloading {filename}. Consider waiting before trying again.")
+                        # Handle 404 (unavailable) separately
+                        if error_msg == "404_NOT_FOUND":
+                            unavailable_count += 1
+                            # Don't log as error, just info
+                            logger.info(f"Video {video_id} unavailable (motion event without recording)")
                         else:
-                            logger.error(f"Failed to download {filename}: {error_msg}")
+                            failed_files.append(filename)
+                            # Check if it was a rate limit error
+                            if '429' in error_msg or 'too many requests' in error_msg.lower():
+                                rate_limited_count += 1
+                                logger.error(f"Rate limited downloading {filename}. Consider waiting before trying again.")
+                            else:
+                                logger.error(f"Failed to download {filename}: {error_msg}")
                         
             except Exception as e:
                 logger.error(f"Error processing {device.name}: {e}", exc_info=True)
@@ -490,12 +540,18 @@ class RingDownloader:
         # Provide detailed summary
         logger.info(f"="*80)
         logger.info(f"Download All Complete Summary:")
-        logger.info(f"  ✓ Successfully downloaded: {len(downloaded_files)}")
-        logger.info(f"  ⊘ Already existed (skipped): {len(skipped_files)}")
+        logger.info(f"  ✓ New downloads: {len(downloaded_files)}")
+        logger.info(f"  ⊘ Already downloaded: {already_downloaded_count}")
+        logger.info(f"  ⓘ Unavailable (404): {unavailable_count}")
         logger.info(f"  ✗ Failed downloads: {len(failed_files)}")
         if rate_limited_count > 0:
             logger.warning(f"  ⚠ Rate limited: {rate_limited_count} videos")
             logger.warning(f"  Ring API has rate limits. Consider waiting 10-15 minutes before retrying.")
         logger.info(f"="*80)
         
-        return downloaded_files
+        return {
+            'new_downloads': len(downloaded_files),
+            'already_downloaded': already_downloaded_count,
+            'unavailable': unavailable_count,
+            'failed': len(failed_files)
+        }

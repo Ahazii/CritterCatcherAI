@@ -156,39 +156,52 @@ def process_videos(config: dict):
             logger.info("Removed invalid token file")
         return
     
-    # Download recent videos
-    logger.info("Downloading recent Ring videos")
-    video_hours = ring_config.get('download_hours', 24)
-    video_limit = ring_config.get('download_limit')
+    # Check for existing unprocessed videos in downloads folder
+    logger.info("Checking for unprocessed videos in downloads folder")
+    download_path_obj = Path(download_path)
+    existing_videos = list(download_path_obj.glob("*.mp4")) if download_path_obj.exists() else []
     
-    # Update progress: downloading
-    try:
-        from webapp import app_state
-        app_state["processing_progress"]["current_step"] = f"Downloading videos from Ring (last {video_hours}h)..."
-        app_state["processing_progress"]["phase"] = "downloading"
-    except:
-        pass
+    videos_to_process = []
     
-    downloaded_videos = ring_downloader.download_recent_videos(
-        hours=video_hours,
-        limit=video_limit
-    )
+    if existing_videos:
+        logger.info(f"Found {len(existing_videos)} existing videos in downloads folder")
+        videos_to_process = existing_videos
+    else:
+        # No existing videos - download new ones
+        logger.info("No existing videos found - downloading recent Ring videos")
+        video_hours = ring_config.get('download_hours', 24)
+        video_limit = ring_config.get('download_limit')
+        
+        # Update progress: downloading
+        try:
+            from webapp import app_state
+            app_state["processing_progress"]["current_step"] = f"Downloading videos from Ring (last {video_hours}h)..."
+            app_state["processing_progress"]["phase"] = "downloading"
+        except:
+            pass
+        
+        downloaded_videos = ring_downloader.download_recent_videos(
+            hours=video_hours,
+            limit=video_limit
+        )
+        
+        if not downloaded_videos:
+            logger.info("No new videos to process")
+            return
+        
+        videos_to_process = downloaded_videos
     
-    if not downloaded_videos:
-        logger.info("No new videos to process")
-        return
-    
-    logger.info(f"Processing {len(downloaded_videos)} videos")
+    logger.info(f"Processing {len(videos_to_process)} videos")
     
     # Update progress: set total count
     try:
         from webapp import app_state
-        app_state["processing_progress"]["videos_total"] = len(downloaded_videos)
+        app_state["processing_progress"]["videos_total"] = len(videos_to_process)
     except:
         pass  # webapp might not be loaded
     
     # Process each video
-    for idx, video_path in enumerate(downloaded_videos, 1):
+    for idx, video_path in enumerate(videos_to_process, 1):
         # Check stop flag or if scheduler was disabled
         try:
             from webapp import app_state
@@ -277,6 +290,19 @@ def process_videos(config: dict):
             
             import shutil
             shutil.move(str(video_path), str(review_path))
+            
+            # Update download tracker status to 'processed'
+            # Extract event ID from filename if possible
+            try:
+                # Filename format: {device_name}_{timestamp}_{event_id}.mp4
+                parts = video_path.stem.split('_')
+                if len(parts) >= 3:
+                    event_id = parts[-1]
+                    ring_downloader.download_tracker.update_status(
+                        event_id, 'processed', str(review_path)
+                    )
+            except Exception as track_err:
+                logger.debug(f"Could not update download tracker: {track_err}")
             
             # Save detection metadata alongside video
             metadata = {
