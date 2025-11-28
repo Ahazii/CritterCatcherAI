@@ -598,16 +598,28 @@
                     <small>Frames with confidence ≥ threshold will be auto-sorted</small>
                 </div>
 
-                <!-- Auto-Approval Toggle -->
+                <!-- Requires Manual Confirmation Toggle -->
                 <div class="form-group">
                     <label class="toggle-switch">
-                        <span>Require manual confirmation for all matches</span>
+                        <span>Requires Manual Confirmation</span>
                         <label class="switch">
-                            <input type="checkbox" id="manualConfirmation">
+                            <input type="checkbox" id="requiresManualConfirmation" checked>
                             <span class="slider"></span>
                         </label>
                     </label>
-                    <small>When enabled, ALL frames go to review regardless of confidence</small>
+                    <small>When enabled, ALL videos go to review regardless of confidence. Disable to allow auto-sorting of high-confidence matches.</small>
+                </div>
+
+                <!-- Auto-Approval Toggle (only applies if manual confirmation is disabled) -->
+                <div class="form-group">
+                    <label class="toggle-switch">
+                        <span>Auto-Approval Enabled</span>
+                        <label class="switch">
+                            <input type="checkbox" id="autoApprovalEnabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                    <small>When enabled (and manual confirmation disabled), high-confidence videos auto-sort to sorted folder. Otherwise they go to review.</small>
                 </div>
 
                 <!-- Retraining Settings -->
@@ -712,7 +724,8 @@
                     document.getElementById('retrainingThreshold').value = profile.retraining_threshold;
                     document.getElementById('confirmationCountRecommendation').value = 
                         profile.confirmation_count_recommendation;
-                    document.getElementById('manualConfirmation').checked = !profile.auto_approval_enabled;
+                    document.getElementById('requiresManualConfirmation').checked = profile.requires_manual_confirmation;
+                    document.getElementById('autoApprovalEnabled').checked = profile.auto_approval_enabled;
 
                     // Set YOLO categories
                     document.querySelectorAll('input[name="yoloCategories"]').forEach(cb => {
@@ -759,7 +772,8 @@
                 yolo_categories: selectedCategories,
                 text_description: document.getElementById('textDescription').value,
                 confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
-                auto_approval_enabled: !document.getElementById('manualConfirmation').checked,
+                requires_manual_confirmation: document.getElementById('requiresManualConfirmation').checked,
+                auto_approval_enabled: document.getElementById('autoApprovalEnabled').checked,
                 retraining_threshold: parseFloat(document.getElementById('retrainingThreshold').value),
                 confirmation_count_recommendation: parseInt(document.getElementById('confirmationCountRecommendation').value)
             };

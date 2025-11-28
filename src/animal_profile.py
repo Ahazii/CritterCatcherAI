@@ -17,6 +17,7 @@ class AnimalProfile:
     text_description: str
     confidence_threshold: float = 0.80
     auto_approval_enabled: bool = True
+    requires_manual_confirmation: bool = True
     enabled: bool = True
     confirmed_count: int = 0
     rejected_count: int = 0

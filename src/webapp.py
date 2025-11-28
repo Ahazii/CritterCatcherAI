@@ -23,6 +23,7 @@ import numpy as np
 from animal_profile import AnimalProfile, AnimalProfileManager
 from review_feedback import ReviewManager
 from face_profile import FaceProfile, FaceProfileManager
+from task_tracker import task_tracker, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -2670,8 +2671,8 @@ async def reject_faces(request: dict):
 
 
 @app.post("/api/review/confirm-person")
-async def confirm_person_video(request: dict):
-    """Confirm a video contains a person and extract faces for training."""
+async def confirm_person_video(request: dict, background_tasks: BackgroundTasks):
+    """Confirm a video contains a person and extract faces for training (async with progress tracking)."""
     try:
         category = request.get('category')
         filenames = request.get('filenames', [])
@@ -2679,104 +2680,338 @@ async def confirm_person_video(request: dict):
         if not category or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
         
-        results = {"processed": [], "failed": []}
-        unassigned_path = Path("/data/training/faces/unassigned")
-        unassigned_path.mkdir(parents=True, exist_ok=True)
+        # Create background task for face extraction
+        task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
         
-        for filename in filenames:
+        def extract_faces_background():
+            """Background task to extract faces from person videos."""
             try:
-                video_path = Path("/data/review") / category / filename
-                if not video_path.exists():
-                    results["failed"].append({"filename": filename, "error": "File not found"})
-                    continue
+                task_tracker.start_task(task_id, message="Extracting faces from videos...")
+                results = {"processed": [], "failed": []}
+                unassigned_path = Path("/data/training/faces/unassigned")
+                unassigned_path.mkdir(parents=True, exist_ok=True)
                 
-                # Extract faces from video
-                import cv2
-                import face_recognition as fr
-                
-                cap = cv2.VideoCapture(str(video_path))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
-                
-                face_count = 0
-                frame_count = 0
-                max_faces = 10  # Limit faces per video
-                
-                while face_count < max_faces:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    
-                    if frame_count % frame_interval == 0:
-                        # Detect faces
-                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        face_locations = fr.face_locations(rgb_frame)
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        # Update progress
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Processing video {idx} of {len(filenames)}...",
+                            details=f"Extracting faces from {filename}"
+                        )
                         
-                        # Save each detected face
-                        for idx, (top, right, bottom, left) in enumerate(face_locations):
-                            # Crop face with some padding
-                            padding = 20
-                            top = max(0, top - padding)
-                            left = max(0, left - padding)
-                            bottom = min(frame.shape[0], bottom + padding)
-                            right = min(frame.shape[1], right + padding)
-                            
-                            face_img = rgb_frame[top:bottom, left:right]
-                            
-                            # Save face image
-                            face_filename = f"{video_path.stem}_face_{face_count:03d}.jpg"
-                            face_path = unassigned_path / face_filename
-                            
-                            import PIL.Image as Image
-                            face_pil = Image.fromarray(face_img)
-                            face_pil.save(str(face_path))
-                            
-                            # Save metadata
-                            metadata = {
-                                "source_video": filename,
-                                "timestamp": datetime.now().isoformat(),
-                                "face_index": face_count
-                            }
-                            metadata_path = face_path.with_suffix(".json")
-                            with open(metadata_path, 'w') as f:
-                                json.dump(metadata, f, indent=2)
-                            
-                            face_count += 1
-                            if face_count >= max_faces:
+                        video_path = Path("/data/review") / category / filename
+                        if not video_path.exists():
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                            continue
+                        
+                        # Extract faces from video
+                        import cv2
+                        import face_recognition as fr
+                        
+                        cap = cv2.VideoCapture(str(video_path))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
+                        
+                        face_count = 0
+                        frame_count = 0
+                        max_faces = 10  # Limit faces per video
+                        
+                        while face_count < max_faces:
+                            ret, frame = cap.read()
+                            if not ret:
                                 break
-                    
-                    frame_count += 1
+                            
+                            if frame_count % frame_interval == 0:
+                                # Update progress with frame info
+                                task_tracker.update_task(
+                                    task_id,
+                                    details=f"Processing frame {frame_count} of {filename}"
+                                )
+                                
+                                # Detect faces
+                                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                                face_locations = fr.face_locations(rgb_frame)
+                                
+                                # Save each detected face
+                                for face_idx, (top, right, bottom, left) in enumerate(face_locations):
+                                    # Crop face with some padding
+                                    padding = 20
+                                    top = max(0, top - padding)
+                                    left = max(0, left - padding)
+                                    bottom = min(frame.shape[0], bottom + padding)
+                                    right = min(frame.shape[1], right + padding)
+                                    
+                                    face_img = rgb_frame[top:bottom, left:right]
+                                    
+                                    # Save face image
+                                    face_filename = f"{video_path.stem}_face_{face_count:03d}.jpg"
+                                    face_path = unassigned_path / face_filename
+                                    
+                                    import PIL.Image as Image
+                                    face_pil = Image.fromarray(face_img)
+                                    face_pil.save(str(face_path))
+                                    
+                                    # Save metadata
+                                    metadata = {
+                                        "source_video": filename,
+                                        "timestamp": datetime.now().isoformat(),
+                                        "face_index": face_count
+                                    }
+                                    metadata_path = face_path.with_suffix(".json")
+                                    with open(metadata_path, 'w') as f:
+                                        json.dump(metadata, f, indent=2)
+                                    
+                                    face_count += 1
+                                    if face_count >= max_faces:
+                                        break
+                            
+                            frame_count += 1
+                        
+                        cap.release()
+                        
+                        # Delete the original video from review
+                        video_path.unlink()
+                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                        if metadata_path.exists():
+                            metadata_path.unlink()
+                        
+                        results["processed"].append({
+                            "filename": filename,
+                            "faces_extracted": face_count
+                        })
+                        
+                        logger.info(f"Extracted {face_count} faces from {filename}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
                 
-                cap.release()
-                
-                # Delete the original video from review
-                video_path.unlink()
-                metadata_path = video_path.with_suffix(video_path.suffix + ".json")
-                if metadata_path.exists():
-                    metadata_path.unlink()
-                
-                results["processed"].append({
-                    "filename": filename,
-                    "faces_extracted": face_count
-                })
-                
-                logger.info(f"Extracted {face_count} faces from {filename}")
+                # Task completed
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Processed {len(results['processed'])} videos, extracted faces from {sum(r['faces_extracted'] for r in results['processed'])} frames"
+                )
                 
             except Exception as e:
-                logger.error(f"Failed to process {filename}: {e}", exc_info=True)
-                results["failed"].append({"filename": filename, "error": str(e)})
+                logger.error(f"Face extraction task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(extract_faces_background)
         
         return {
-            "status": "success",
-            "processed_count": len(results["processed"]),
-            "failed_count": len(results["failed"]),
-            "results": results,
-            "message": f"Processed {len(results['processed'])} videos and extracted faces"
+            "status": "processing",
+            "task_id": task_id,
+            "message": "Face extraction started in background",
+            "video_count": len(filenames)
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to confirm person videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/progress/{task_id}")
+async def get_task_progress(task_id: str):
+    """Get progress of a background task."""
+    task = task_tracker.get_task(task_id)
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return task.to_dict()
+
+
+@app.post("/api/review/{category}/confirm-videos")
+async def confirm_videos(category: str, request: dict, background_tasks: BackgroundTasks):
+    """Confirm videos are correct and move to sorted folder (async)."""
+    global animal_profile_manager
+    
+    try:
+        filenames = request.get('filenames', [])
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="Missing filenames")
+        
+        # Try to get a matching profile (optional)
+        profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
+        
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Starting video confirmation...")
+        
+        def confirm_videos_background():
+            """Background task to move videos to sorted."""
+            try:
+                task_tracker.start_task(task_id, message="Moving videos to sorted...")
+                results = {"confirmed": [], "failed": []}
+                
+                review_path = Path("/data/review") / category
+                sorted_path = Path("/data/sorted") / category
+                sorted_path.mkdir(parents=True, exist_ok=True)
+                
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        # Update progress
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Confirming video {idx} of {len(filenames)}...",
+                            details=f"Moving {filename}"
+                        )
+                        
+                        video_path = review_path / filename
+                        if not video_path.exists():
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                            continue
+                        
+                        # Move video to sorted
+                        dest_path = sorted_path / filename
+                        if dest_path.exists():
+                            # Handle duplicates
+                            counter = 1
+                            while dest_path.exists():
+                                dest_path = sorted_path / f"{video_path.stem}_{counter}{video_path.suffix}"
+                                counter += 1
+                        
+                        import shutil
+                        shutil.move(str(video_path), str(dest_path))
+                        
+                        # Move metadata if exists
+                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                        if metadata_path.exists():
+                            dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                            shutil.move(str(metadata_path), str(dest_metadata))
+                        
+                        results["confirmed"].append(filename)
+                        logger.info(f"Confirmed {filename} for category {category}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to confirm {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+                
+                # Update profile accuracy if profile exists
+                if profile:
+                    new_confirmed = profile.confirmed_count + len(results["confirmed"])
+                    animal_profile_manager.update_accuracy(category, new_confirmed, profile.rejected_count)
+                    updated_profile = animal_profile_manager.get_profile(category)
+                    acc_msg = f" Accuracy: {updated_profile.accuracy_percentage:.1f}%"
+                else:
+                    acc_msg = ""
+                
+                # Task completed
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Confirmed {len(results['confirmed'])} videos.{acc_msg}"
+                )
+                
+            except Exception as e:
+                logger.error(f"Confirm videos task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(confirm_videos_background)
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": "Video confirmation started in background",
+            "video_count": len(filenames)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start confirm videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/{category}/reject-videos")
+async def reject_videos(category: str, request: dict, background_tasks: BackgroundTasks):
+    """Reject/delete videos from review (async)."""
+    global animal_profile_manager
+    
+    try:
+        filenames = request.get('filenames', [])
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="Missing filenames")
+        
+        # Try to get a matching profile (optional)
+        profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
+        
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Starting video rejection...")
+        
+        def reject_videos_background():
+            """Background task to delete videos."""
+            try:
+                task_tracker.start_task(task_id, message="Deleting videos...")
+                results = {"deleted": [], "failed": []}
+                
+                review_path = Path("/data/review") / category
+                
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        # Update progress
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Deleting video {idx} of {len(filenames)}...",
+                            details=f"Deleting {filename}"
+                        )
+                        
+                        video_path = review_path / filename
+                        if video_path.exists():
+                            video_path.unlink()
+                            results["deleted"].append(filename)
+                            
+                            # Delete metadata if exists
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                metadata_path.unlink()
+                            
+                            logger.info(f"Rejected {filename} for category {category}")
+                        else:
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to delete {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+                
+                # Update profile accuracy if profile exists
+                if profile:
+                    new_rejected = profile.rejected_count + len(results["deleted"])
+                    animal_profile_manager.update_accuracy(category, profile.confirmed_count, new_rejected)
+                    updated_profile = animal_profile_manager.get_profile(category)
+                    acc_msg = f" Accuracy: {updated_profile.accuracy_percentage:.1f}%"
+                else:
+                    acc_msg = ""
+                
+                # Task completed
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Deleted {len(results['deleted'])} videos.{acc_msg}"
+                )
+                
+            except Exception as e:
+                logger.error(f"Reject videos task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(reject_videos_background)
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": "Video rejection started in background",
+            "video_count": len(filenames)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start reject videos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

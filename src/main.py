@@ -370,7 +370,8 @@ def process_videos(config: dict):
                                     "profile_name": profile.name,
                                     "confidence": avg_confidence,
                                     "threshold": profile.confidence_threshold,
-                                    "auto_approval_enabled": profile.auto_approval_enabled
+                                    "auto_approval_enabled": profile.auto_approval_enabled,
+                                    "requires_manual_confirmation": profile.requires_manual_confirmation
                                 })
                                 
                                 logger.info(f"CLIP result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
@@ -387,10 +388,14 @@ def process_videos(config: dict):
                                     "auto_approved": False
                                 }
                                 
-                                # Determine final destination
-                                if best_result['confidence'] >= best_result['threshold']:
+                                # Determine final destination based on routing rules
+                                if best_result['requires_manual_confirmation']:
+                                    # Manual confirmation required -> always send to review
+                                    final_destination = Path("/data/review") / best_result['profile_id']
+                                    logger.info(f"CLIP Stage 2: Sending to review/{best_result['profile_name']} (manual confirmation required)")
+                                elif best_result['confidence'] >= best_result['threshold']:
                                     if best_result['auto_approval_enabled']:
-                                        # High confidence + auto-approval -> sorted
+                                        # High confidence + auto-approval + no manual confirmation -> sorted
                                         final_destination = Path("/data/sorted") / best_result['profile_id']
                                         clip_stage2_result['auto_approved'] = True
                                         logger.info(f"CLIP Stage 2: Auto-approving to sorted/{best_result['profile_name']}")
