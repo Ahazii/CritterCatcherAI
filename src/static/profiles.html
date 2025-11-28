@@ -724,8 +724,11 @@
                     document.getElementById('retrainingThreshold').value = profile.retraining_threshold;
                     document.getElementById('confirmationCountRecommendation').value = 
                         profile.confirmation_count_recommendation;
-                    document.getElementById('requiresManualConfirmation').checked = profile.requires_manual_confirmation;
-                    document.getElementById('autoApprovalEnabled').checked = profile.auto_approval_enabled;
+                    // Handle new fields with defaults for backward compatibility
+                    document.getElementById('requiresManualConfirmation').checked = 
+                        profile.requires_manual_confirmation !== undefined ? profile.requires_manual_confirmation : true;
+                    document.getElementById('autoApprovalEnabled').checked = 
+                        profile.auto_approval_enabled !== undefined ? profile.auto_approval_enabled : true;
 
                     // Set YOLO categories
                     document.querySelectorAll('input[name="yoloCategories"]').forEach(cb => {
@@ -831,7 +834,7 @@
                                 </div>
                                 <div class="profile-stats">
                                     <div class="stat">
-                                        <div class="stat-value">${profile.accuracy_percentage.toFixed(0)}</div>
+                                        <div class="stat-value">${profile.accuracy_percentage.toFixed(0)}%</div>
                                         <div class="stat-label">Accuracy</div>
                                     </div>
                                     <div class="stat">
@@ -841,6 +844,20 @@
                                     <div class="stat">
                                         <div class="stat-value">${profile.confidence_threshold.toFixed(2)}</div>
                                         <div class="stat-label">Threshold</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                                    <div style="background: var(--bg-secondary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem;">
+                                        <strong>Manual Confirmation:</strong> 
+                                        <span style="color: ${profile.requires_manual_confirmation ? 'var(--warning-color)' : 'var(--success-color)'}; font-weight: bold;">
+                                            ${profile.requires_manual_confirmation ? 'Required' : 'Optional'}
+                                        </span>
+                                    </div>
+                                    <div style="background: var(--bg-secondary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem;">
+                                        <strong>Auto-Approval:</strong> 
+                                        <span style="color: ${profile.auto_approval_enabled ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: bold;">
+                                            ${profile.auto_approval_enabled ? 'Enabled' : 'Disabled'}
+                                        </span>
                                     </div>
                                 </div>
                                 ${profile.should_recommend_retraining ? 
