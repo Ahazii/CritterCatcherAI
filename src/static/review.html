@@ -399,8 +399,27 @@
         fetch('/static/status_widget.html')
             .then(response => response.text())
             .then(html => {
-                document.getElementById('statusWidgetContainer').innerHTML = html;
+                const container = document.getElementById('statusWidgetContainer');
+                
+                // Extract script content from HTML
+                const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+                const scriptContent = scriptMatch ? scriptMatch[1] : '';
+                
+                // Remove script tag from HTML (we'll execute it separately)
+                const htmlWithoutScript = html.replace(/<script>[\s\S]*?<\/script>/, '');
+                
+                // Insert HTML (styles and elements)
+                container.innerHTML = htmlWithoutScript;
+                
+                // Execute the script in global context
+                if (scriptContent) {
+                    const scriptEl = document.createElement('script');
+                    scriptEl.textContent = scriptContent;
+                    document.body.appendChild(scriptEl);
+                }
+                
                 widgetLoaded = true;
+                console.log('Status widget loaded successfully');
             })
             .catch(error => {
                 console.error('Failed to load status widget:', error);
