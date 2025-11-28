@@ -136,6 +136,14 @@
             font-size: 0.875rem;
         }
 
+        .btn-warning {
+            background: var(--warning-color);
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #dd6b20;
+        }
+
         .category-tabs {
             display: flex;
             gap: 1rem;
@@ -364,6 +372,7 @@
                     <option value="">-- Select Profile --</option>
                 </select>
                 <button class="btn btn-success btn-small" onclick="assignToProfile()" id="assignBtn" disabled>✓ Assign</button>
+                <button class="btn btn-warning btn-small" onclick="confirmPerson()" id="confirmPersonBtn" disabled style="display:none;">👤 Confirm Person</button>
                 <button class="btn btn-danger btn-small" onclick="deleteVideos()" id="deleteBtn" disabled>✗ Delete</button>
             </div>
         </div>
@@ -447,6 +456,15 @@
             });
             
             selectedVideos.clear();
+            
+            // Show/hide "Confirm Person" button based on category
+            const confirmPersonBtn = document.getElementById('confirmPersonBtn');
+            if (categoryName === 'person') {
+                confirmPersonBtn.style.display = 'inline-block';
+            } else {
+                confirmPersonBtn.style.display = 'none';
+            }
+            
             await loadVideos(categoryName);
         }
 
@@ -669,6 +687,7 @@
             document.getElementById('selectionInfo').textContent = `${count} of ${videos.length} selected`;
             document.getElementById('assignBtn').disabled = count === 0;
             document.getElementById('deleteBtn').disabled = count === 0;
+            document.getElementById('confirmPersonBtn').disabled = count === 0;
         }
 
         async function assignToProfile() {
@@ -743,6 +762,43 @@
             } catch (error) {
                 console.error('Failed to delete videos:', error);
                 alert('Error deleting videos');
+            }
+        }
+
+        async function confirmPerson() {
+            if (selectedVideos.size === 0) {
+                alert('No videos selected');
+                return;
+            }
+            
+            if (!confirm(`Confirm ${selectedVideos.size} video(s) contain people and extract faces for training?\n\nThis will:\n• Extract face images from each video\n• Move them to Face Training tab\n• Delete the original videos from review`)) {
+                return;
+            }
+            
+            const filenames = Array.from(selectedVideos);
+            
+            try {
+                const response = await fetch('/api/review/confirm-person', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category: currentCategory,
+                        filenames: filenames
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const totalFaces = data.results.processed.reduce((sum, r) => sum + r.faces_extracted, 0);
+                    alert(`✓ Processed ${data.processed_count} video(s)\n✓ Extracted ${totalFaces} face images\n\nGo to Face Training tab to assign names to faces.`);
+                    await loadCategories();
+                } else {
+                    alert('Failed to confirm person videos');
+                }
+            } catch (error) {
+                console.error('Failed to confirm person videos:', error);
+                alert('Error confirming person videos');
             }
         }
 
