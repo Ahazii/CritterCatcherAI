@@ -22,6 +22,7 @@ import numpy as np
 
 from animal_profile import AnimalProfile, AnimalProfileManager
 from review_feedback import ReviewManager
+from face_profile import FaceProfile, FaceProfileManager
 
 logger = logging.getLogger(__name__)
 
@@ -108,14 +109,17 @@ DOWNLOADS_PATH = Path("/data/downloads")
 # Global animal profile manager
 animal_profile_manager: Optional[AnimalProfileManager] = None
 
+# Global face profile manager
+face_profile_manager: Optional[FaceProfileManager] = None
+
 # Global review manager
 review_manager: Optional[ReviewManager] = None
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Animal Profile Manager and Review Manager on startup."""
-    global animal_profile_manager, review_manager
+    """Initialize Animal Profile Manager, Face Profile Manager, and Review Manager on startup."""
+    global animal_profile_manager, face_profile_manager, review_manager
     
     # Ensure config directory exists (copy from defaults if needed)
     try:
@@ -139,6 +143,13 @@ async def startup_event():
         logger.info("Animal profile manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize animal profile manager: {e}")
+    
+    # Initialize face profile manager
+    try:
+        face_profile_manager = FaceProfileManager(Path("/data"))
+        logger.info("Face profile manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize face profile manager: {e}")
     
     # Initialize review manager
     try:
@@ -2396,6 +2407,354 @@ async def delete_review_videos(request: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to delete videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# FACE PROFILE AND FACE TRAINING ENDPOINTS
+# ============================================================================
+
+@app.get("/api/face-profiles")
+async def list_face_profiles():
+    """List all face profiles."""
+    try:
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        profiles = face_profile_manager.list_profiles()
+        
+        return {
+            "status": "success",
+            "profiles": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "confidence_threshold": p.confidence_threshold,
+                    "auto_approval_enabled": p.auto_approval_enabled,
+                    "enabled": p.enabled,
+                    "confirmed_count": p.confirmed_count,
+                    "rejected_count": p.rejected_count,
+                    "accuracy_percentage": p.accuracy_percentage,
+                    "training_images_path": p.training_images_path
+                }
+                for p in profiles
+            ],
+            "count": len(profiles)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list face profiles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/face-profiles")
+async def create_face_profile(request: dict):
+    """Create a new face profile."""
+    try:
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        name = request.get('name')
+        if not name:
+            raise HTTPException(status_code=400, detail="Name is required")
+        
+        confidence_threshold = request.get('confidence_threshold', 0.6)
+        
+        profile = face_profile_manager.create_profile(name, confidence_threshold)
+        
+        logger.info(f"Created face profile: {name}")
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "confidence_threshold": profile.confidence_threshold,
+                "auto_approval_enabled": profile.auto_approval_enabled,
+                "enabled": profile.enabled,
+                "training_images_path": profile.training_images_path
+            },
+            "message": f"Created face profile '{name}'"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to create face profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/faces/unassigned")
+async def list_unassigned_faces():
+    """List all unassigned face images awaiting labeling."""
+    try:
+        unassigned_path = Path("/data/training/faces/unassigned")
+        unassigned_path.mkdir(parents=True, exist_ok=True)
+        
+        faces = []
+        for img_file in unassigned_path.glob("*.jpg"):
+            # Get metadata if exists
+            metadata_file = img_file.with_suffix(".json")
+            metadata = {}
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+            
+            faces.append({
+                "filename": img_file.name,
+                "path": str(img_file),
+                "timestamp": metadata.get('timestamp', datetime.fromtimestamp(img_file.stat().st_mtime).isoformat()),
+                "source_video": metadata.get('source_video', 'unknown')
+            })
+        
+        # Sort by timestamp descending
+        faces.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return {
+            "status": "success",
+            "faces": faces,
+            "count": len(faces)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list unassigned faces: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/faces/assign")
+async def assign_faces_to_person(request: dict, background_tasks: BackgroundTasks):
+    """Assign face images to a person (create profile if needed)."""
+    try:
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        person_name = request.get('person_name')
+        filenames = request.get('filenames', [])
+        
+        if not person_name or not filenames:
+            raise HTTPException(status_code=400, detail="Missing person_name or filenames")
+        
+        # Get or create face profile
+        profile = face_profile_manager.get_profile_by_name(person_name)
+        if not profile:
+            profile = face_profile_manager.create_profile(person_name)
+            logger.info(f"Created new face profile: {person_name}")
+        
+        unassigned_path = Path("/data/training/faces/unassigned")
+        confirmed_path = Path(profile.training_images_path)
+        confirmed_path.mkdir(parents=True, exist_ok=True)
+        
+        results = {"moved": [], "failed": []}
+        
+        for filename in filenames:
+            try:
+                source = unassigned_path / filename
+                if not source.exists():
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+                    continue
+                
+                # Move image
+                dest = confirmed_path / filename
+                import shutil
+                shutil.move(str(source), str(dest))
+                
+                # Move metadata if exists
+                metadata_source = source.with_suffix(".json")
+                if metadata_source.exists():
+                    metadata_dest = dest.with_suffix(".json")
+                    shutil.move(str(metadata_source), str(metadata_dest))
+                
+                results["moved"].append(filename)
+                profile.confirmed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to move {filename}: {e}")
+                results["failed"].append({"filename": filename, "error": str(e)})
+        
+        # Save updated profile
+        face_profile_manager._save_profile(profile)
+        
+        # Trigger face encoding retraining in background
+        def retrain_task():
+            try:
+                from face_recognizer import FaceRecognizer
+                fr = FaceRecognizer()
+                images = list(confirmed_path.glob("*.jpg"))
+                if images:
+                    fr.add_person(person_name, images)
+                    logger.info(f"Retrained face recognition with {len(images)} images for {person_name}")
+            except Exception as e:
+                logger.error(f"Failed to retrain face recognition: {e}")
+        
+        background_tasks.add_task(retrain_task)
+        
+        logger.info(f"Assigned {len(results['moved'])} faces to {person_name}")
+        
+        return {
+            "status": "success",
+            "person_name": person_name,
+            "moved_count": len(results["moved"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Assigned {len(results['moved'])} faces to '{person_name}'. Retraining face recognition..."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to assign faces: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/faces/reject")
+async def reject_faces(request: dict):
+    """Reject/delete face images (not useful for training)."""
+    try:
+        filenames = request.get('filenames', [])
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="Missing filenames")
+        
+        unassigned_path = Path("/data/training/faces/unassigned")
+        results = {"deleted": [], "failed": []}
+        
+        for filename in filenames:
+            try:
+                img_path = unassigned_path / filename
+                if img_path.exists():
+                    img_path.unlink()
+                    results["deleted"].append(filename)
+                    
+                    # Delete metadata if exists
+                    metadata_path = img_path.with_suffix(".json")
+                    if metadata_path.exists():
+                        metadata_path.unlink()
+                else:
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+            except Exception as e:
+                logger.error(f"Failed to delete {filename}: {e}")
+                results["failed"].append({"filename": filename, "error": str(e)})
+        
+        logger.info(f"Rejected {len(results['deleted'])} face images")
+        
+        return {
+            "status": "success",
+            "deleted_count": len(results["deleted"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Rejected {len(results['deleted'])} faces"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject faces: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/confirm-person")
+async def confirm_person_video(request: dict):
+    """Confirm a video contains a person and extract faces for training."""
+    try:
+        category = request.get('category')
+        filenames = request.get('filenames', [])
+        
+        if not category or not filenames:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        results = {"processed": [], "failed": []}
+        unassigned_path = Path("/data/training/faces/unassigned")
+        unassigned_path.mkdir(parents=True, exist_ok=True)
+        
+        for filename in filenames:
+            try:
+                video_path = Path("/data/review") / category / filename
+                if not video_path.exists():
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+                    continue
+                
+                # Extract faces from video
+                import cv2
+                import face_recognition as fr
+                
+                cap = cv2.VideoCapture(str(video_path))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
+                
+                face_count = 0
+                frame_count = 0
+                max_faces = 10  # Limit faces per video
+                
+                while face_count < max_faces:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    if frame_count % frame_interval == 0:
+                        # Detect faces
+                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        face_locations = fr.face_locations(rgb_frame)
+                        
+                        # Save each detected face
+                        for idx, (top, right, bottom, left) in enumerate(face_locations):
+                            # Crop face with some padding
+                            padding = 20
+                            top = max(0, top - padding)
+                            left = max(0, left - padding)
+                            bottom = min(frame.shape[0], bottom + padding)
+                            right = min(frame.shape[1], right + padding)
+                            
+                            face_img = rgb_frame[top:bottom, left:right]
+                            
+                            # Save face image
+                            face_filename = f"{video_path.stem}_face_{face_count:03d}.jpg"
+                            face_path = unassigned_path / face_filename
+                            
+                            import PIL.Image as Image
+                            face_pil = Image.fromarray(face_img)
+                            face_pil.save(str(face_path))
+                            
+                            # Save metadata
+                            metadata = {
+                                "source_video": filename,
+                                "timestamp": datetime.now().isoformat(),
+                                "face_index": face_count
+                            }
+                            metadata_path = face_path.with_suffix(".json")
+                            with open(metadata_path, 'w') as f:
+                                json.dump(metadata, f, indent=2)
+                            
+                            face_count += 1
+                            if face_count >= max_faces:
+                                break
+                    
+                    frame_count += 1
+                
+                cap.release()
+                
+                # Delete the original video from review
+                video_path.unlink()
+                metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                if metadata_path.exists():
+                    metadata_path.unlink()
+                
+                results["processed"].append({
+                    "filename": filename,
+                    "faces_extracted": face_count
+                })
+                
+                logger.info(f"Extracted {face_count} faces from {filename}")
+                
+            except Exception as e:
+                logger.error(f"Failed to process {filename}: {e}", exc_info=True)
+                results["failed"].append({"filename": filename, "error": str(e)})
+        
+        return {
+            "status": "success",
+            "processed_count": len(results["processed"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Processed {len(results['processed'])} videos and extracted faces"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to confirm person videos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
