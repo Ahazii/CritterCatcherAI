@@ -389,23 +389,18 @@
         </div>
     </div>
 
-    <!-- Progress Modal -->
-    <div id="progressModal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; align-items: center; justify-content: center;">
-        <div style="background: white; border-radius: 8px; padding: 30px; width: 500px; max-width: 90%;">
-            <h3 style="margin-top: 0;">Processing Videos</h3>
-            <div style="margin: 20px 0;">
-                <div style="background: #f0f0f0; border-radius: 4px; height: 30px; overflow: hidden; position: relative;">
-                    <div id="progressBar" style="background: linear-gradient(90deg, #4CAF50, #45a049); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
-                    <span id="progressPercent" style="position: absolute; width: 100%; text-align: center; line-height: 30px; font-weight: bold; color: #333;">0%</span>
-                </div>
-            </div>
-            <div id="progressMessage" style="font-size: 14px; color: #666; margin-bottom: 10px;">Starting...</div>
-            <div id="progressDetails" style="font-size: 12px; color: #999;"></div>
-            <div id="progressComplete" style="display:none; text-align: center; margin-top: 20px;">
-                <button class="btn btn-primary" onclick="closeProgressModal()">Close</button>
-            </div>
-        </div>
-    </div>
+    <!-- Status Widget (embedded for non-blocking progress) -->
+    <iframe src="/static/status_widget.html" style="display:none;"></iframe>
+    <div id="statusWidgetContainer"></div>
+    
+    <script>
+        // Load status widget component
+        fetch('/static/status_widget.html')
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById('statusWidgetContainer').innerHTML = html;
+            });
+    </script>
 
     <script>
         let categories = [];
@@ -812,9 +807,16 @@
                 const data = await response.json();
                 
                 if (data.status === 'processing') {
-                    // Show progress modal and poll for progress
-                    showProgressModal();
-                    pollTaskProgress(data.task_id);
+                    // Start task tracking with status widget (non-blocking)
+                    startTaskTracking(data.task_id, 'Extracting Faces');
+                    // Refresh categories after task completes (poll completion)
+                    const checkCompletion = setInterval(async () => {
+                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(checkCompletion);
+                            await loadCategories();
+                        }
+                    }, 2000);
                 } else {
                     alert('Failed to start face extraction');
                 }
@@ -848,9 +850,16 @@
                 const data = await response.json();
                 
                 if (data.status === 'processing') {
-                    // Show progress modal and poll for progress
-                    showProgressModal();
-                    pollTaskProgress(data.task_id);
+                    // Start task tracking with status widget (non-blocking)
+                    startTaskTracking(data.task_id, 'Confirming Videos');
+                    // Refresh categories after task completes
+                    const checkCompletion = setInterval(async () => {
+                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(checkCompletion);
+                            await loadCategories();
+                        }
+                    }, 2000);
                 } else {
                     alert('Failed to start video confirmation');
                 }
@@ -884,9 +893,16 @@
                 const data = await response.json();
                 
                 if (data.status === 'processing') {
-                    // Show progress modal and poll for progress
-                    showProgressModal();
-                    pollTaskProgress(data.task_id);
+                    // Start task tracking with status widget (non-blocking)
+                    startTaskTracking(data.task_id, 'Rejecting Videos');
+                    // Refresh categories after task completes
+                    const checkCompletion = setInterval(async () => {
+                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(checkCompletion);
+                            await loadCategories();
+                        }
+                    }, 2000);
                 } else {
                     alert('Failed to start video rejection');
                 }
@@ -894,60 +910,6 @@
                 console.error('Failed to reject videos:', error);
                 alert('Error rejecting videos');
             }
-        }
-
-        function showProgressModal() {
-            document.getElementById('progressModal').style.display = 'flex';
-            document.getElementById('progressBar').style.width = '0%';
-            document.getElementById('progressPercent').textContent = '0%';
-            document.getElementById('progressMessage').textContent = 'Starting...';
-            document.getElementById('progressDetails').textContent = '';
-            document.getElementById('progressComplete').style.display = 'none';
-        }
-
-        function closeProgressModal() {
-            document.getElementById('progressModal').style.display = 'none';
-            loadCategories(); // Refresh categories after processing
-        }
-
-        async function pollTaskProgress(taskId) {
-            const pollInterval = 500; // Poll every 500ms
-            
-            const poll = async () => {
-                try {
-                    const response = await fetch(`/api/progress/${taskId}`);
-                    const data = await response.json();
-                    
-                    // Update progress UI
-                    const percent = data.progress_percentage || 0;
-                    document.getElementById('progressBar').style.width = `${percent}%`;
-                    document.getElementById('progressPercent').textContent = `${Math.round(percent)}%`;
-                    document.getElementById('progressMessage').textContent = data.message || 'Processing...';
-                    document.getElementById('progressDetails').textContent = data.details || '';
-                    
-                    if (data.status === 'completed') {
-                        // Task completed successfully
-                        document.getElementById('progressBar').style.width = '100%';
-                        document.getElementById('progressPercent').textContent = '100%';
-                        document.getElementById('progressComplete').style.display = 'block';
-                    } else if (data.status === 'failed') {
-                        // Task failed
-                        document.getElementById('progressMessage').textContent = 'Error: ' + (data.error || 'Task failed');
-                        document.getElementById('progressMessage').style.color = 'red';
-                        document.getElementById('progressComplete').style.display = 'block';
-                    } else {
-                        // Continue polling
-                        setTimeout(poll, pollInterval);
-                    }
-                } catch (error) {
-                    console.error('Failed to poll task progress:', error);
-                    document.getElementById('progressMessage').textContent = 'Error: Failed to get progress';
-                    document.getElementById('progressMessage').style.color = 'red';
-                    document.getElementById('progressComplete').style.display = 'block';
-                }
-            };
-            
-            poll();
         }
 
         init();

@@ -24,6 +24,7 @@ from animal_profile import AnimalProfile, AnimalProfileManager
 from review_feedback import ReviewManager
 from face_profile import FaceProfile, FaceProfileManager
 from task_tracker import task_tracker, TaskStatus
+from download_tracker import DownloadTracker
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +117,14 @@ face_profile_manager: Optional[FaceProfileManager] = None
 # Global review manager
 review_manager: Optional[ReviewManager] = None
 
+# Global download tracker
+download_tracker: Optional[DownloadTracker] = None
+
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Animal Profile Manager, Face Profile Manager, and Review Manager on startup."""
-    global animal_profile_manager, face_profile_manager, review_manager
+    """Initialize Animal Profile Manager, Face Profile Manager, Review Manager, and Download Tracker on startup."""
+    global animal_profile_manager, face_profile_manager, review_manager, download_tracker
     
     # Ensure config directory exists (copy from defaults if needed)
     try:
@@ -159,6 +163,13 @@ async def startup_event():
             logger.info("Review manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize review manager: {e}")
+    
+    # Initialize download tracker
+    try:
+        download_tracker = DownloadTracker()
+        logger.info("Download tracker initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize download tracker: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -2930,7 +2941,7 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
 @app.post("/api/review/{category}/reject-videos")
 async def reject_videos(category: str, request: dict, background_tasks: BackgroundTasks):
     """Reject/delete videos from review (async)."""
-    global animal_profile_manager
+    global animal_profile_manager, download_tracker
     
     try:
         filenames = request.get('filenames', [])
@@ -2964,6 +2975,16 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                         
                         video_path = review_path / filename
                         if video_path.exists():
+                            # Extract event_id from filename (format: CameraName_timestamp_eventid.mp4)
+                            try:
+                                event_id = filename.split('_')[-1].split('.')[0]
+                                # Mark as rejected in download tracker so it's never re-downloaded
+                                if download_tracker:
+                                    download_tracker.update_status(event_id, 'rejected')
+                                    logger.debug(f"Marked event {event_id} as rejected in download tracker")
+                            except Exception as e:
+                                logger.warning(f"Could not extract event_id from {filename}: {e}")
+                            
                             video_path.unlink()
                             results["deleted"].append(filename)
                             

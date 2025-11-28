@@ -1,0 +1,343 @@
+<!-- Header Status Widget for Background Tasks -->
+<style>
+    #statusWidget {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        width: 350px;
+        max-height: 400px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9998;
+        display: none;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    #statusWidget.minimized {
+        max-height: 50px;
+    }
+
+    .status-widget-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 12px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .status-widget-title {
+        font-weight: bold;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .status-widget-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .status-widget-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .status-widget-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        transition: background 0.2s;
+    }
+
+    .status-widget-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .status-widget-body {
+        max-height: 350px;
+        overflow-y: auto;
+    }
+
+    .status-task {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .status-task:last-child {
+        border-bottom: none;
+    }
+
+    .status-task-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .status-task-name {
+        font-weight: 500;
+        color: #333;
+        font-size: 13px;
+    }
+
+    .status-task-percent {
+        font-weight: bold;
+        color: #667eea;
+        font-size: 13px;
+    }
+
+    .status-task-progress-bar {
+        height: 6px;
+        background: #e0e0e0;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 6px;
+    }
+
+    .status-task-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        transition: width 0.3s ease;
+        border-radius: 3px;
+    }
+
+    .status-task-message {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 3px;
+    }
+
+    .status-task-details {
+        font-size: 11px;
+        color: #999;
+    }
+
+    .status-task-completed {
+        background: #f0fdf4;
+        border-left: 3px solid #10b981;
+    }
+
+    .status-task-failed {
+        background: #fef2f2;
+        border-left: 3px solid #ef4444;
+    }
+
+    .status-task-completed .status-task-name,
+    .status-task-completed .status-task-percent {
+        color: #10b981;
+    }
+
+    .status-task-failed .status-task-name,
+    .status-task-failed .status-task-percent {
+        color: #ef4444;
+    }
+
+    #statusWidgetIndicator {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        cursor: pointer;
+        z-index: 9997;
+        display: none;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    #statusWidgetIndicator:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .indicator-content {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+</style>
+
+<!-- Small indicator when widget is closed -->
+<div id="statusWidgetIndicator" onclick="showStatusWidget()">
+    <div class="indicator-content">
+        <div class="status-widget-spinner"></div>
+        <span id="indicatorText">Processing...</span>
+    </div>
+</div>
+
+<!-- Main status widget -->
+<div id="statusWidget">
+    <div class="status-widget-header" onclick="toggleStatusWidget()">
+        <div class="status-widget-title">
+            <div class="status-widget-spinner"></div>
+            <span>Background Tasks</span>
+        </div>
+        <div class="status-widget-actions" onclick="event.stopPropagation()">
+            <button class="status-widget-btn" onclick="minimizeStatusWidget()">−</button>
+            <button class="status-widget-btn" onclick="closeStatusWidget()">✕</button>
+        </div>
+    </div>
+    <div class="status-widget-body" id="statusWidgetBody">
+        <!-- Tasks will be added here dynamically -->
+    </div>
+</div>
+
+<script>
+// Global task tracking
+window.activeTasks = new Map();
+window.pollIntervals = new Map();
+
+function showStatusWidget() {
+    document.getElementById('statusWidget').style.display = 'block';
+    document.getElementById('statusWidget').classList.remove('minimized');
+    document.getElementById('statusWidgetIndicator').style.display = 'none';
+}
+
+function closeStatusWidget() {
+    document.getElementById('statusWidget').style.display = 'none';
+    // Only show indicator if there are active tasks
+    if (window.activeTasks.size > 0) {
+        document.getElementById('statusWidgetIndicator').style.display = 'block';
+    }
+}
+
+function minimizeStatusWidget() {
+    document.getElementById('statusWidget').classList.add('minimized');
+}
+
+function toggleStatusWidget() {
+    document.getElementById('statusWidget').classList.toggle('minimized');
+}
+
+function startTaskTracking(taskId, taskName = "Processing") {
+    // Show the widget
+    showStatusWidget();
+    
+    // Add task to tracking
+    window.activeTasks.set(taskId, {
+        name: taskName,
+        status: 'running',
+        progress: 0,
+        message: 'Starting...',
+        details: ''
+    });
+    
+    // Update UI
+    updateStatusWidget();
+    
+    // Start polling for this task
+    const pollInterval = setInterval(() => {
+        pollTaskProgress(taskId);
+    }, 500);
+    
+    window.pollIntervals.set(taskId, pollInterval);
+}
+
+async function pollTaskProgress(taskId) {
+    try {
+        const response = await fetch(`/api/progress/${taskId}`);
+        const data = await response.json();
+        
+        // Update task info
+        const task = window.activeTasks.get(taskId);
+        if (task) {
+            task.status = data.status;
+            task.progress = data.progress_percentage || 0;
+            task.message = data.message || 'Processing...';
+            task.details = data.details || '';
+            task.error = data.error;
+            
+            updateStatusWidget();
+            
+            // If completed or failed, stop polling after a delay
+            if (data.status === 'completed' || data.status === 'failed') {
+                clearInterval(window.pollIntervals.get(taskId));
+                window.pollIntervals.delete(taskId);
+                
+                // Remove from active tasks after 5 seconds
+                setTimeout(() => {
+                    window.activeTasks.delete(taskId);
+                    updateStatusWidget();
+                    
+                    // Hide indicator if no more active tasks
+                    if (window.activeTasks.size === 0) {
+                        document.getElementById('statusWidgetIndicator').style.display = 'none';
+                        // Auto-close widget if no more tasks
+                        setTimeout(() => {
+                            if (window.activeTasks.size === 0) {
+                                document.getElementById('statusWidget').style.display = 'none';
+                            }
+                        }, 2000);
+                    }
+                }, 5000);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to poll task progress:', error);
+    }
+}
+
+function updateStatusWidget() {
+    const body = document.getElementById('statusWidgetBody');
+    const indicator = document.getElementById('indicatorText');
+    
+    if (window.activeTasks.size === 0) {
+        body.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No active tasks</div>';
+        return;
+    }
+    
+    // Update indicator text
+    const activeCount = Array.from(window.activeTasks.values()).filter(t => t.status === 'running').length;
+    indicator.textContent = `${activeCount} task${activeCount !== 1 ? 's' : ''} running...`;
+    
+    // Render tasks
+    body.innerHTML = Array.from(window.activeTasks.entries()).map(([taskId, task]) => {
+        const statusClass = task.status === 'completed' ? 'status-task-completed' : 
+                           task.status === 'failed' ? 'status-task-failed' : '';
+        
+        return `
+            <div class="status-task ${statusClass}">
+                <div class="status-task-header">
+                    <div class="status-task-name">${task.name}</div>
+                    <div class="status-task-percent">${Math.round(task.progress)}%</div>
+                </div>
+                <div class="status-task-progress-bar">
+                    <div class="status-task-progress-fill" style="width: ${task.progress}%"></div>
+                </div>
+                <div class="status-task-message">${task.message}</div>
+                ${task.details ? `<div class="status-task-details">${task.details}</div>` : ''}
+                ${task.error ? `<div class="status-task-details" style="color: #ef4444;">${task.error}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// Auto-show indicator if there are active tasks on page load
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.activeTasks.size > 0) {
+        document.getElementById('statusWidgetIndicator').style.display = 'block';
+    }
+});
+</script>
