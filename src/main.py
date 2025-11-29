@@ -102,9 +102,31 @@ def process_videos(config: dict):
     face_profile_manager = FaceProfileManager(Path("/data"))
     clip_classifier = None  # Lazy load when needed
     
-    # V2: Object detection now happens in Animal Profile processing
-    # Initialize object detector with configured labels (for backward compatibility)
-    object_labels = detection_config.get('object_labels', ['bird', 'cat', 'dog', 'person'])
+    # V2: Compute active YOLO categories from enabled Animal Profiles + manual categories
+    logger.info("Computing active YOLO categories from Animal Profiles and manual config")
+    
+    # Get manual categories from config
+    manual_categories = set([c.lower() for c in config.get('yolo_manual_categories', [])])
+    
+    # Get categories from enabled Animal Profiles
+    all_profiles = profile_manager.list_profiles()
+    auto_enabled_categories = set()
+    for profile in all_profiles:
+        if profile.enabled:
+            auto_enabled_categories.update([c.lower() for c in profile.yolo_categories])
+    
+    # Compute union of auto + manual
+    active_categories = list(auto_enabled_categories | manual_categories)
+    
+    # Fallback to config object_labels if no active categories
+    if not active_categories:
+        logger.warning("No active YOLO categories found from profiles/manual. Using config object_labels as fallback.")
+        active_categories = detection_config.get('object_labels', ['bird', 'cat', 'dog', 'person'])
+    
+    logger.info(f"Active YOLO categories: {active_categories}")
+    logger.info(f"  Auto-enabled by profiles: {sorted(auto_enabled_categories)}")
+    logger.info(f"  Manually enabled: {sorted(manual_categories)}")
+    
     yolo_model = detection_config.get('yolo_model', 'yolov8n')  # Default to nano model
     
     # Add .pt extension if not present
@@ -112,7 +134,7 @@ def process_videos(config: dict):
         yolo_model = f"{yolo_model}.pt"
     
     object_detector = ObjectDetector(
-        labels=object_labels,
+        labels=active_categories,
         confidence_threshold=detection_config.get('confidence_threshold', 0.25),
         num_frames=detection_config.get('object_frames', 5),
         model_name=yolo_model

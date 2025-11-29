@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Animal Profiles - CritterCatcherAI</title>
+    <title>CLIP Profiles - CritterCatcherAI</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <style>
         :root {
@@ -571,7 +571,8 @@
                 <div class="form-group">
                     <label>YOLO Categories *</label>
                     <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-                        Select which YOLO categories might contain your target animal
+                        Select which YOLO categories might contain your target animal.
+                        <strong style="color: var(--accent-color);">Selected categories will be automatically enabled in YOLO detection.</strong>
                     </p>
                     <div id="yoloCategories" class="checkbox-group"></div>
                 </div>
@@ -704,14 +705,14 @@
 
         function openCreateModal() {
             currentProfileId = null;
-            document.getElementById('modalTitle').textContent = 'Create Animal Profile';
+            document.getElementById('modalTitle').textContent = 'Create CLIP Profile';
             document.getElementById('profileForm').reset();
             document.getElementById('profileModal').classList.add('active');
         }
 
         function openEditModal(profileId) {
             currentProfileId = profileId;
-            document.getElementById('modalTitle').textContent = 'Edit Animal Profile';
+            document.getElementById('modalTitle').textContent = 'Edit CLIP Profile';
 
             // Load profile data
             fetch(`/api/animal-profiles/${profileId}`)

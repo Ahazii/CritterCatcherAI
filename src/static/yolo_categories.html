@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Categories - CritterCatcherAI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --danger-color: #f56565;
+            --locked-color: #a0aec0;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --accent-color: #63b3ed;
+            --accent-hover: #4299e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-title {
+            color: var(--accent-color);
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* Page Title */
+        .page-header {
+            margin: 2rem 0;
+        }
+
+        .page-header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-header p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* Legend */
+        .legend {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-icon {
+            font-size: 1.2rem;
+        }
+
+        /* Category Groups */
+        .category-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .category-group h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .category-item:hover {
+            box-shadow: var(--shadow);
+        }
+
+        .category-item.locked {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+            border-color: var(--locked-color);
+        }
+
+        .category-info {
+            flex: 1;
+        }
+
+        .category-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .category-status {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .category-profiles {
+            font-size: 0.75rem;
+            color: var(--accent-color);
+            margin-top: 0.25rem;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: var(--success-color);
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        input:disabled + .toggle-slider {
+            cursor: not-allowed;
+            background-color: var(--locked-color);
+            opacity: 0.7;
+        }
+
+        .lock-icon {
+            font-size: 1.2rem;
+            color: var(--locked-color);
+            margin-left: 0.5rem;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/static/index.html" class="logo">
+                <span class="logo-title">🎯 YOLO Categories</span>
+            </a>
+            <button class="btn" onclick="window.location.href='/static/index.html'">← Back to Dashboard</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>YOLO Object Detection Categories</h1>
+            <p>Configure which object types to detect in videos. Categories used by CLIP profiles are automatically enabled.</p>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-icon">🔒</span>
+                <span><strong>In use by profiles</strong> - Auto-enabled (cannot disable)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">✅</span>
+                <span><strong>Manually enabled</strong> - Can toggle on/off</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">⬜</span>
+                <span><strong>Not used</strong> - Available to enable</span>
+            </div>
+        </div>
+
+        <div id="categoriesContainer">
+            <div style="text-align: center; padding: 3rem;">
+                <div class="spinner"></div>
+                <p style="margin-top: 1rem; color: var(--text-secondary);">Loading categories...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Category groups for organization
+        const CATEGORY_GROUPS = {
+            'Animals': ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'],
+            'Vehicles': ['bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat'],
+            'Outdoor Objects': ['traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench'],
+            'Sports & Recreation': ['frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket'],
+            'Indoor Objects': ['bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'book', 'clock', 'vase', 'scissors', 'teddy bear'],
+            'Electronics & Appliances': ['microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'hair drier', 'toothbrush'],
+            'Personal Items': ['backpack', 'umbrella', 'handbag', 'tie', 'suitcase'],
+            'Food': ['banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake']
+        };
+
+        let categoryData = null;
+
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/yolo-categories');
+                categoryData = await response.json();
+                renderCategories();
+            } catch (error) {
+                console.error('Failed to load categories:', error);
+                document.getElementById('categoriesContainer').innerHTML = `
+                    <div style="text-align: center; padding: 3rem; color: var(--danger-color);">
+                        <p>❌ Failed to load categories</p>
+                        <p style="font-size: 0.875rem; margin-top: 0.5rem;">${error.message}</p>
+                        <button class="btn" onclick="loadCategories()" style="margin-top: 1rem;">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderCategories() {
+            const container = document.getElementById('categoriesContainer');
+            container.innerHTML = '';
+
+            for (const [groupName, categories] of Object.entries(CATEGORY_GROUPS)) {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'category-group';
+                
+                const groupTitle = document.createElement('h2');
+                groupTitle.textContent = groupName;
+                groupDiv.appendChild(groupTitle);
+
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'category-grid';
+
+                for (const category of categories) {
+                    const catInfo = categoryData.categories.find(c => c.name === category);
+                    if (!catInfo) continue;
+
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'category-item' + (catInfo.used_by_profiles.length > 0 ? ' locked' : '');
+
+                    const infoDiv = document.createElement('div');
+                    infoDiv.className = 'category-info';
+
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'category-name';
+                    nameDiv.textContent = category;
+                    infoDiv.appendChild(nameDiv);
+
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'category-status';
+                    if (catInfo.used_by_profiles.length > 0) {
+                        statusDiv.textContent = 'In use by profiles';
+                    } else if (catInfo.manually_enabled) {
+                        statusDiv.textContent = 'Manually enabled';
+                    } else {
+                        statusDiv.textContent = 'Not used';
+                    }
+                    infoDiv.appendChild(statusDiv);
+
+                    if (catInfo.used_by_profiles.length > 0) {
+                        const profilesDiv = document.createElement('div');
+                        profilesDiv.className = 'category-profiles';
+                        profilesDiv.textContent = `Used by: ${catInfo.used_by_profiles.join(', ')}`;
+                        infoDiv.appendChild(profilesDiv);
+                    }
+
+                    itemDiv.appendChild(infoDiv);
+
+                    // Toggle or lock icon
+                    if (catInfo.used_by_profiles.length > 0) {
+                        const lockIcon = document.createElement('span');
+                        lockIcon.className = 'lock-icon';
+                        lockIcon.textContent = '🔒';
+                        lockIcon.title = 'Auto-enabled by CLIP profiles';
+                        itemDiv.appendChild(lockIcon);
+                    } else {
+                        const toggleLabel = document.createElement('label');
+                        toggleLabel.className = 'toggle-switch';
+                        
+                        const toggleInput = document.createElement('input');
+                        toggleInput.type = 'checkbox';
+                        toggleInput.checked = catInfo.manually_enabled;
+                        toggleInput.onchange = () => toggleCategory(category, toggleInput.checked);
+                        
+                        const toggleSpan = document.createElement('span');
+                        toggleSpan.className = 'toggle-slider';
+                        
+                        toggleLabel.appendChild(toggleInput);
+                        toggleLabel.appendChild(toggleSpan);
+                        itemDiv.appendChild(toggleLabel);
+                    }
+
+                    gridDiv.appendChild(itemDiv);
+                }
+
+                groupDiv.appendChild(gridDiv);
+                container.appendChild(groupDiv);
+            }
+        }
+
+        async function toggleCategory(category, enabled) {
+            try {
+                const response = await fetch('/api/yolo-categories/manual/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, enabled })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to toggle category');
+                }
+
+                // Reload to reflect changes
+                await loadCategories();
+            } catch (error) {
+                console.error('Failed to toggle category:', error);
+                alert(`Failed to toggle ${category}: ${error.message}`);
+                // Reload to reset state
+                await loadCategories();
+            }
+        }
+
+        // Load categories on page load
+        loadCategories();
+    </script>
+</body>
+</html>

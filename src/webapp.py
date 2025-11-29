@@ -2208,6 +2208,151 @@ async def trigger_retrain(profile_id: str, request: dict = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============= YOLO Categories Management =============
+
+@app.get("/api/yolo-categories")
+async def get_yolo_categories():
+    """Get all YOLO categories with usage information."""
+    try:
+        from object_detector import YOLO_COCO_CLASSES
+        
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        # Load manual categories from config
+        manual_categories = set()
+        try:
+            if CONFIG_PATH.exists():
+                with open(CONFIG_PATH, 'r') as f:
+                    config = yaml.safe_load(f)
+                manual_categories = set(config.get('yolo_manual_categories', []))
+        except Exception as e:
+            logger.warning(f"Failed to load manual categories: {e}")
+        
+        # Get all profiles to compute auto-enabled categories
+        profiles = animal_profile_manager.list_profiles()
+        
+        # Build category info
+        categories_info = []
+        for category in YOLO_COCO_CLASSES:
+            # Find which profiles use this category
+            used_by_profiles = []
+            for profile in profiles:
+                if profile.enabled and category.lower() in [c.lower() for c in profile.yolo_categories]:
+                    used_by_profiles.append(profile.name)
+            
+            categories_info.append({
+                "name": category,
+                "used_by_profiles": used_by_profiles,
+                "manually_enabled": category.lower() in [c.lower() for c in manual_categories],
+                "is_enabled": len(used_by_profiles) > 0 or category.lower() in [c.lower() for c in manual_categories]
+            })
+        
+        return {
+            "status": "success",
+            "categories": categories_info,
+            "total_categories": len(YOLO_COCO_CLASSES)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get YOLO categories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/yolo-categories/manual/toggle")
+async def toggle_manual_category(request: dict):
+    """Toggle a YOLO category manual enable/disable."""
+    try:
+        category = request.get('category')
+        enabled = request.get('enabled', False)
+        
+        if not category:
+            raise HTTPException(status_code=400, detail="Category is required")
+        
+        # Load config
+        if not CONFIG_PATH.exists():
+            raise HTTPException(status_code=500, detail="Config file not found")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f) or {}
+        
+        # Get current manual categories
+        manual_categories = config.get('yolo_manual_categories', [])
+        manual_categories_lower = [c.lower() for c in manual_categories]
+        
+        # Update list
+        if enabled:
+            # Add if not present
+            if category.lower() not in manual_categories_lower:
+                manual_categories.append(category)
+                logger.info(f"Manually enabled YOLO category: {category}")
+        else:
+            # Remove if present
+            manual_categories = [c for c in manual_categories if c.lower() != category.lower()]
+            logger.info(f"Manually disabled YOLO category: {category}")
+        
+        # Update config
+        config['yolo_manual_categories'] = manual_categories
+        
+        # Save config
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        return {
+            "status": "success",
+            "category": category,
+            "enabled": enabled,
+            "message": f"Category '{category}' {'enabled' if enabled else 'disabled'}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to toggle manual category: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/yolo-categories/active")
+async def get_active_yolo_categories():
+    """Get list of all active YOLO categories (auto-enabled + manual)."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        # Load manual categories
+        manual_categories = set()
+        try:
+            if CONFIG_PATH.exists():
+                with open(CONFIG_PATH, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+                manual_categories = set([c.lower() for c in config.get('yolo_manual_categories', [])])
+        except Exception as e:
+            logger.warning(f"Failed to load manual categories: {e}")
+        
+        # Get all enabled profiles
+        profiles = animal_profile_manager.list_profiles()
+        auto_enabled = set()
+        for profile in profiles:
+            if profile.enabled:
+                auto_enabled.update([c.lower() for c in profile.yolo_categories])
+        
+        # Compute union
+        active_categories = list(auto_enabled | manual_categories)
+        
+        return {
+            "status": "success",
+            "active_categories": sorted(active_categories),
+            "auto_enabled_count": len(auto_enabled),
+            "manually_enabled_count": len(manual_categories),
+            "total_active": len(active_categories)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get active YOLO categories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============= Video-Based Review Endpoints =============
 
 @app.get("/api/review/categories")
