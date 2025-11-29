@@ -194,19 +194,42 @@ class ObjectDetector:
             # Draw thick highlighted rectangle
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 3)
             
-            # Draw bold label for highlighted detection
+            # Draw bold label for highlighted detection with improved placement
             label_text = f"{label} {confidence:.2f}"
-            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            font_thickness = 2
+            (text_width, text_height), baseline = cv2.getTextSize(label_text, font, font_scale, font_thickness)
             
-            if y1 < text_height + baseline + 10:
-                label_y = y1 + text_height + baseline + 5
-                cv2.rectangle(annotated_frame, (x1, y1), (x1 + text_width + 4, label_y), color, -1)
-                cv2.putText(annotated_frame, label_text, (x1 + 2, y1 + text_height + 2),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            # Calculate label box dimensions with padding
+            label_padding = 4
+            label_height = text_height + baseline + (2 * label_padding)
+            label_width = text_width + (2 * label_padding)
+            
+            # Try to place label above box
+            if y1 - label_height >= 0:
+                # Place above
+                label_y1 = y1 - label_height
+                label_y2 = y1
+                text_y = y1 - baseline - label_padding
             else:
-                cv2.rectangle(annotated_frame, (x1, y1 - text_height - baseline - 5), (x1 + text_width, y1), color, -1)
-                cv2.putText(annotated_frame, label_text, (x1, y1 - baseline - 2),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+                # Place inside box at top
+                label_y1 = y1
+                label_y2 = y1 + label_height
+                text_y = y1 + text_height + label_padding
+            
+            # Ensure label doesn't go off right edge
+            label_x1 = x1
+            label_x2 = min(x1 + label_width, annotated_frame.shape[1])
+            
+            # Draw semi-transparent background for label
+            overlay = annotated_frame.copy()
+            cv2.rectangle(overlay, (label_x1, label_y1), (label_x2, label_y2), color, -1)
+            cv2.addWeighted(overlay, 0.7, annotated_frame, 0.3, 0, annotated_frame)
+            
+            # Draw label text
+            cv2.putText(annotated_frame, label_text, (x1 + label_padding, text_y),
+                       font, font_scale, (0, 0, 0), font_thickness)
             
             # Save this annotated image (only for focused labels)
             if save_detections and is_focused:
@@ -423,4 +446,187 @@ class ObjectDetector:
         except Exception as e:
             logger.error(f"Failed to save detected object: {e}")
             return False
+    
+    def track_and_annotate_video(self, video_path: Path, output_path: Path = None, 
+                                  save_original: bool = False) -> Dict[str, float]:
+        """
+        Track objects through entire video and create annotated output with bounding boxes.
+        
+        Args:
+            video_path: Path to input video file
+            output_path: Path for annotated output video (auto-generated if None)
+            save_original: Whether to keep the original video alongside annotated version
+            
+        Returns:
+            Dictionary mapping label to max confidence score across all frames
+        """
+        try:
+            logger.info(f"Starting video tracking for: {video_path.name}")
+            
+            # Open video
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                logger.error(f"Failed to open video: {video_path}")
+                return {}
+            
+            # Get video properties
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            logger.info(f"Video properties: {width}x{height}, {fps} fps, {total_frames} frames")
+            
+            # Generate output path if not provided
+            if output_path is None:
+                output_dir = self.detected_objects_path / "annotated_videos"
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_path = output_dir / f"tracked_{video_path.name}"
+            else:
+                output_path = Path(output_path)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Set permissions for output directory (per user rule)
+            try:
+                import stat
+                output_path.parent.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+            except Exception as e:
+                logger.warning(f"Could not set permissions on {output_path.parent}: {e}")
+            
+            # Create video writer
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+            
+            if not out.isOpened():
+                logger.error(f"Failed to create output video writer: {output_path}")
+                cap.release()
+                return {}
+            
+            # Track detections
+            all_detections = {}
+            frame_count = 0
+            
+            logger.info("Processing frames with object tracking...")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                frame_count += 1
+                
+                # Track objects in frame (YOLOv8 tracking with persistent IDs)
+                results = self.model.track(frame, persist=True, verbose=False)
+                
+                # Process tracking results
+                if results and len(results) > 0:
+                    result = results[0]
+                    
+                    if result.boxes is not None and len(result.boxes) > 0:
+                        boxes = result.boxes
+                        
+                        for box in boxes:
+                            class_id = int(box.cls[0])
+                            confidence = float(box.conf[0])
+                            label = result.names[class_id].lower()
+                            
+                            # Check if this label is in our tracked labels
+                            if label not in self.labels:
+                                continue
+                            
+                            # Track max confidence for this label
+                            if label not in all_detections or confidence > all_detections[label]:
+                                all_detections[label] = confidence
+                            
+                            # Only draw boxes for labels we're tracking
+                            if confidence >= self.confidence_threshold:
+                                bbox = box.xyxy[0].cpu().numpy()
+                                x1, y1, x2, y2 = map(int, bbox)
+                                
+                                # Get track ID if available
+                                track_id = int(box.id[0]) if box.id is not None else None
+                                
+                                # Draw bounding box
+                                color = (0, 255, 0)  # Green for tracked objects
+                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                                
+                                # Prepare label text
+                                if track_id is not None:
+                                    label_text = f"{label} #{track_id} {confidence:.2f}"
+                                else:
+                                    label_text = f"{label} {confidence:.2f}"
+                                
+                                # Calculate label dimensions
+                                font = cv2.FONT_HERSHEY_SIMPLEX
+                                font_scale = 0.6
+                                font_thickness = 2
+                                (text_width, text_height), baseline = cv2.getTextSize(
+                                    label_text, font, font_scale, font_thickness
+                                )
+                                
+                                # Improved label placement logic
+                                label_padding = 4
+                                label_height = text_height + baseline + (2 * label_padding)
+                                label_width = text_width + (2 * label_padding)
+                                
+                                # Try to place label above box
+                                if y1 - label_height >= 0:
+                                    # Place above
+                                    label_y1 = y1 - label_height
+                                    label_y2 = y1
+                                    text_y = y1 - baseline - label_padding
+                                else:
+                                    # Place inside box at top
+                                    label_y1 = y1
+                                    label_y2 = y1 + label_height
+                                    text_y = y1 + text_height + label_padding
+                                
+                                # Ensure label doesn't go off right edge
+                                label_x1 = x1
+                                label_x2 = min(x1 + label_width, width)
+                                
+                                # Draw semi-transparent background for label
+                                overlay = frame.copy()
+                                cv2.rectangle(overlay, (label_x1, label_y1), (label_x2, label_y2), 
+                                            color, -1)
+                                cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+                                
+                                # Draw label text
+                                cv2.putText(frame, label_text, (x1 + label_padding, text_y),
+                                          font, font_scale, (0, 0, 0), font_thickness)
+                
+                # Write annotated frame
+                out.write(frame)
+                
+                # Log progress every 10%
+                if frame_count % (total_frames // 10 + 1) == 0:
+                    progress = (frame_count / total_frames) * 100
+                    logger.info(f"Tracking progress: {progress:.0f}% ({frame_count}/{total_frames} frames)")
+            
+            # Cleanup
+            cap.release()
+            out.release()
+            
+            logger.info(f"Video tracking complete: {output_path}")
+            logger.info(f"Detected objects: {all_detections}")
+            
+            # Optionally move original video to a separate folder
+            if save_original:
+                original_dir = self.detected_objects_path / "original_videos"
+                original_dir.mkdir(parents=True, exist_ok=True)
+                original_path = original_dir / video_path.name
+                
+                try:
+                    import shutil
+                    if not original_path.exists():
+                        shutil.copy2(str(video_path), str(original_path))
+                        logger.info(f"Saved original video to: {original_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to save original video: {e}")
+            
+            return all_detections
+            
+        except Exception as e:
+            logger.error(f"Failed to track video: {e}", exc_info=True)
+            return {}
     
