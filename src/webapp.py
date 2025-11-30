@@ -2402,6 +2402,8 @@ async def list_category_videos(category: str):
             return {"status": "success", "videos": []}
         
         videos = []
+        tracked_videos_dir = Path("/data/objects/detected/annotated_videos")
+        
         for video_file in sorted(category_dir.glob("*.mp4")):
             # Try to load metadata
             metadata = {}
@@ -2413,6 +2415,11 @@ async def list_category_videos(category: str):
                 except Exception as e:
                     logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
             
+            # Check if tracked video exists
+            tracked_filename = f"tracked_{video_file.name}"
+            tracked_video_path = tracked_videos_dir / tracked_filename
+            has_tracked_video = tracked_video_path.exists()
+            
             videos.append({
                 "filename": video_file.name,
                 "category": category,
@@ -2422,7 +2429,8 @@ async def list_category_videos(category: str):
                 "clip_results": metadata.get("clip_results"),
                 "status": metadata.get("status", "pending_review"),
                 "timestamp": metadata.get("timestamp", ""),
-                "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
+                "tracked_video_filename": tracked_filename if has_tracked_video else None
             })
         
         return {
@@ -2455,6 +2463,29 @@ async def serve_review_video(category: str, filename: str):
         raise
     except Exception as e:
         logger.error(f"Failed to serve video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/review/tracked-video/{filename}")
+async def serve_tracked_video(filename: str):
+    """Serve a tracked video file with bounding box annotations."""
+    try:
+        # Tracked videos are stored with 'tracked_' prefix
+        video_path = Path("/data/objects/detected/annotated_videos") / filename
+        
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail=f"Tracked video not found: {filename}")
+        
+        # Return video file
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve tracked video: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3033,7 +3064,7 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
                         
-                        # Move video to sorted
+                        # Move ORIGINAL video to sorted (not tracked version)
                         dest_path = sorted_path / filename
                         if dest_path.exists():
                             # Handle duplicates
@@ -3050,6 +3081,12 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
                         if metadata_path.exists():
                             dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
                             shutil.move(str(metadata_path), str(dest_metadata))
+                        
+                        # Delete tracked video (for review only, not needed in sorted)
+                        tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
+                        if tracked_video_path.exists():
+                            tracked_video_path.unlink()
+                            logger.debug(f"Deleted tracked video: tracked_{filename}")
                         
                         results["confirmed"].append(filename)
                         logger.info(f"Confirmed {filename} for category {category}")
@@ -3133,13 +3170,14 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                             # Extract event_id from filename (format: CameraName_timestamp_eventid.mp4)
                             try:
                                 event_id = filename.split('_')[-1].split('.')[0]
-                                # Mark as rejected in download tracker so it's never re-downloaded
+                                # Mark as rejected in download tracker (preserve entry, just update status)
                                 if download_tracker:
                                     download_tracker.update_status(event_id, 'rejected')
-                                    logger.debug(f"Marked event {event_id} as rejected in download tracker")
+                                    logger.debug(f"Marked event {event_id} as rejected in download tracker (entry preserved)")
                             except Exception as e:
                                 logger.warning(f"Could not extract event_id from {filename}: {e}")
                             
+                            # Delete original video
                             video_path.unlink()
                             results["deleted"].append(filename)
                             
@@ -3148,7 +3186,13 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                             if metadata_path.exists():
                                 metadata_path.unlink()
                             
-                            logger.info(f"Rejected {filename} for category {category}")
+                            # Delete tracked video if exists
+                            tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
+                            if tracked_video_path.exists():
+                                tracked_video_path.unlink()
+                                logger.debug(f"Deleted tracked video: tracked_{filename}")
+                            
+                            logger.info(f"Rejected and deleted {filename} for category {category} (DB entry preserved)")
                         else:
                             results["failed"].append({"filename": filename, "error": "File not found"})
                         

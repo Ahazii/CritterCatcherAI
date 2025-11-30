@@ -572,28 +572,19 @@
             videoContainer.className = 'video-container';
             
             const videoElement = document.createElement('video');
-            videoElement.src = `/api/review/video/${currentCategory}/${video.filename}`;
+            // Use tracked video if available (has animated bounding boxes), otherwise fall back to original
+            if (video.tracked_video_filename) {
+                videoElement.src = `/api/review/tracked-video/${video.tracked_video_filename}`;
+            } else {
+                videoElement.src = `/api/review/video/${currentCategory}/${video.filename}`;
+            }
             videoElement.controls = true;
             videoElement.preload = 'metadata';
             videoElement.style.width = '100%';
             videoElement.style.height = '100%';
             videoElement.style.objectFit = 'cover';
             
-            // Canvas for bounding boxes
-            const canvas = document.createElement('canvas');
-            canvas.className = 'bbox-canvas';
-            canvas.width = 280;
-            canvas.height = 200;
-            
-            // Draw bounding boxes when video loads metadata
-            videoElement.addEventListener('loadedmetadata', () => {
-                if (video.detected_objects && Object.keys(video.detected_objects).length > 0) {
-                    drawBoundingBoxes(canvas, video.detected_objects);
-                }
-            });
-            
             videoContainer.appendChild(videoElement);
-            videoContainer.appendChild(canvas);
             
             // Checkbox with better click handling
             const checkbox = document.createElement('div');
