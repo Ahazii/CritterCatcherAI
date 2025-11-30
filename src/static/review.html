@@ -621,10 +621,34 @@
                 })
                 .join(', ');
             
-            metadata.innerHTML = `
-                <div><strong>Detections:</strong> ${detections || 'None'}</div>
+            // Build metadata HTML
+            let metadataHTML = `
+                <div><strong>YOLO Category:</strong> ${video.yolo_category || currentCategory} (${video.yolo_confidence ? (video.yolo_confidence * 100).toFixed(0) + '%' : 'N/A'})</div>
+            `;
+            
+            // Add CLIP results if available
+            if (video.clip_results) {
+                const clipResults = video.clip_results;
+                if (clipResults.selected_profile) {
+                    const finalConf = clipResults.final_confidence || 0;
+                    const autoApproved = clipResults.auto_approved ? ' ✅ Auto-approved' : '';
+                    metadataHTML += `<div><strong>CLIP Match:</strong> Profile ID ${clipResults.selected_profile} (${(finalConf * 100).toFixed(0)}%)${autoApproved}</div>`;
+                }
+            }
+            
+            metadataHTML += `
+                <div><strong>All Detections:</strong> ${detections || 'None'}</div>
                 <div><strong>Size:</strong> ${video.size_mb} MB</div>
             `;
+            
+            // Add status badge
+            if (video.status) {
+                const statusEmoji = video.status === 'clip_sorted' ? '✅' : '⏳';
+                const statusText = video.status === 'clip_sorted' ? 'CLIP Sorted' : 'Pending Review';
+                metadataHTML += `<div><strong>Status:</strong> ${statusEmoji} ${statusText}</div>`;
+            }
+            
+            metadata.innerHTML = metadataHTML;
             
             info.appendChild(filename);
             info.appendChild(metadata);

@@ -2411,6 +2411,10 @@ async def list_category_videos(category: str):
                 "filename": video_file.name,
                 "category": category,
                 "detected_objects": metadata.get("detected_objects", {}),
+                "yolo_category": metadata.get("yolo_category", category),
+                "yolo_confidence": metadata.get("yolo_confidence", 0.0),
+                "clip_results": metadata.get("clip_results"),
+                "status": metadata.get("status", "pending_review"),
                 "timestamp": metadata.get("timestamp", ""),
                 "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
             })

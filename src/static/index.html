@@ -1129,8 +1129,20 @@
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab-content active">
             <div id="dashboardProgress"></div>
+            
             <div class="card">
-                <div class="card-title">Video Statistics by Category</div>
+                <div class="card-title">🔍 YOLO Review Queue</div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                    Videos detected by YOLO Stage 1, pending CLIP refinement or manual review
+                </p>
+                <div id="reviewStatsChart"></div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title">✅ Sorted Videos</div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                    Videos confirmed and sorted by CLIP profiles or manual review
+                </p>
                 <div id="statsChart"></div>
             </div>
         </div>
@@ -1643,6 +1655,43 @@
                 document.getElementById('statsChart').innerHTML = html;
             } catch (error) {
                 console.error('Failed to fetch stats:', error);
+            }
+        }
+        
+        async function fetchReviewStats() {
+            try {
+                const response = await fetch('/api/review/categories');
+                const data = await response.json();
+                
+                const reviewChart = document.getElementById('reviewStatsChart');
+                
+                if (!data.categories || data.categories.length === 0) {
+                    reviewChart.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No videos in review queue</p>';
+                    return;
+                }
+                
+                let html = '<div class="face-list">';
+                
+                for (const cat of data.categories) {
+                    html += `
+                        <div class="face-item" style="cursor: pointer;" onclick="window.location.href='/static/review.html'">
+                            <div>
+                                <div class="face-name">${cat.name}</div>
+                            </div>
+                            <div class="stat-value" style="font-size: 1.5rem; margin: 0;">${cat.video_count}</div>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                html += `<p style="text-align: center; margin-top: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+                    <strong>${data.total_videos}</strong> videos pending review • 
+                    <a href="/static/review.html" style="color: var(--accent-color); text-decoration: none;">Go to Review →</a>
+                </p>`;
+                
+                reviewChart.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to fetch review stats:', error);
             }
         }
 
@@ -2946,12 +2995,14 @@
             // Start fetching status
             fetchStatus();
             fetchStats();
+            fetchReviewStats();
             checkForUpdates();
             
             // Auto-refresh with configurable rate
             refreshInterval = setInterval(() => {
                 fetchStatus();
                 fetchStats();
+                fetchReviewStats();
                 if (currentTab === 'videos') {
                     loadVideos();
                 }
