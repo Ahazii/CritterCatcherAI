@@ -2219,13 +2219,16 @@ async def get_yolo_categories():
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
         
-        # Load manual categories from config
+        # Load manual categories from config (normalize to lowercase for comparison)
         manual_categories = set()
+        manual_categories_lower = set()
         try:
             if CONFIG_PATH.exists():
                 with open(CONFIG_PATH, 'r') as f:
-                    config = yaml.safe_load(f)
+                    config = yaml.safe_load(f) or {}
                 manual_categories = set(config.get('yolo_manual_categories', []))
+                manual_categories_lower = set([c.lower() for c in manual_categories])
+                logger.debug(f"Loaded {len(manual_categories)} manual categories from config: {sorted(manual_categories)}")
         except Exception as e:
             logger.warning(f"Failed to load manual categories: {e}")
         
@@ -2241,11 +2244,14 @@ async def get_yolo_categories():
                 if profile.enabled and category.lower() in [c.lower() for c in profile.yolo_categories]:
                     used_by_profiles.append(profile.name)
             
+            # Check if manually enabled (case-insensitive)
+            is_manually_enabled = category.lower() in manual_categories_lower
+            
             categories_info.append({
                 "name": category,
                 "used_by_profiles": used_by_profiles,
-                "manually_enabled": category.lower() in [c.lower() for c in manual_categories],
-                "is_enabled": len(used_by_profiles) > 0 or category.lower() in [c.lower() for c in manual_categories]
+                "manually_enabled": is_manually_enabled,
+                "is_enabled": len(used_by_profiles) > 0 or is_manually_enabled
             })
         
         return {

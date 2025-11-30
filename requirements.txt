@@ -12,6 +12,7 @@ opencv-python==4.8.1.78
 
 # YOLO Object Detection
 ultralytics==8.0.228
+lap>=0.5.0  # Required for YOLOv8 object tracking
 
 # CLIP/ViT for Second-Stage Classification
 # Note: transformers includes CLIP model support

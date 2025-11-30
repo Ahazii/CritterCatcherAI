@@ -211,6 +211,13 @@ image_review:
 - Check logs for errors during video processing
 - Verify videos are being downloaded to `/data/downloads`
 
+### Video Tracking Not Working (1KB or 258-byte files)
+- **Symptom**: Annotated videos in `/data/objects/detected/annotated_videos/` are tiny (1KB or 258 bytes) and won't play
+- **Cause**: Missing `lap` module dependency for YOLOv8 tracking
+- **Solution**: The `lap` module is now included in `requirements.txt` and will be installed automatically during container build
+- **Manual Fix** (if needed): `docker exec crittercatcherai pip3 install lap>=0.5.0 && docker restart crittercatcherai`
+- **Verification**: Check logs for "Video tracking complete" with file size in MB (not bytes)
+
 ### Face Recognition Not Working
 - Ensure face encodings are created (see Face Recognition Setup)
 - Add more training photos for better accuracy
