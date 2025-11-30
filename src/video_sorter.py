@@ -157,6 +157,156 @@ class VideoSorter:
         logger.info(f"No detections for {video_path.name}, sorting to 'unknown'")
         return self.move_video(video_path, "unknown")
     
+    def sort_by_yolo_category(self, video_path: Path, yolo_category: str, 
+                               confidence: float, metadata: Dict = None) -> Path:
+        """
+        Sort video to YOLO category folder (hybrid workflow - Stage 1).
+        This places videos in /data/review/{category}/ for initial YOLO-based sorting.
+        CLIP profiles can then refine and move high-confidence matches to /data/sorted/.
+        
+        Args:
+            video_path: Path to the video file
+            yolo_category: YOLO detection category (e.g., 'dog', 'bird', 'car')
+            confidence: YOLO detection confidence score
+            metadata: Optional additional metadata to save
+            
+        Returns:
+            Path to sorted video in review folder
+        """
+        import json
+        from datetime import datetime
+        
+        # Create review folder structure
+        review_base = Path("/data/review")
+        category_dir = review_base / yolo_category
+        category_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set permissions for created folders (per user rule)
+        try:
+            import stat
+            category_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception as e:
+            logger.warning(f"Could not set permissions on {category_dir}: {e}")
+        
+        # Destination path
+        dest_path = category_dir / video_path.name
+        
+        # Handle duplicate filenames
+        if dest_path.exists():
+            counter = 1
+            stem = video_path.stem
+            suffix = video_path.suffix
+            while dest_path.exists():
+                new_name = f"{stem}_{counter}{suffix}"
+                dest_path = category_dir / new_name
+                counter += 1
+        
+        try:
+            # Move video to review folder
+            shutil.move(str(video_path), str(dest_path))
+            logger.info(f"Sorted video to YOLO category '{yolo_category}': {video_path.name} (confidence: {confidence:.2f})")
+            
+            # Save metadata JSON
+            metadata_dict = {
+                "filename": dest_path.name,
+                "yolo_category": yolo_category,
+                "yolo_confidence": confidence,
+                "timestamp": datetime.now().isoformat(),
+                "status": "pending_review",  # Can be updated by CLIP refinement
+                "clip_results": None  # Will be populated if CLIP profiles run
+            }
+            
+            if metadata:
+                metadata_dict.update(metadata)
+            
+            metadata_path = dest_path.with_suffix(dest_path.suffix + ".json")
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata_dict, f, indent=2)
+            
+            return dest_path
+            
+        except Exception as e:
+            logger.error(f"Failed to sort video by YOLO category {video_path.name}: {e}", exc_info=True)
+            raise
+    
+    def move_to_clip_sorted(self, video_path: Path, clip_profile_id: str, 
+                            confidence: float, metadata: Dict = None) -> Path:
+        """
+        Move video from review to sorted folder (hybrid workflow - Stage 2 CLIP refinement).
+        
+        Args:
+            video_path: Path to current video location (in review folder)
+            clip_profile_id: CLIP profile identifier (e.g., 'jack_russell')
+            confidence: CLIP confidence score
+            metadata: Optional additional metadata
+            
+        Returns:
+            Path to video in sorted folder
+        """
+        import json
+        from datetime import datetime
+        
+        # Create sorted folder for this CLIP profile
+        sorted_dir = self.sorted_base_path / clip_profile_id
+        sorted_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set permissions
+        try:
+            import stat
+            sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception as e:
+            logger.warning(f"Could not set permissions on {sorted_dir}: {e}")
+        
+        # Destination path
+        dest_path = sorted_dir / video_path.name
+        
+        # Handle duplicates
+        if dest_path.exists():
+            counter = 1
+            stem = video_path.stem
+            suffix = video_path.suffix
+            while dest_path.exists():
+                new_name = f"{stem}_{counter}{suffix}"
+                dest_path = sorted_dir / new_name
+                counter += 1
+        
+        try:
+            # Move video and metadata
+            shutil.move(str(video_path), str(dest_path))
+            logger.info(f"Moved video to sorted/{clip_profile_id}: {video_path.name} (CLIP confidence: {confidence:.2f})")
+            
+            # Update metadata
+            old_metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+            new_metadata_path = dest_path.with_suffix(dest_path.suffix + ".json")
+            
+            # Load existing metadata if available
+            metadata_dict = {}
+            if old_metadata_path.exists():
+                with open(old_metadata_path, 'r') as f:
+                    metadata_dict = json.load(f)
+                old_metadata_path.unlink()  # Remove old metadata file
+            
+            # Update with CLIP results
+            metadata_dict.update({
+                "clip_profile": clip_profile_id,
+                "clip_confidence": confidence,
+                "sorted_timestamp": datetime.now().isoformat(),
+                "status": "clip_sorted"
+            })
+            
+            if metadata:
+                metadata_dict.update(metadata)
+            
+            # Save updated metadata
+            with open(new_metadata_path, 'w') as f:
+                json.dump(metadata_dict, f, indent=2)
+            
+            return dest_path
+            
+        except Exception as e:
+            logger.error(f"Failed to move video to CLIP sorted folder: {e}", exc_info=True)
+            raise
+    
     def get_stats(self) -> Dict[str, int]:
         """
         Get statistics about sorted videos.

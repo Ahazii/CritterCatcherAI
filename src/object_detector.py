@@ -493,12 +493,49 @@ class ObjectDetector:
             except Exception as e:
                 logger.warning(f"Could not set permissions on {output_path.parent}: {e}")
             
-            # Create video writer
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+            # Create video writer with codec fallback
+            CODEC_FALLBACK = [
+                ('avc1', 'H.264 - best quality, modern'),
+                ('mp4v', 'MPEG-4 - most compatible'),
+                ('XVID', 'Xvid - legacy fallback'),
+                ('MJPG', 'Motion JPEG - always works'),
+            ]
             
-            if not out.isOpened():
-                logger.error(f"Failed to create output video writer: {output_path}")
+            out = None
+            successful_codec = None
+            
+            for codec, desc in CODEC_FALLBACK:
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*codec)
+                    test_out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+                    
+                    if test_out.isOpened():
+                        # Verify it can actually write a frame
+                        test_frame = np.zeros((height, width, 3), dtype=np.uint8)
+                        test_out.write(test_frame)
+                        test_out.release()
+                        
+                        # Check file was created and has content
+                        if output_path.exists() and output_path.stat().st_size > 500:
+                            # Success! Recreate writer for actual use
+                            output_path.unlink()  # Delete test file
+                            out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+                            successful_codec = codec
+                            logger.info(f"Video writer using codec: {codec} ({desc})")
+                            break
+                        else:
+                            logger.warning(f"Codec {codec} opened but failed to write data")
+                            if output_path.exists():
+                                output_path.unlink()
+                    else:
+                        logger.warning(f"Codec {codec} failed to open")
+                except Exception as e:
+                    logger.warning(f"Codec {codec} error: {e}")
+                    continue
+            
+            if out is None or not out.isOpened():
+                logger.error(f"All codecs failed for video writer: {output_path}")
+                logger.error(f"Tried codecs: {[c[0] for c in CODEC_FALLBACK]}")
                 cap.release()
                 return {}
             
