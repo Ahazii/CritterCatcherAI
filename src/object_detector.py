@@ -520,11 +520,18 @@ class ObjectDetector:
                             # Success! Recreate writer for actual use
                             output_path.unlink()  # Delete test file
                             out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+                            
+                            # Verify the recreated writer also opened successfully
+                            if not out.isOpened():
+                                logger.error(f"Codec {codec} test passed but failed to reopen")
+                                out = None
+                                continue
+                            
                             successful_codec = codec
-                            logger.info(f"Video writer using codec: {codec} ({desc})")
+                            logger.info(f"Video writer successfully initialized with codec: {codec} ({desc})")
                             break
                         else:
-                            logger.warning(f"Codec {codec} opened but failed to write data")
+                            logger.warning(f"Codec {codec} opened but failed to write data (size: {output_path.stat().st_size if output_path.exists() else 0} bytes)")
                             if output_path.exists():
                                 output_path.unlink()
                     else:
@@ -635,16 +642,42 @@ class ObjectDetector:
                 # Write annotated frame
                 out.write(frame)
                 
-                # Log progress every 10%
+                # Log progress every 10% and check file size
                 if frame_count % (total_frames // 10 + 1) == 0:
                     progress = (frame_count / total_frames) * 100
-                    logger.info(f"Tracking progress: {progress:.0f}% ({frame_count}/{total_frames} frames)")
+                    
+                    # Check if data is actually being written
+                    if output_path.exists():
+                        current_size = output_path.stat().st_size
+                        logger.info(f"Tracking progress: {progress:.0f}% ({frame_count}/{total_frames} frames, {current_size / 1024:.1f} KB written)")
+                        
+                        # If we've written many frames but file is still tiny, something is wrong
+                        if frame_count > 30 and current_size < 5000:
+                            logger.error(f"Video writer failure detected: {frame_count} frames written but file only {current_size} bytes")
+                            logger.error(f"Codec: {successful_codec}, aborting to prevent wasted processing")
+                            cap.release()
+                            out.release()
+                            return {}
+                    else:
+                        logger.warning(f"Tracking progress: {progress:.0f}% but output file not yet created")
             
             # Cleanup
             cap.release()
             out.release()
             
-            logger.info(f"Video tracking complete: {output_path}")
+            # Verify output file was created successfully
+            if not output_path.exists():
+                logger.error(f"Output video file was not created: {output_path}")
+                return {}
+            
+            file_size = output_path.stat().st_size
+            if file_size < 10000:  # Less than 10KB is suspicious for a video
+                logger.error(f"Output video file is too small ({file_size} bytes), likely corrupt: {output_path}")
+                logger.error(f"Codec used: {successful_codec}, Frames processed: {frame_count}, Video properties: {width}x{height} @ {fps}fps")
+                # Don't return empty - let the file exist so user can see the problem
+            else:
+                logger.info(f"Video tracking complete: {output_path} ({file_size / 1024 / 1024:.2f} MB)")
+            
             logger.info(f"Detected objects: {all_detections}")
             
             # Optionally move original video to a separate folder
