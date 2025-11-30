@@ -274,8 +274,40 @@ def process_videos(config: dict):
             logger.debug("Running YOLO object detection (Stage 1)")
             detected_objects = object_detector.detect_objects_in_video(video_path, return_bboxes=True)
             
-            # Generate tracked/annotated video if objects were detected
+            # HYBRID WORKFLOW: Sort by YOLO category first
+            yolo_sorted_path = None
+            yolo_category = None
+            yolo_confidence = 0.0
+            
             if detected_objects:
+                # Get highest confidence detection
+                best_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
+                best_confidence = detected_objects[best_category]['confidence']
+                yolo_category = best_category  # Save for metadata
+                yolo_confidence = best_confidence  # Save for metadata
+                
+                logger.info(f"HYBRID WORKFLOW - YOLO detected '{best_category}' with confidence {best_confidence:.2f}")
+                
+                # Sort to YOLO category folder in review
+                try:
+                    from webapp import app_state
+                    app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name} to YOLO category '{best_category}'..."
+                    app_state["processing_progress"]["phase"] = "yolo_sorting"
+                except:
+                    pass
+                
+                yolo_sorted_path = video_sorter.sort_by_yolo_category(
+                    video_path,
+                    yolo_category=best_category,
+                    confidence=best_confidence,
+                    metadata={"all_detections": detected_objects}
+                )
+                logger.info(f"Video sorted to /data/review/{best_category}/")
+                
+                # Update video_path to the new location for subsequent processing
+                video_path = yolo_sorted_path
+                
+                # Generate tracked/annotated video
                 try:
                     from webapp import app_state
                     app_state["processing_progress"]["current_step"] = f"Creating tracked video for {video_path.name}..."
@@ -295,7 +327,7 @@ def process_videos(config: dict):
                 )
                 logger.info(f"Tracked video created with detections: {tracked_detections}")
             else:
-                logger.debug("No objects detected, skipping video tracking")
+                logger.debug("No objects detected, skipping YOLO sorting and tracking")
             
             # Check if Face Recognition routing should be triggered
             # Conditions:
@@ -336,6 +368,7 @@ def process_videos(config: dict):
             # CLIP Stage 2: Check for matching Animal Profiles
             clip_stage2_result = None
             final_destination = None
+            should_move_to_sorted = False  # Track if CLIP approved moving to sorted
             
             if detected_objects:
                 # Get YOLO categories that were detected
@@ -433,25 +466,42 @@ def process_videos(config: dict):
                                     "auto_approved": False
                                 }
                                 
-                                # Determine final destination based on routing rules
+                                # HYBRID WORKFLOW: CLIP Refinement - decide if video moves to sorted
+                                should_move_to_sorted = False
+                                
                                 if best_result['requires_manual_confirmation']:
-                                    # Manual confirmation required -> always send to review
-                                    final_destination = Path("/data/review") / best_result['profile_id']
-                                    logger.info(f"CLIP Stage 2: Sending to review/{best_result['profile_name']} (manual confirmation required)")
+                                    # Manual confirmation required -> stays in YOLO review folder
+                                    logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Staying in YOLO review (manual confirmation required)")
+                                    final_destination = video_path  # Keep in current YOLO category folder
                                 elif best_result['confidence'] >= best_result['threshold']:
                                     if best_result['auto_approval_enabled']:
-                                        # High confidence + auto-approval + no manual confirmation -> sorted
-                                        final_destination = Path("/data/sorted") / best_result['profile_id']
+                                        # High confidence + auto-approval -> move to sorted
+                                        should_move_to_sorted = True
                                         clip_stage2_result['auto_approved'] = True
-                                        logger.info(f"CLIP Stage 2: Auto-approving to sorted/{best_result['profile_name']}")
+                                        logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Moving to sorted (confidence: {best_result['confidence']:.2f})")
                                     else:
-                                        # High confidence but no auto-approval -> review
-                                        final_destination = Path("/data/review") / best_result['profile_id']
-                                        logger.info(f"CLIP Stage 2: Sending to review/{best_result['profile_name']} (auto-approval disabled)")
+                                        # High confidence but no auto-approval -> stays in YOLO review
+                                        logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Staying in YOLO review (auto-approval disabled)")
+                                        final_destination = video_path
                                 else:
-                                    # Below threshold -> review
-                                    final_destination = Path("/data/review") / best_result['profile_id']
-                                    logger.info(f"CLIP Stage 2: Below threshold, sending to review/{best_result['profile_name']}")
+                                    # Below threshold -> stays in YOLO review folder
+                                    logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Below threshold ({best_result['confidence']:.2f} < {best_result['threshold']}), staying in YOLO review")
+                                    final_destination = video_path
+                                
+                                # Move to sorted if approved
+                                if should_move_to_sorted:
+                                    try:
+                                        final_destination = video_sorter.move_to_clip_sorted(
+                                            video_path,
+                                            clip_profile_id=best_result['profile_id'],
+                                            confidence=best_result['confidence'],
+                                            metadata={"clip_results": profile_results}
+                                        )
+                                        logger.info(f"Video moved to /data/sorted/{best_result['profile_id']}/")
+                                        video_path = final_destination  # Update path
+                                    except Exception as move_err:
+                                        logger.error(f"Failed to move video to sorted: {move_err}", exc_info=True)
+                                        final_destination = video_path  # Fall back to current location
                         
                         except Exception as clip_err:
                             logger.error(f"CLIP Stage 2 failed: {clip_err}", exc_info=True)
@@ -473,39 +523,18 @@ def process_videos(config: dict):
                 except Exception as profile_err:
                     logger.error(f"Error checking Animal Profiles: {profile_err}", exc_info=True)
             
-            # Update progress: moving to destination
-            try:
-                from webapp import app_state
-                app_state["processing_progress"]["current_step"] = f"Moving {video_path.name} to destination..."
-                app_state["processing_progress"]["phase"] = "moving"
-            except:
-                pass
+            # HYBRID WORKFLOW: Video is already in its final location
+            # - Either in /data/review/{yolo_category}/ (YOLO-only or CLIP didn't match)
+            # - Or in /data/sorted/{clip_profile}/ (CLIP matched and auto-approved)
             
-            # Determine final destination if not set by CLIP Stage 2
-            if final_destination is None:
-                # Fall back to YOLO-only review workflow
-                review_category = "unknown"
-                if detected_objects:
-                    review_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
-                elif recognized_people:
-                    review_category = f"people_{sorted(recognized_people)[0]}"
-                
-                final_destination = Path("/data/review") / review_category
-            
-            # Create destination directory
-            final_destination.mkdir(parents=True, exist_ok=True)
-            
-            # Move video to destination
-            dest_path = final_destination / video_path.name
-            if dest_path.exists():
-                # Handle duplicates
-                counter = 1
-                while dest_path.exists():
-                    dest_path = final_destination / f"{video_path.stem}_{counter}{video_path.suffix}"
-                    counter += 1
-            
-            import shutil
-            shutil.move(str(video_path), str(dest_path))
+            if final_destination is None or final_destination == video_path:
+                # Video is already sorted to YOLO category, no further move needed
+                dest_path = video_path
+                logger.info(f"HYBRID WORKFLOW: Video remains at {video_path}")
+            else:
+                # CLIP moved it to sorted, already at final destination
+                dest_path = final_destination
+                logger.info(f"HYBRID WORKFLOW: Video at final destination {dest_path}")
             
             # Update download tracker status to 'processed'
             try:
@@ -520,16 +549,18 @@ def process_videos(config: dict):
             
             # Save metadata alongside video
             metadata = {
+                "video_name": video_path.name,
+                "timestamp": datetime.now().isoformat(),
+                "yolo_category": yolo_category if yolo_category else "unknown",
+                "yolo_confidence": yolo_confidence,
                 "detected_objects": detected_objects if detected_objects else {},
                 "recognized_people": list(recognized_people) if recognized_people else [],
-                "timestamp": datetime.now().isoformat(),
-                "video_name": video_path.name,
-                "category": final_destination.name
+                "status": "clip_sorted" if should_move_to_sorted else "pending_review"
             }
             
             # Add CLIP Stage 2 results if available
             if clip_stage2_result:
-                metadata["clip_stage2"] = clip_stage2_result
+                metadata["clip_results"] = clip_stage2_result
             
             metadata_path = dest_path.with_suffix(dest_path.suffix + ".json")
             with open(metadata_path, 'w') as f:
