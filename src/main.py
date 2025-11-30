@@ -68,8 +68,13 @@ def load_config(config_path: str = "/config/config.yaml") -> dict:
         return {}
 
 
-def process_videos(config: dict):
-    """Main video processing pipeline."""
+def process_videos(config: dict, manual_trigger: bool = False):
+    """Main video processing pipeline.
+    
+    Args:
+        config: Configuration dictionary
+        manual_trigger: If True, bypasses scheduler enabled check (for manual "Process Now" button)
+    """
     logger = logging.getLogger(__name__)
     
     # Get configuration values (environment variables override config file)
@@ -234,13 +239,14 @@ def process_videos(config: dict):
     
     # Process each video
     for idx, video_path in enumerate(videos_to_process, 1):
-        # Check stop flag or if scheduler was disabled
+        # Check stop flag or if scheduler was disabled (skip scheduler check for manual triggers)
         try:
             from webapp import app_state
             if app_state.get("stop_requested", False):
                 logger.info("Stop requested - ending processing gracefully")
                 break
-            if not app_state["scheduler"]["enabled"]:
+            # Only check scheduler state if this wasn't a manual trigger
+            if not manual_trigger and not app_state["scheduler"]["enabled"]:
                 logger.info("Scheduler disabled - stopping current processing run")
                 break
         except:

@@ -595,7 +595,7 @@ async def trigger_processing(background_tasks: BackgroundTasks):
             from main import process_videos, load_config
             config = load_config()
             logger.info("Config loaded, calling process_videos()")
-            process_videos(config)
+            process_videos(config, manual_trigger=True)
             app_state["last_run"] = datetime.now().isoformat()
             logger.info("Manual processing completed successfully")
         except Exception as e:
