@@ -555,6 +555,9 @@ class ObjectDetector:
             
             logger.info("Processing frames with object tracking...")
             
+            # Write a test frame to verify codec works
+            test_frame_success = False
+            
             while True:
                 ret, frame = cap.read()
                 if not ret:
@@ -562,8 +565,34 @@ class ObjectDetector:
                 
                 frame_count += 1
                 
+                # On first frame, write immediately to verify codec works
+                if frame_count == 1:
+                    try:
+                        out.write(frame)
+                        test_frame_success = True
+                        logger.info(f"Successfully wrote test frame with codec {successful_codec}")
+                    except Exception as e:
+                        logger.error(f"Failed to write test frame: {e}")
+                        cap.release()
+                        out.release()
+                        if output_path.exists():
+                            output_path.unlink()
+                        return {}
+                
                 # Track objects in frame (YOLOv8 tracking with persistent IDs)
-                results = self.model.track(frame, persist=True, verbose=False)
+                try:
+                    results = self.model.track(frame, persist=True, verbose=False)
+                except Exception as track_error:
+                    # If tracking fails (e.g. due to lap module), log but continue with detection
+                    logger.warning(f"Tracking failed on frame {frame_count}: {track_error}")
+                    # Fall back to simple detection without tracking
+                    try:
+                        results = self.model(frame, verbose=False)
+                    except Exception as detect_error:
+                        logger.error(f"Both tracking and detection failed on frame {frame_count}: {detect_error}")
+                        # Write the frame without annotations
+                        out.write(frame)
+                        continue
                 
                 # Process tracking results
                 if results and len(results) > 0:
