@@ -3,7 +3,7 @@ FROM python:3.11
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for dlib, opencv, and face_recognition
+# Install system dependencies for dlib, opencv, face_recognition, and H.264 video encoding
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libopenblas-dev \
     liblapack-dev \
+    libx264-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
