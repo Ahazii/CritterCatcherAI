@@ -2228,9 +2228,11 @@ async def get_yolo_categories():
                     config = yaml.safe_load(f) or {}
                 manual_categories = set(config.get('yolo_manual_categories', []))
                 manual_categories_lower = set([c.lower() for c in manual_categories])
-                logger.debug(f"Loaded {len(manual_categories)} manual categories from config: {sorted(manual_categories)}")
+                logger.info(f"Loaded {len(manual_categories)} manual categories from config: {sorted(manual_categories)}")
+            else:
+                logger.warning(f"Config file not found at {CONFIG_PATH}")
         except Exception as e:
-            logger.warning(f"Failed to load manual categories: {e}")
+            logger.error(f"Failed to load manual categories: {e}", exc_info=True)
         
         # Get all profiles to compute auto-enabled categories
         profiles = animal_profile_manager.list_profiles()
@@ -2301,9 +2303,17 @@ async def toggle_manual_category(request: dict):
         # Update config
         config['yolo_manual_categories'] = manual_categories
         
+        logger.info(f"Saving {len(manual_categories)} manual categories to {CONFIG_PATH}: {sorted(manual_categories)}")
+        
         # Save config
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
+        
+        # Verify save by re-reading
+        with open(CONFIG_PATH, 'r') as f:
+            verify_config = yaml.safe_load(f) or {}
+            verify_categories = verify_config.get('yolo_manual_categories', [])
+            logger.info(f"Verified save: {len(verify_categories)} categories in file: {sorted(verify_categories)}")
         
         return {
             "status": "success",

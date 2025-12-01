@@ -494,9 +494,12 @@ class ObjectDetector:
                 logger.warning(f"Could not set permissions on {output_path.parent}: {e}")
             
             # Create video writer with codec fallback
+            # Try H.264 variants first for best browser compatibility
             CODEC_FALLBACK = [
-                ('avc1', 'H.264 - best quality, modern'),
-                ('mp4v', 'MPEG-4 - most compatible'),
+                ('H264', 'H.264 (x264) - best browser compatibility'),
+                ('X264', 'H.264 (alt) - modern browsers'),
+                ('avc1', 'H.264 (avc1) - Apple/Safari'),
+                ('mp4v', 'MPEG-4 - fallback compatibility'),
                 ('XVID', 'Xvid - legacy fallback'),
                 ('MJPG', 'Motion JPEG - always works'),
             ]
