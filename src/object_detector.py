@@ -710,6 +710,43 @@ class ObjectDetector:
             else:
                 logger.info(f"Video tracking complete: {output_path} ({file_size / 1024 / 1024:.2f} MB)")
             
+            # Convert mp4v to H.264 using ffmpeg for browser compatibility
+            if successful_codec == 'mp4v':
+                logger.info("Converting mp4v video to H.264 for browser compatibility...")
+                temp_output = output_path.with_suffix('.temp.mp4')
+                
+                try:
+                    import subprocess
+                    # Use ffmpeg to convert: copy video stream but re-encode with libx264
+                    result = subprocess.run([
+                        'ffmpeg', '-y',  # Overwrite output
+                        '-i', str(output_path),  # Input file
+                        '-c:v', 'libx264',  # H.264 codec
+                        '-preset', 'fast',  # Encoding speed
+                        '-crf', '23',  # Quality (lower = better, 18-28 is good range)
+                        '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
+                        str(temp_output)
+                    ], capture_output=True, text=True, timeout=300)
+                    
+                    if result.returncode == 0 and temp_output.exists():
+                        # Replace original with converted version
+                        temp_output.replace(output_path)
+                        new_size = output_path.stat().st_size
+                        logger.info(f"Successfully converted to H.264: {output_path} ({new_size / 1024 / 1024:.2f} MB)")
+                    else:
+                        logger.warning(f"ffmpeg conversion failed (returncode {result.returncode}): {result.stderr}")
+                        logger.warning("Keeping original mp4v video (may not play in all browsers)")
+                        if temp_output.exists():
+                            temp_output.unlink()
+                except subprocess.TimeoutExpired:
+                    logger.error("ffmpeg conversion timed out after 5 minutes")
+                    if temp_output.exists():
+                        temp_output.unlink()
+                except Exception as e:
+                    logger.error(f"Failed to convert video with ffmpeg: {e}")
+                    if temp_output.exists():
+                        temp_output.unlink()
+            
             logger.info(f"Detected objects: {all_detections}")
             
             # Optionally move original video to a separate folder
