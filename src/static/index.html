@@ -2386,7 +2386,14 @@
                     body: JSON.stringify({ time_range: timeRange })
                 });
                 const data = await response.json();
-                alert(data.message);
+                
+                // Start task tracking if task_id returned
+                if (data.task_id && window.startTaskTracking) {
+                    startTaskTracking(data.task_id, `Download ${timeRangeText}`);
+                } else {
+                    alert(data.message);
+                }
+                
                 fetchStatus();
             } catch (error) {
                 console.error('Failed to trigger download:', error);
@@ -2398,7 +2405,14 @@
             try {
                 const response = await fetch('/api/process', { method: 'POST' });
                 const data = await response.json();
-                alert(data.message);
+                
+                // Start task tracking if task_id returned
+                if (data.task_id && window.startTaskTracking) {
+                    startTaskTracking(data.task_id, 'Process Now');
+                } else {
+                    alert(data.message);
+                }
+                
                 fetchStatus();
             } catch (error) {
                 console.error('Failed to trigger processing:', error);

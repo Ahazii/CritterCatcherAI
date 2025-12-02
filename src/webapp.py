@@ -577,6 +577,9 @@ async def trigger_processing(background_tasks: BackgroundTasks):
         logger.warning("Processing already running, rejecting request")
         return {"status": "already_running", "message": "Processing is already in progress"}
     
+    # Create task tracker entry
+    task_id = task_tracker.create_task(total=100, message="Initializing video processing...")
+    
     # Reset stop flag and progress
     app_state["stop_requested"] = False
     app_state["processing_progress"] = {
@@ -590,6 +593,7 @@ async def trigger_processing(background_tasks: BackgroundTasks):
     def process_task():
         app_state["is_processing"] = True
         try:
+            task_tracker.start_task(task_id, message="Processing videos...")
             logger.info("Starting manual processing task...")
             # Import here to avoid issues
             from main import process_videos, load_config
@@ -598,15 +602,17 @@ async def trigger_processing(background_tasks: BackgroundTasks):
             process_videos(config, manual_trigger=True)
             app_state["last_run"] = datetime.now().isoformat()
             logger.info("Manual processing completed successfully")
+            task_tracker.complete_task(task_id, message="Processing completed successfully!")
         except Exception as e:
             logger.error(f"Processing failed: {e}", exc_info=True)
+            task_tracker.fail_task(task_id, str(e))
         finally:
             app_state["is_processing"] = False
             app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
     
     background_tasks.add_task(process_task)
     logger.info("Processing task added to background queue")
-    return {"status": "started", "message": "Processing started"}
+    return {"status": "started", "message": "Processing started", "task_id": task_id}
 
 
 @app.post("/api/stop")
@@ -652,9 +658,14 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
     
     logger.info(f"Download All: time_range={time_range}, hours={hours}")
     
+    # Create task tracker entry
+    time_desc = f"last {time_range}" if time_range != 'all' else "all available videos"
+    task_id = task_tracker.create_task(total=100, message=f"Downloading {time_desc}...")
+    
     def download_task():
         app_state["is_processing"] = True
         try:
+            task_tracker.start_task(task_id, message="Authenticating with Ring...")
             logger.info(f"Starting download all task (time_range: {time_range})...")
             from ring_downloader import RingDownloader
             
@@ -666,7 +677,10 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
             # Authenticate
             if not rd.authenticate():
                 logger.error("Failed to authenticate with Ring")
+                task_tracker.fail_task(task_id, "Failed to authenticate with Ring")
                 return
+            
+            task_tracker.update_task(task_id, current=30, message="Downloading videos...")
             
             # Download all videos
             stats = rd.download_all_videos(hours=hours, skip_existing=True)
@@ -677,16 +691,21 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
                 f"{stats['failed']} failed"
             )
             
+            task_tracker.complete_task(
+                task_id,
+                message=f"Downloaded {stats['new_downloads']} new videos! ({stats['already_downloaded']} already on system)"
+            )
+            
         except Exception as e:
             logger.error(f"Download all failed: {e}", exc_info=True)
+            task_tracker.fail_task(task_id, str(e))
         finally:
             app_state["is_processing"] = False
     
     background_tasks.add_task(download_task)
     logger.info("Download all task added to background queue")
     
-    time_desc = f"last {time_range}" if time_range != 'all' else "all available videos"
-    return {"status": "started", "message": f"Downloading {time_desc}..."}
+    return {"status": "started", "message": f"Downloading {time_desc}...", "task_id": task_id}
 
 
 @app.post("/api/cleanup-downloads")

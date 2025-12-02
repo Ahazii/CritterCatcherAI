@@ -209,10 +209,10 @@
 window.activeTasks = new Map();
 window.pollIntervals = new Map();
 
-// Load tasks from sessionStorage on page load
+// Load tasks from localStorage on page load (persists across page navigation)
 function loadTasksFromStorage() {
     try {
-        const stored = sessionStorage.getItem('activeTasks');
+        const stored = localStorage.getItem('activeTasks');
         if (stored) {
             const tasks = JSON.parse(stored);
             tasks.forEach(task => {
@@ -236,7 +236,7 @@ function loadTasksFromStorage() {
     }
 }
 
-// Save tasks to sessionStorage
+// Save tasks to localStorage (persists across page navigation)
 function saveTasksToStorage() {
     try {
         const tasks = Array.from(window.activeTasks.entries()).map(([id, task]) => ({
@@ -248,7 +248,7 @@ function saveTasksToStorage() {
             details: task.details,
             error: task.error
         }));
-        sessionStorage.setItem('activeTasks', JSON.stringify(tasks));
+        localStorage.setItem('activeTasks', JSON.stringify(tasks));
     } catch (error) {
         console.error('Failed to save tasks to storage:', error);
     }
@@ -301,7 +301,7 @@ function startTaskTracking(taskId, taskName = "Processing") {
         details: ''
     });
     
-    // Save to sessionStorage for cross-page persistence
+    // Save to localStorage for cross-page persistence
     saveTasksToStorage();
     
     // Update UI
