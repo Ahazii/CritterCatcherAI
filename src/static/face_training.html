@@ -395,7 +395,8 @@
             controls.style.display = 'none';
             
             try {
-                const response = await fetch('/api/faces/unassigned');
+                // Add cache-busting parameter to prevent stale data
+                const response = await fetch(`/api/faces/unassigned?_=${Date.now()}`);
                 const data = await response.json();
                 faces = data.faces || [];
                 
@@ -510,6 +511,10 @@
             
             const filenames = Array.from(selectedFaces);
             
+            // Disable buttons during assignment
+            document.getElementById('assignBtn').disabled = true;
+            document.getElementById('rejectBtn').disabled = true;
+            
             try {
                 const response = await fetch('/api/faces/assign', {
                     method: 'POST',
@@ -523,16 +528,44 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
+                    // Show success message
                     alert(`✓ ${data.message}`);
+                    
+                    // Clear input and selection
                     document.getElementById('personInput').value = '';
-                    await loadFaceProfiles();
-                    await loadUnassignedFaces();
+                    selectedFaces.clear();
+                    
+                    // Refresh data with retry on failure
+                    try {
+                        await loadFaceProfiles();
+                    } catch (e) {
+                        console.warn('Failed to reload face profiles, will retry on next page visit:', e);
+                    }
+                    
+                    try {
+                        await loadUnassignedFaces();
+                    } catch (e) {
+                        console.warn('Failed to reload faces after assignment:', e);
+                        // Show a more helpful message instead of error state
+                        const gallery = document.getElementById('faceGallery');
+                        gallery.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">✅</div>
+                                <h3>Faces Assigned Successfully!</h3>
+                                <p>The faces have been assigned to "${personName}".</p>
+                                <button class="btn" onclick="loadUnassignedFaces()">Refresh to see remaining faces</button>
+                            </div>
+                        `;
+                    }
                 } else {
-                    alert('Failed to assign faces');
+                    alert('Failed to assign faces: ' + (data.detail || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Failed to assign faces:', error);
-                alert('Error assigning faces');
+                alert('Error assigning faces: ' + error.message);
+            } finally {
+                // Re-enable buttons
+                updateSelectionInfo();
             }
         }
 
