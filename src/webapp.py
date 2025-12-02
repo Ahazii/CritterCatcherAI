@@ -323,6 +323,109 @@ async def update_config(config_data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============= Logging API Endpoints =============
+
+@app.get("/api/logs")
+async def get_logs(lines: int = 500, level: Optional[str] = None):
+    """Get recent log lines from application log file.
+    
+    Args:
+        lines: Number of lines to return (max 2000)
+        level: Optional filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    try:
+        log_file = Path("/app/config/crittercatcher.log")
+        
+        if not log_file.exists():
+            return {
+                "status": "success",
+                "logs": [],
+                "message": "Log file not yet created"
+            }
+        
+        # Limit lines to max 2000
+        lines = min(lines, 2000)
+        
+        # Read last N lines
+        with open(log_file, 'r', encoding='utf-8') as f:
+            all_lines = f.readlines()
+            recent_lines = all_lines[-lines:]
+        
+        # Filter by level if specified
+        if level:
+            level_upper = level.upper()
+            filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
+            recent_lines = filtered_lines
+        
+        # Get file stats
+        stats = log_file.stat()
+        
+        return {
+            "status": "success",
+            "logs": recent_lines,
+            "total_lines": len(recent_lines),
+            "file_size": stats.st_size,
+            "last_modified": datetime.fromtimestamp(stats.st_mtime).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to read logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/logs/download")
+async def download_logs():
+    """Download full log file."""
+    try:
+        log_file = Path("/app/config/crittercatcher.log")
+        
+        if not log_file.exists():
+            raise HTTPException(status_code=404, detail="Log file not found")
+        
+        return FileResponse(
+            path=str(log_file),
+            media_type='text/plain',
+            filename='crittercatcher.log'
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/logs/clear")
+async def clear_logs():
+    """Clear/rotate current log file."""
+    try:
+        log_file = Path("/app/config/crittercatcher.log")
+        
+        if not log_file.exists():
+            return {
+                "status": "success",
+                "message": "No log file to clear"
+            }
+        
+        # Backup current log with timestamp
+        import shutil
+        backup_name = f"crittercatcher.log.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        backup_path = log_file.parent / backup_name
+        shutil.copy2(log_file, backup_path)
+        
+        # Clear current log file
+        with open(log_file, 'w') as f:
+            f.write(f"# Log cleared at {datetime.now().isoformat()}\n")
+        
+        logger.info(f"Log file cleared and backed up to {backup_name}")
+        
+        return {
+            "status": "success",
+            "message": f"Log cleared and backed up to {backup_name}"
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/videos")
 async def get_videos(category: Optional[str] = None, limit: int = 50):
     """Get list of sorted videos."""
