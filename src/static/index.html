@@ -1341,8 +1341,56 @@
         <!-- Logs Tab -->
         <div id="logs" class="tab-content">
             <div class="card">
-                <div class="card-title">Real-time Logs</div>
-                <div class="log-viewer" id="logViewer"></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">📋 Application Logs</div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <label style="font-size: 0.875rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                            <input type="checkbox" id="logAutoScroll" checked style="width: auto;">
+                            Auto-scroll
+                        </label>
+                        <label style="font-size: 0.875rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                            <input type="checkbox" id="logAutoRefresh" checked style="width: auto;">
+                            Auto-refresh
+                        </label>
+                        <button class="btn" onclick="refreshLogs()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">🔄 Refresh</button>
+                        <button class="btn" onclick="downloadLogs()" style="padding: 0.5rem 1rem; font-size: 0.875rem; background: var(--success-color);">⬇ Download</button>
+                        <button class="btn" onclick="clearLogs()" style="padding: 0.5rem 1rem; font-size: 0.875rem; background: var(--danger-color);">🗑️ Clear</button>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: end;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.875rem;">Search</label>
+                        <input type="text" id="logSearch" class="form-input" placeholder="Filter logs..." oninput="filterLogs()" style="padding: 0.5rem; font-size: 0.875rem;">
+                    </div>
+                    <div style="flex: 0 1 150px;">
+                        <label class="form-label" style="font-size: 0.875rem;">Level</label>
+                        <select id="logLevelFilter" class="form-select" onchange="filterLogs()" style="padding: 0.5rem; font-size: 0.875rem;">
+                            <option value="">All Levels</option>
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="CRITICAL">CRITICAL</option>
+                        </select>
+                    </div>
+                    <div style="flex: 0 1 150px;">
+                        <label class="form-label" style="font-size: 0.875rem;">Lines</label>
+                        <select id="logLineCount" class="form-select" onchange="refreshLogs()" style="padding: 0.5rem; font-size: 0.875rem;">
+                            <option value="100">Last 100</option>
+                            <option value="250">Last 250</option>
+                            <option value="500" selected>Last 500</option>
+                            <option value="1000">Last 1000</option>
+                            <option value="2000">Last 2000</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="logStats" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;"></div>
+                
+                <div class="log-viewer" id="logViewer" style="height: 500px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.875rem; line-height: 1.5;">
+                    <div style="text-align: center; padding: 2rem; color: #888;">Loading logs...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -1400,6 +1448,29 @@
         // Load saved theme immediately
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Toast Notification Function
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <div style="flex: 1;">${message}</div>
+                <span class="toast-close" onclick="this.parentElement.remove()">×</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 4000);
+        }
 
         // Check Ring authentication on page load
         async function checkRingAuthStatus() {
@@ -2140,11 +2211,34 @@
                         </p>
                     </div>
                     
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">📋 Application Logging</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Log Level</label>
+                        <select id="logLevel" class="form-select" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
+                            <option value="DEBUG" ${(data.config.logging?.level || 'INFO') === 'DEBUG' ? 'selected' : ''}>DEBUG - Detailed diagnostic info</option>
+                            <option value="INFO" ${(data.config.logging?.level || 'INFO') === 'INFO' ? 'selected' : ''}>INFO - General informational messages</option>
+                            <option value="WARNING" ${(data.config.logging?.level || 'INFO') === 'WARNING' ? 'selected' : ''}>WARNING - Warning messages</option>
+                            <option value="ERROR" ${(data.config.logging?.level || 'INFO') === 'ERROR' ? 'selected' : ''}>ERROR - Error messages only</option>
+                            <option value="CRITICAL" ${(data.config.logging?.level || 'INFO') === 'CRITICAL' ? 'selected' : ''}>CRITICAL - Critical errors only</option>
+                        </select>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Controls verbosity of application logging. DEBUG shows all messages, CRITICAL shows only severe errors. View logs in the Logs tab.
+                        </p>
+                    </div>
+                    
+                    <div id="logFileInfo" style="font-size: 0.75rem; color: var(--text-secondary); padding: 0.75rem; background: var(--bg-secondary); border-radius: 6px; margin-top: 0.5rem;"></div>
+                    
                     <div style="margin-top: 2rem;">
                         <button class="btn" onclick="saveConfig()" style="width: 100%; padding: 1rem; font-size: 1rem;">💾 Save Configuration</button>
                     </div>
                     <div id="configMessage" style="margin-top: 1rem;"></div>
                 `;
+                
+                // Load and display log file info
+                loadLogFileInfo();
                 
                 // No longer need multi-select - object labels are managed in Species Training page
             } catch (error) {
@@ -2208,6 +2302,9 @@
                         },
                         face_recognition: {
                             enabled: document.getElementById('faceRecognitionEnabled').checked
+                        },
+                        logging: {
+                            level: document.getElementById('logLevel').value
                         },
                         run_once: false,
                         interval_minutes: parseInt(document.getElementById('intervalMinutes').value)  // Keep for backwards compatibility
@@ -2895,22 +2992,211 @@
         // ===== END PHASE 3 =====
         
         
-        function startLogStream() {
-            const logViewer = document.getElementById('logViewer');
-            const eventSource = new EventSource('/api/logs/stream');
+        // ===== LOG VIEWER FUNCTIONS =====
+        let logRefreshInterval = null;
+        let allLogLines = [];
+        
+        async function startLogStream() {
+            await refreshLogs();
             
-            eventSource.onmessage = (event) => {
-                const logLine = document.createElement('div');
-                logLine.className = 'log-line';
-                logLine.textContent = event.data;
+            // Start auto-refresh if enabled
+            if (document.getElementById('logAutoRefresh').checked) {
+                logRefreshInterval = setInterval(() => {
+                    if (document.getElementById('logAutoRefresh').checked) {
+                        refreshLogs();
+                    }
+                }, 5000);
+            }
+        }
+        
+        async function refreshLogs() {
+            try {
+                const lineCount = document.getElementById('logLineCount').value;
+                const response = await fetch(`/api/logs?lines=${lineCount}`);
                 
-                if (event.data.includes('ERROR')) logLine.classList.add('error');
-                else if (event.data.includes('WARNING')) logLine.classList.add('warning');
-                else if (event.data.includes('INFO')) logLine.classList.add('info');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 
-                logViewer.appendChild(logLine);
+                const data = await response.json();
+                allLogLines = data.logs || [];
+                
+                // Update stats
+                const statsDiv = document.getElementById('logStats');
+                if (statsDiv) {
+                    statsDiv.textContent = `Showing ${allLogLines.length} lines`;
+                }
+                
+                filterLogs();
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                const logViewer = document.getElementById('logViewer');
+                if (logViewer) {
+                    logViewer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff6b6b;">Failed to load logs. Check that the log file exists.</div>';
+                }
+            }
+        }
+        
+        function filterLogs() {
+            const searchTerm = document.getElementById('logSearch').value.toLowerCase();
+            const levelFilter = document.getElementById('logLevelFilter').value;
+            
+            let filtered = allLogLines;
+            
+            // Filter by level
+            if (levelFilter) {
+                filtered = filtered.filter(line => line.includes(levelFilter));
+            }
+            
+            // Filter by search term
+            if (searchTerm) {
+                filtered = filtered.filter(line => line.toLowerCase().includes(searchTerm));
+            }
+            
+            // Update stats
+            const statsDiv = document.getElementById('logStats');
+            if (statsDiv) {
+                if (filtered.length !== allLogLines.length) {
+                    statsDiv.textContent = `Showing ${filtered.length} of ${allLogLines.length} lines`;
+                } else {
+                    statsDiv.textContent = `Showing ${allLogLines.length} lines`;
+                }
+            }
+            
+            // Render filtered logs
+            renderLogs(filtered);
+        }
+        
+        function renderLogs(logs) {
+            const logViewer = document.getElementById('logViewer');
+            if (!logViewer) return;
+            
+            if (logs.length === 0) {
+                logViewer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #888;">No logs to display</div>';
+                return;
+            }
+            
+            const html = logs.map((line, index) => {
+                let color = '#d4d4d4'; // Default gray
+                
+                // Color code by severity
+                if (line.includes('CRITICAL')) {
+                    color = '#ff3838'; // Bright red
+                } else if (line.includes('ERROR')) {
+                    color = '#ff6b6b'; // Red
+                } else if (line.includes('WARNING')) {
+                    color = '#ffa500'; // Orange
+                } else if (line.includes('INFO')) {
+                    color = '#4a9eff'; // Blue
+                } else if (line.includes('DEBUG')) {
+                    color = '#888888'; // Gray
+                }
+                
+                const escapedLine = escapeHtml(line);
+                return `<div style="color: ${color}; padding: 0.125rem 0; white-space: pre-wrap; word-break: break-all;"><span style="color: #555; margin-right: 0.5rem;">${index + 1}</span>${escapedLine}</div>`;
+            }).join('');
+            
+            logViewer.innerHTML = html;
+            
+            // Auto-scroll to bottom if enabled
+            if (document.getElementById('logAutoScroll').checked) {
                 logViewer.scrollTop = logViewer.scrollHeight;
+            }
+        }
+        
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
             };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        async function downloadLogs() {
+            try {
+                const response = await fetch('/api/logs/download');
+                if (!response.ok) throw new Error('Download failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `crittercatcher_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('Log file downloaded', 'success');
+            } catch (error) {
+                console.error('Failed to download logs:', error);
+                showToast('Failed to download logs', 'error');
+            }
+        }
+        
+        async function clearLogs() {
+            if (!confirm('Clear all logs? This will create a backup with timestamp.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/logs/clear', {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Clear failed');
+                
+                const data = await response.json();
+                showToast(data.message || 'Logs cleared', 'success');
+                await refreshLogs();
+            } catch (error) {
+                console.error('Failed to clear logs:', error);
+                showToast('Failed to clear logs', 'error');
+            }
+        }
+        
+        // Stop log refresh when switching away from logs tab
+        const originalSwitchTabFunc = switchTab;
+        switchTab = function(tabName) {
+            // Clear log refresh interval when leaving logs tab
+            if (currentTab === 'logs' && tabName !== 'logs' && logRefreshInterval) {
+                clearInterval(logRefreshInterval);
+                logRefreshInterval = null;
+            }
+            
+            // Call original function
+            originalSwitchTabFunc(tabName);
+            
+            // Restart interval if switching to logs tab
+            if (tabName === 'logs' && document.getElementById('logAutoRefresh')?.checked) {
+                logRefreshInterval = setInterval(() => {
+                    if (document.getElementById('logAutoRefresh').checked) {
+                        refreshLogs();
+                    }
+                }, 5000);
+            }
+        };
+        
+        // ===== END LOG VIEWER FUNCTIONS =====
+        
+        async function loadLogFileInfo() {
+            try {
+                const response = await fetch('/api/logs?lines=1');
+                if (!response.ok) throw new Error('Failed to fetch');
+                
+                const infoDiv = document.getElementById('logFileInfo');
+                if (infoDiv) {
+                    infoDiv.innerHTML = '📁 Log file: /app/config/crittercatcher.log | Max size: 10MB (rotates automatically) | View and manage logs in the Logs tab';
+                }
+            } catch (error) {
+                const infoDiv = document.getElementById('logFileInfo');
+                if (infoDiv) {
+                    infoDiv.innerHTML = '⚠️ Log file not yet created (will be created on first application start)';
+                }
+            }
         }
 
         // Drag and drop - initialize after DOM loads
