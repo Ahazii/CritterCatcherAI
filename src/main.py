@@ -273,8 +273,20 @@ def process_videos(config: dict, manual_trigger: bool = False):
     
     # Update progress: set total count
     try:
-        from webapp import app_state
+        from webapp import app_state, task_tracker
         app_state["processing_progress"]["videos_total"] = len(videos_to_process)
+        
+        # Update task tracker with correct total count
+        # Get current task_id from app_state if available
+        current_tasks = task_tracker.get_active_tasks()
+        if current_tasks:
+            task_id = list(current_tasks.keys())[0]  # Get the first active task
+            task_tracker.update_task(
+                task_id,
+                total=len(videos_to_process),
+                current=0,
+                message=f"Processing {len(videos_to_process)} videos..."
+            )
     except:
         pass  # webapp might not be loaded
     
@@ -301,10 +313,22 @@ def process_videos(config: dict, manual_trigger: bool = False):
             
             # Update progress
             try:
-                from webapp import app_state
+                from webapp import app_state, task_tracker
                 app_state["processing_progress"]["current_video"] = video_path.name
                 app_state["processing_progress"]["videos_processed"] = idx
-            except:
+                
+                # Update task tracker progress
+                current_tasks = task_tracker.get_active_tasks()
+                if current_tasks:
+                    task_id = list(current_tasks.keys())[0]
+                    percentage = int((idx / len(videos_to_process)) * 100) if len(videos_to_process) > 0 else 0
+                    task_tracker.update_task(
+                        task_id,
+                        current=idx,
+                        message=f"Processing video {idx}/{len(videos_to_process)} ({percentage}%) - {video_path.name}"
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to update progress: {e}")
                 pass
             
             logger.info(f"Processing video: {video_path.name}")
