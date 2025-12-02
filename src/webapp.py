@@ -102,7 +102,7 @@ app_state = {
     }
 }
 
-CONFIG_PATH = Path("/config/config.yaml")
+CONFIG_PATH = Path("/app/config/config.yaml")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 SORTED_PATH = Path("/data/sorted")
