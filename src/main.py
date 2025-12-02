@@ -22,22 +22,63 @@ import cv2
 import tempfile
 
 
-def setup_logging(log_level: str = "INFO"):
-    """Configure logging for the application."""
+def setup_logging(config: dict = None):
+    """Configure logging for the application with file and console output.
+    
+    Args:
+        config: Configuration dictionary. If provided, reads log level from config['logging']['level'].
+               Otherwise defaults to INFO.
+    """
+    from logging.handlers import RotatingFileHandler
+    
+    # Determine log level from config or default to INFO
+    log_level = "INFO"
+    if config and 'logging' in config:
+        log_level = config.get('logging', {}).get('level', 'INFO')
+    
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
     
-    logging.basicConfig(
-        level=numeric_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout)
-        ]
+    # Create log file directory
+    log_dir = Path("/app/config")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "crittercatcher.log"
+    
+    # Create formatters
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    formatter = logging.Formatter(log_format)
+    
+    # Console handler (stdout)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    
+    # File handler with rotation (10MB max, keep 5 backups)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10*1024*1024,  # 10 MB
+        backupCount=5,
+        encoding='utf-8'
     )
+    file_handler.setFormatter(formatter)
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+    
+    # Remove existing handlers to avoid duplicates
+    root_logger.handlers.clear()
+    
+    # Add handlers
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+    
+    # Log initialization
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging initialized: level={log_level}, file={log_file}")
 
 
-def load_config(config_path: str = "/config/config.yaml") -> dict:
+def load_config(config_path: str = "/app/config/config.yaml") -> dict:
     """Load configuration from YAML file."""
     logger = logging.getLogger(__name__)
     
@@ -611,9 +652,11 @@ def main():
         except Exception as e:
             print(f"Warning: Could not create {dir_path}: {e}")
     
-    # Setup logging
-    log_level = os.environ.get('LOG_LEVEL', 'INFO')
-    setup_logging(log_level)
+    # Load configuration first (needed for logging setup)
+    config = load_config()
+    
+    # Setup logging with config
+    setup_logging(config)
     
     logger = logging.getLogger(__name__)
     logger.info("Starting CritterCatcherAI")
@@ -625,9 +668,6 @@ def main():
     web_thread = threading.Thread(target=start_web_server, daemon=True)
     web_thread.start()
     logger.info("Web interface started on http://0.0.0.0:8080")
-    
-    # Load configuration
-    config = load_config()
     
     # Get run mode (new scheduler block)
     scheduler = config.get('scheduler', {})

@@ -85,6 +85,16 @@ image_review:
   # Older confirmed images are automatically deleted when limit is exceeded
   max_confirmed_images: 200
 
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # DEBUG: Detailed information for debugging
+  # INFO: General informational messages (recommended)
+  # WARNING: Warning messages for potential issues
+  # ERROR: Error messages for failures
+  # CRITICAL: Critical errors that may cause system failure
+  level: INFO
+
 # Application settings
 # Run once and exit, or run continuously
 run_once: false

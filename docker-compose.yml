@@ -9,7 +9,6 @@ services:
     
     # Environment variables
     environment:
-      - LOG_LEVEL=INFO
       - RING_USERNAME=${RING_USERNAME}
       - RING_PASSWORD=${RING_PASSWORD}
       - RUN_ONCE=false
