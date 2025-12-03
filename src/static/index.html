@@ -3076,6 +3076,9 @@
                 return;
             }
             
+            // Check if user is already at bottom before rendering (within 50px tolerance)
+            const wasAtBottom = logViewer.scrollHeight - logViewer.scrollTop - logViewer.clientHeight < 50;
+            
             const html = logs.map((line, index) => {
                 let color = '#d4d4d4'; // Default gray
                 
@@ -3098,8 +3101,10 @@
             
             logViewer.innerHTML = html;
             
-            // Auto-scroll to bottom if enabled
-            if (document.getElementById('logAutoScroll').checked) {
+            // Auto-scroll to bottom ONLY if:
+            // 1. Auto-scroll checkbox is enabled AND
+            // 2. User was already at/near bottom before refresh (they haven't scrolled up)
+            if (document.getElementById('logAutoScroll').checked && wasAtBottom) {
                 logViewer.scrollTop = logViewer.scrollHeight;
             }
         }

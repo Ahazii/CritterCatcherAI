@@ -202,6 +202,15 @@ class VideoSorter:
                 counter += 1
         
         try:
+            # Clean up any existing JSON metadata from downloads folder
+            old_metadata = video_path.with_suffix(video_path.suffix + ".json")
+            if old_metadata.exists():
+                try:
+                    old_metadata.unlink()
+                    logger.debug(f"Cleaned up old metadata file: {old_metadata.name}")
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to cleanup old metadata: {cleanup_err}")
+            
             # Move video to review folder
             shutil.move(str(video_path), str(dest_path))
             logger.info(f"Sorted video to YOLO category '{yolo_category}': {video_path.name} (confidence: {confidence:.2f})")

@@ -416,7 +416,27 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 )
                 logger.info(f"Tracked video created with detections: {tracked_detections}")
             else:
-                logger.debug("No objects detected, skipping YOLO sorting and tracking")
+                # No objects detected - move to "unknown" category in review
+                logger.info("No objects detected - sorting to 'unknown' category")
+                try:
+                    from webapp import app_state
+                    app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name} to 'unknown' category..."
+                    app_state["processing_progress"]["phase"] = "yolo_sorting"
+                except:
+                    pass
+                
+                yolo_sorted_path = video_sorter.sort_by_yolo_category(
+                    video_path,
+                    yolo_category="unknown",
+                    confidence=0.0,
+                    metadata={"all_detections": {}}
+                )
+                logger.info("Video sorted to /data/review/unknown/")
+                
+                # Update video_path to the new location
+                video_path = yolo_sorted_path
+                yolo_category = "unknown"
+                yolo_confidence = 0.0
             
             # Check if Face Recognition routing should be triggered
             # Conditions:
