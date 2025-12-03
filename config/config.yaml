@@ -14,6 +14,10 @@ ring:
   # Optional: limit number of videos per run (null for no limit)
   download_limit: null
 
+# Manual YOLO categories (managed via Species Training page)
+# Categories manually enabled here will be used for detection even if not part of an Animal Profile
+yolo_manual_categories: []
+
 # Detection settings
 detection:
   # YOLO model selection: yolov8n (nano - fastest), yolov8s (small), yolov8m (medium), 
