@@ -1,723 +1,553 @@
 # CritterCatcherAI User Guide
-## Specialized Species Detection & Training
 
-**Version**: 2.0  
-**Last Updated**: 2025-10-28
-
----
-
-## 📋 Table of Contents
-
-1. [Overview](#overview)
-2. [Getting Started](#getting-started)
-3. [Training Species Classifiers](#training-species-classifiers)
-4. [Clip Extraction Mode](#clip-extraction-mode)
-5. [Configuration](#configuration)
-6. [Troubleshooting](#troubleshooting)
-7. [API Reference](#api-reference)
+**Version 2.0 - Hybrid YOLO-First Workflow**  
+**Last Updated:** December 2, 2025
 
 ---
 
-## Overview
+## Table of Contents
 
-CritterCatcherAI v2.0 introduces a two-stage AI detection pipeline for identifying specific wildlife species from your Ring camera videos:
-
-### **Stage 1: YOLO Detection** (Existing)
-- Detects broad categories (bird, cat, dog, etc.)
-- Fast, real-time capable
-- 80 COCO object classes
-
-### **Stage 2: Specialized Classification** (New)
-- Fine-grained species identification
-- Custom-trained models for specific animals
-- High accuracy for target species
-- Example: hedgehog, finch, goldfinch
-
-### **Clip Extraction** (New)
-- Automatically extracts video clips containing target species
-- Configurable padding (±10 seconds)
-- Saves to Plex server
-- Optional auto-delete non-matching videos
+1. [Getting Started](#getting-started)
+2. [Ring Authentication](#ring-authentication)
+3. [YOLO Categories Management](#yolo-categories-management)
+4. [Video Review Workflow](#video-review-workflow)
+5. [CLIP Profiles (Optional)](#clip-profiles-optional)
+6. [Face Recognition](#face-recognition)
+7. [Configuration](#configuration)
+8. [Troubleshooting](#troubleshooting)
+9. [YOLO Categories Reference](#yolo-categories-reference)
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+### First Time Setup
 
-1. **Unraid server** with CritterCatcherAI installed
-2. **Ring camera** with video subscription
-3. **GPU (recommended)** or powerful CPU for training
-4. **Training images** (minimum 10 per species)
+1. **Access Web Interface**
+   - Open browser: `http://YOUR_SERVER_IP:8080`
+   - You'll see the Dashboard
 
-### Access the Web Interface
+2. **Authenticate with Ring**
+   - Navigate to **Ring Setup** tab
+   - Enter your Ring email and password
+   - If 2FA is enabled:
+     - Click "Authenticate with Ring"
+     - You'll see: "✓ Ring has sent a verification code!"
+     - Check your phone/email for 6-digit code
+     - Enter code and click "Submit 2FA Code"
+   - Token is saved automatically
 
-1. Open your browser and navigate to: `http://YOUR_UNRAID_IP:8080`
-2. You'll see the main dashboard
-3. Click **"Species Training"** in the navigation menu
+3. **Enable YOLO Categories**
+   - Go to **YOLO Categories** tab
+   - Select categories to monitor (bird, cat, dog, person, car, etc.)
+   - Click "Select All" for maximum coverage
+   - Categories are saved automatically
 
----
-
-## Training Species Classifiers
-
-Training a custom species classifier involves 4 steps:
-
-### Step 1: Add a New Species
-
-1. Navigate to the **Species Training** page
-2. Click **"+ Add Species"** button
-3. Fill in the form:
-   - **Species Name**: e.g., "hedgehog"
-   - **Parent YOLO Classes**: Use the searchable dropdown (see below)
-   - **Confidence Threshold**: 0.75 (recommended)
-4. Click **"Add Species"**
-
-#### Using the Parent YOLO Classes Dropdown
-
-The system now features an improved **multi-select dropdown** for selecting parent classes:
-
-**How to use:**
-1. Click the dropdown field to open the class list
-2. Type to search/filter the 80 available YOLO classes
-3. Click checkboxes to select multiple classes
-4. Selected classes appear as tags (click × to remove)
-5. Click outside the dropdown to close
-
-**Real-time Validation:**
-- ✅ System validates your selections automatically
-- ⚠️ Warning appears if parent classes aren't in your detection list
-- 🔧 One-click button to add missing classes to "Objects to Detect"
-
-**Example workflow:**
-```
-1. Add species "hedgehog" with parent classes: cat, dog
-2. System checks: Are "cat" and "dog" in your detection list?
-3. If missing → Warning: "cat, dog not in detection list"
-4. Click "Add Missing Classes to Detection List"
-5. System automatically updates your config ✓
-```
-
-#### Choosing Parent YOLO Classes
-
-The parent classes tell the system which YOLO detections to check with your specialized classifier:
-
-| Your Species | Parent YOLO Classes | Reason |
-|--------------|---------------------|---------|
-| Hedgehog | cat, dog | Hedgehogs are often misclassified as cats or dogs |
-| Finch | bird | Finches are birds |
-| Fox | dog, cat | Foxes look like dogs/cats |
-| Squirrel | cat, dog | Small mammals often detected as cats |
-
-**All 80 Available YOLO COCO Classes:**
-```
-person, bicycle, car, motorcycle, airplane, bus, train, truck, boat,
-traffic light, fire hydrant, stop sign, parking meter, bench,
-bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe,
-backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard,
-sports ball, kite, baseball bat, baseball glove, skateboard, surfboard,
-tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl,
-banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza,
-donut, cake, chair, couch, potted plant, bed, dining table, toilet,
-tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven,
-toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear,
-hair drier, toothbrush
-```
-
-### Step 2: Collect Training Images
-
-You need **minimum 10 images**, but **50-200+ is recommended** for good accuracy.
-
-#### Option A: Download from Public Datasets
-
-1. Search for datasets on:
-   - **iNaturalist**: https://www.inaturalist.org/
-   - **Kaggle**: https://www.kaggle.com/datasets
-   - **Google Images**: Use browser extensions to batch download
-
-2. Download 50-200 images of your target species
-
-#### Option B: Use Your Ring Videos
-
-1. Let YOLO run for a few days
-2. Check `/data/objects/detected/` for potential matches
-3. Manually select images of your target species
-4. Move them to `/data/training_data/SPECIES_NAME/train/`
-
-### Step 3: Upload Training Images
-
-1. On the Species Training page, find your species card
-2. Click **"📤 Upload"** button
-3. Select multiple images (Ctrl+Click or Cmd+Click)
-4. Click **"Upload Images"**
-5. Wait for upload to complete
-
-**Image Requirements:**
-- Format: JPG or PNG
-- Size: Any (will be resized to 224x224)
-- Quality: Clear, well-lit images work best
-- Variety: Different angles, lighting, backgrounds
-
-### Step 4: Train the Model
-
-1. Once you have 10+ training images, the **"🎓 Train"** button will activate
-2. Click **"🎓 Train"**
-3. Confirm the dialog (training takes 30-60 minutes)
-4. Monitor progress in the **"Training Status"** section
-
-**Training Process:**
-- Uses ResNet18 with transfer learning
-- Automatically collects negative samples from YOLO detections
-- Trains for 50 epochs (configurable)
-- Saves best model based on validation accuracy
-- GPU training: ~30 minutes
-- CPU training: ~2 hours
-
-**Training Output:**
-```
-/data/models/hedgehog_classifier.pt (model file)
-/data/models/hedgehog_metadata.json (training metrics)
-```
+4. **Start Processing**
+   - Click **Process Now** on Dashboard
+   - System downloads videos from Ring
+   - Videos are analyzed and sorted by category
+   - Check **Review** tab to see results
 
 ---
 
-## Clip Extraction Mode
+## Ring Authentication
 
-Once you have trained models, you can enable clip extraction to automatically save only videos containing your target species.
+### Web Interface Method (Recommended)
 
-### Enable Clip Extraction
+The web UI makes Ring authentication simple:
 
-1. Edit `/app/config/config.yaml` (via Unraid terminal or file editor):
+**Initial Setup:**
+1. Go to **Ring Setup** tab
+2. Enter your Ring credentials
+3. Click "Authenticate with Ring"
+
+**If 2FA is Enabled:**
+- After clicking authenticate, you'll see a green success message
+- A 2FA input field appears
+- Enter the 6-digit code from your phone/email
+- Click "Submit 2FA Code"
+
+**Token Storage:**
+- Token saved to `/data/tokens/ring_token.json`
+- Persists across container restarts
+- Only authenticate once unless token expires
+
+### Token Expiration
+
+If your Ring token expires:
+- You'll see authentication errors in logs
+- Old token is automatically deleted
+- Follow the "Initial Setup" steps again
+
+For more details, see [RING_2FA_SETUP.md](RING_2FA_SETUP.md)
+
+---
+
+## YOLO Categories Management
+
+### Understanding YOLO Categories
+
+YOLO Stage 1 detects 80 object classes from the COCO dataset. You choose which categories to monitor.
+
+**How it works:**
+1. System downloads videos from Ring cameras
+2. YOLO analyzes videos and detects objects
+3. Videos are sorted to `/data/review/{category}/` folders
+4. Only enabled categories are monitored
+
+### Enabling Categories
+
+**Via Web Interface:**
+1. Go to **YOLO Categories** tab
+2. You'll see organized groups:
+   - **Animals** (bird, cat, dog, horse, etc.)
+   - **Vehicles** (car, motorcycle, bus, etc.)
+   - **People** (person)
+   - **Outdoor Objects** (bench, fire hydrant, etc.)
+   - And more...
+
+3. **Category States:**
+   - 🔒 **Locked (purple)** - Used by CLIP profile, cannot disable
+   - ✅ **Enabled (green toggle)** - Manually enabled
+   - ⬜ **Disabled (gray toggle)** - Not monitored
+
+4. **Batch Actions:**
+   - Click "✅ Select All" to enable all categories
+   - Click "❌ Deselect All" to disable all (except locked)
+
+### YOLO Detection Settings
+
+**Confidence Threshold** (in Configuration tab):
+- **0.15-0.20** - Very sensitive (many detections, more false positives)
+- **0.25-0.35** - ✅ Recommended (balanced)
+- **0.40-0.50** - Conservative (fewer detections, high accuracy)
+
+**Object Detection Frames:**
+- Number of video frames to analyze
+- **5 frames** - ✅ Recommended (fast, sufficient)
+- **10-15 frames** - More thorough, slower
+
+---
+
+## Video Review Workflow
+
+### Review Interface
+
+After processing, videos are organized in `/data/review/{category}/` folders.
+
+**Accessing Review:**
+1. Go to **Review** tab
+2. You'll see category tabs: `car (17)`, `dog (3)`, `bird (5)`, `person (26)`
+3. Click a tab to view videos in that category
+
+### Tracked Videos with Bounding Boxes
+
+All videos in review include **animated tracking**:
+- Green bounding boxes around detected objects
+- Persistent track IDs (e.g., "dog #1", "person #2")
+- Confidence scores displayed
+- Boxes follow objects through frames
+
+**Video Files:**
+- **Original:** `/data/review/{category}/video.mp4`
+- **Tracked:** `/data/objects/detected/annotated_videos/tracked_video.mp4`
+- Review tab automatically shows tracked version with bounding boxes
+
+### Video Actions
+
+**Bulk Selection:**
+- **Single click** - Select one video
+- **Shift+click** - Select range
+- **"Select All"** button - Select all videos in category
+
+**Actions:**
+- **✓ Confirm Videos** 
+  - Moves original to `/data/sorted/{category}/`
+  - Deletes tracked version (no longer needed)
+  - Video remains in sorted folder permanently
+
+- **✗ Reject Videos**
+  - Deletes both original and tracked versions
+  - Marks as 'rejected' in download tracker
+  - Won't be downloaded again
+
+- **Or assign to:** (Dropdown)
+  - Assign to specific CLIP profile
+  - Moves to `/data/sorted/{profile}/`
+
+### Video Metadata
+
+Each video shows:
+- **YOLO Category** - What YOLO detected (e.g., "car 81%")
+- **All Detections** - All objects found (e.g., "potted plant: 82%, person: 86%, car: 91%")
+- **CLIP Match** - If CLIP profile ran (e.g., "Profile ID hedgehog (78%)")
+- **Status** - "Pending Review" or "CLIP Sorted"
+- **File Size** - Video file size
+
+---
+
+## CLIP Profiles (Optional)
+
+### What are CLIP Profiles?
+
+CLIP Stage 2 provides **fine-grained classification** beyond YOLO's 80 categories.
+
+**Example Use Cases:**
+- YOLO detects "bird" → CLIP identifies specific species (finch, robin, hawk)
+- YOLO detects "dog" → CLIP identifies breeds (Jack Russell, Doberman)
+- YOLO detects "cat" → CLIP identifies specific animals (hedgehog, fox)
+
+### Creating a CLIP Profile
+
+**Coming Soon** - CLIP Profiles tab is under development.
+
+**Current Workaround:**
+Edit `/config/config.yaml` manually:
 
 ```yaml
-specialized_detection:
-  enabled: true  # Enable specialized classifiers
-  
-  species:
-    - name: hedgehog
-      parent_yolo_class: [cat, dog]
-      model_path: /data/models/hedgehog_classifier.pt
-      confidence_threshold: 0.75
-  
-  clip_extraction:
-    enabled: true  # Enable clip extraction
-    padding_seconds: 10  # ±10 seconds around detection
-    merge_overlapping: true  # Merge nearby detections
-    auto_delete_non_matches: false  # CAUTION: Deletes non-matching videos!
-    output_path: /data/clips  # Extracted clips for Plex
+animal_profiles:
+  - name: hedgehog
+    yolo_categories: [cat, dog]  # Which YOLO categories to check
+    text_description: "a small hedgehog with spiky brown fur"
+    confidence_threshold: 0.75    # 75% confidence required
+    auto_approval: true           # Auto-move to sorted if ≥threshold
 ```
 
-2. Restart the container:
-```bash
-docker restart crittercatcher-ai
-```
+### How CLIP Profiles Work
 
-### How Clip Extraction Works
+1. YOLO detects video with "dog" (Stage 1)
+2. Video sorted to `/data/review/dog/`
+3. System checks: Is there a CLIP profile for "dog"?
+4. YES → Run CLIP classification
+5. **If CLIP confidence ≥ 0.75:**
+   - Move to `/data/sorted/{profile}/`
+   - Mark as auto-approved
+6. **If CLIP confidence < 0.75:**
+   - Stay in `/data/review/dog/`
+   - User reviews manually
 
-1. **YOLO detects** animals in video (Stage 1)
-2. **Specialized classifier** checks if it's your target species (Stage 2)
-3. **If match found**:
-   - Extracts clip with ±10s padding
-   - Saves to `/data/clips/SPECIES_NAME/`
-   - Deletes original video (saves space)
-4. **If no match** and `auto_delete_non_matches: true`:
-   - Deletes original video
-   - ⚠️ **Use with caution!** Deleted files cannot be recovered
+---
 
-### Safety Toggle
+## Face Recognition
 
-The `auto_delete_non_matches` setting is **disabled by default** for safety:
+### Setup Face Recognition
 
-```yaml
-auto_delete_non_matches: false  # Safe: keeps all videos
-```
+Face recognition allows identifying specific people automatically.
 
-**Only enable this when:**
-- ✅ Your models are well-trained (>85% accuracy)
-- ✅ You've tested with a few videos first
-- ✅ You have backups of important footage
-- ✅ You understand files are permanently deleted
+**Workflow:**
+1. **Enable person detection** in YOLO Categories
+2. **Process person videos** - they go to `/data/review/person/`
+3. **Extract faces** from confirmed videos
+4. **Assign faces** to person names
+5. **Future videos** automatically recognize people
 
-### Accessing Extracted Clips
+### Face Training Tab
 
-Clips are saved to `/data/clips/SPECIES_NAME/` which you can mount to your Plex server:
+1. **Confirm Person Videos**
+   - In Review tab, select person videos
+   - Click "Confirm as Person" button
+   - System extracts faces from video
+   - Faces saved to `/data/training/faces/unassigned/`
 
-```yaml
-# docker-compose.yml
-volumes:
-  - /mnt/user/Videos/Wildlife:/data/clips
-```
+2. **Assign Faces to Names**
+   - Go to **Face Training** tab
+   - View unassigned face images
+   - Select faces of same person
+   - Enter person name (e.g., "John", "Claire")
+   - Click "Assign to Person"
+   - System retrains face recognition automatically
 
-**Clip Filename Format:**
-```
-20251028_143022_FrontDoor_20240126_143022_12345_hedgehog.mp4
-```
+3. **Future Processing**
+   - New person videos are analyzed
+   - Recognized faces are labeled
+   - Videos routed to appropriate destinations
+
+### Face Recognition Settings
+
+**Face Tolerance** (in Configuration tab):
+- **0.3-0.4** - Strict matching (fewer false positives)
+- **0.5-0.7** - ✅ Recommended (balanced)
+- **0.8-0.9** - Lenient (more false positives)
+
+**Face Recognition Frames:**
+- Number of frames to analyze for faces
+- **10-15** - ✅ Recommended
+- **20-30** - More thorough, slower
 
 ---
 
 ## Configuration
 
-### Web-Based Configuration
+### Configuration Tab
 
-Most settings can be configured through the **Configuration** tab in the web interface:
+Most settings are accessible via **Configuration** tab in web UI:
 
-1. Navigate to the **⚙️ Configuration** tab
-2. Adjust settings using the intuitive controls
-3. Click **💾 Save Configuration**
+**Object Detection:**
+- Confidence Threshold (slider: 0.1-0.9)
+- Object Detection Frames (slider: 3-20)
 
-#### Objects to Detect (Multi-Select)
+**Image Review:**
+- Auto-Confirm Threshold (slider: 0.50-1.00)
+  - Detections ≥ this threshold are auto-confirmed
+  - Bypass manual review
+  - ✅ Recommended: 0.80-0.90
+  
+- Max Confirmed Images per Label (slider: 50-1000)
+  - Maximum confirmed images kept per label
+  - Older images auto-deleted when limit exceeded
+  - ✅ Recommended: 100-300
 
-The "Objects to Detect" section now uses the same multi-select dropdown:
+**Scheduler:**
+- Enable Auto Run (checkbox)
+- Run Interval (dropdown: 15 min to 24 hours)
 
-**Features:**
-- Search through all 80 YOLO classes
-- Select multiple classes with checkboxes
-- Visual tag display of selected classes
-- No more typos or invalid class names!
+**Face Recognition:**
+- Enable Face Recognition (checkbox)
+- Face Tolerance (slider: 0.3-0.9)
+- Face Recognition Frames (slider: 5-30)
 
-**Tips:**
-- Start with common animals: bird, cat, dog, person
-- Add specific classes as needed
-- Fewer classes = faster processing
-- More classes = better discovery mode
+### Manual Configuration
 
-#### Image Review Settings (New in v0.1.0)
-
-The **Image Review** section helps manage the flow of detected objects and training data:
-
-**Auto-Confirm Threshold** (Default: 85%)
-- Detections with confidence ≥ this threshold are automatically confirmed
-- Auto-confirmed images bypass manual review and go directly to `confirmed/` folder
-- Discovery detections are never auto-confirmed (always require manual review)
-- **Recommended**: 0.80-0.90 for balanced automation
-- **Conservative**: 0.90+ to minimize false positives
-- **Aggressive**: 0.70-0.80 if you have well-trained models
-
-**Max Confirmed Images per Label** (Default: 200)
-- Maximum number of confirmed images kept per label
-- When limit is exceeded, oldest confirmed images are automatically deleted
-- Cleanup happens immediately on confirmation (no background task)
-- **Recommended**: 100-300 for most use cases
-- **Storage-constrained**: 50-100 to save disk space
-- **Large datasets**: 500-1000 for extensive training libraries
-
-**How It Works:**
-```
-1. YOLO detects "cat" with 90% confidence
-2. System checks: 90% ≥ 85% auto-confirm threshold?
-3. YES → Saves to /data/objects/detected/cat/confirmed/
-4. Checks: Total confirmed images > 200?
-5. YES → Deletes oldest confirmed images to maintain limit
-6. Result: Automatic training data management!
-```
-
-**Benefits:**
-- ✅ Reduces manual review workload for high-confidence detections
-- ✅ Automatically maintains training data size
-- ✅ Prevents disk space issues from unlimited image accumulation
-- ✅ Keeps only most recent images (better for seasonal variations)
-
-### Main Configuration File
-
-Advanced users can edit directly: `/app/config/config.yaml`
-
-### Image Review Section
+Advanced users can edit `/config/config.yaml` directly:
 
 ```yaml
+paths:
+  downloads: /data/downloads
+  sorted: /data/sorted
+  face_encodings: /data/faces/encodings.pkl
+
+ring:
+  download_hours: 24        # Hours back to download
+  download_limit: null      # Max videos (null = unlimited)
+
+detection:
+  confidence_threshold: 0.25
+  object_frames: 5
+  face_tolerance: 0.6
+  face_frames: 10
+  face_model: hog           # or 'cnn' (slower, more accurate)
+  priority: people          # or 'objects'
+  yolo_model: yolov8n       # n/s/m/l/x (size/speed tradeoff)
+
+scheduler:
+  auto_run: true
+  interval_minutes: 60
+
 image_review:
-  # Auto-confirm threshold (0.0-1.0)
-  # Detections with confidence >= this threshold are automatically confirmed
-  # and bypass manual review
   auto_confirm_threshold: 0.85
-  
-  # Maximum confirmed images to keep per label
-  # Older confirmed images are automatically deleted when limit is exceeded
   max_confirmed_images: 200
+
+tracking:
+  enabled: true
+  save_original_videos: false
+
+yolo_manual_categories:    # Manually enabled categories
+  - bird
+  - cat
+  - dog
+  - person
+  - car
+
+face_recognition:
+  enabled: true
+
+animal_profiles: []         # CLIP profiles (optional)
 ```
 
-### Specialized Detection Section
-
-```yaml
-specialized_detection:
-  # Enable/disable Stage 2 classifiers
-  enabled: false  # Set to true after training models
-  
-  # Species definitions
-  species:
-    - name: hedgehog
-      parent_yolo_class: [cat, dog]
-      model_path: /data/models/hedgehog_classifier.pt
-      confidence_threshold: 0.75  # 75% confidence required
-      
-    - name: finch
-      parent_yolo_class: [bird]
-      model_path: /data/models/finch_classifier.pt
-      confidence_threshold: 0.70
-      # Optional: hierarchical sub-classifiers
-      sub_classifiers:
-        - name: goldfinch
-          model_path: /data/models/goldfinch_classifier.pt
-          confidence_threshold: 0.65
-  
-  # Clip extraction settings
-  clip_extraction:
-    enabled: false  # Enable clip mode
-    padding_seconds: 10  # Seconds before/after detection
-    merge_overlapping: true  # Merge nearby detections
-    auto_delete_non_matches: false  # Safety toggle
-    output_path: /data/clips
-  
-  # Training hyperparameters
-  training:
-    data_augmentation: true
-    validation_split: 0.2  # 20% for validation
-    epochs: 50
-    batch_size: 32
-    learning_rate: 0.001
-```
-
-### Training Hyperparameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `epochs` | 50 | Training iterations |
-| `batch_size` | 32 | Images per training batch |
-| `learning_rate` | 0.001 | Learning step size |
-| `validation_split` | 0.2 | Validation data percentage |
-| `data_augmentation` | true | Random transforms during training |
-
-**Adjust for better results:**
-- Low accuracy? → Increase `epochs` to 100
-- Training too slow? → Decrease `batch_size` to 16
-- Overfitting? → Add more training images
+**After editing:** Restart container to apply changes
 
 ---
 
 ## Troubleshooting
 
-### Training Issues
+### Ring Issues
 
-#### "Insufficient training images"
-- **Problem**: Less than 10 images uploaded
-- **Solution**: Upload at least 10 images, preferably 50+
+**Authentication Failed:**
+- Double-check credentials in Ring Setup tab
+- Ensure Ring subscription is active
+- Delete token file: `/data/tokens/ring_token.json` and re-authenticate
 
-#### Training fails immediately
-- **Problem**: Corrupt images or wrong format
-- **Solution**: 
-  1. Check logs: `docker logs crittercatcher-ai`
-  2. Verify all images are JPG/PNG
-  3. Remove any corrupt files
+**No Videos Downloaded:**
+- Check Ring app - are there videos in the timeframe?
+- Default: last 24 hours
+- Increase `ring.download_hours` in config
+- Check Docker logs: `docker logs CritterCatcherAI`
 
-#### Low accuracy (<70%)
-- **Problem**: Not enough training data or poor quality images
-- **Solutions**:
-  - Add more training images (aim for 100+)
-  - Ensure image variety (different angles, lighting)
-  - Add more negative samples
-  - Increase epochs to 100
-
-#### Training takes forever (>4 hours)
-- **Problem**: CPU training is slow
-- **Solutions**:
-  - Enable GPU support (see UNRAID_INSTALL.md)
-  - Reduce `batch_size` to 16
-  - Reduce `epochs` to 25
+**2FA Code Rejected:**
+- Codes expire quickly - request a new one
+- Copy/paste code directly from email/SMS
+- Ensure no spaces in code
 
 ### Detection Issues
 
-#### Model not detecting anything
-1. Check if specialized_detection is enabled in config
-2. Verify model file exists: `/data/models/SPECIES_classifier.pt`
-3. Check parent YOLO classes are correct
-4. Lower confidence_threshold to 0.5 for testing
+**No Detections in Videos:**
+- Lower confidence threshold to 0.20-0.25
+- Enable more YOLO categories
+- Check logs for processing errors
+- Verify videos are in `/data/downloads/`
 
-#### Too many false positives
-- **Solution**: Increase `confidence_threshold` to 0.85
-- Add more negative training samples
+**Too Many False Positives:**
+- Raise confidence threshold to 0.35-0.45
+- Increase auto-confirm threshold
+- Reject false positives to improve tracking
 
-#### Too many false negatives (missing detections)
-- **Solution**: Lower `confidence_threshold` to 0.65
-- Add more training images with variety
+**YOLO Categories Not Persisting:**
+- Check if `/config/` volume is mounted correctly
+- Verify file permissions on config directory
+- Check logs for "Saved X categories" messages
 
-### Clip Extraction Issues
+### Video Playback Issues
 
-#### Clips are too short/long
-- **Problem**: Padding setting
-- **Solution**: Adjust `padding_seconds` in config (try 15 or 20)
+**Videos Show Black in Browser:**
+- System automatically converts mp4v to H.264
+- Check logs for "Successfully converted to H.264"
+- Try different browser (Chrome/Firefox recommended)
+- Check browser console (F12) for errors
 
-#### Clips have multiple detections
-- **Expected behavior** when `merge_overlapping: true`
-- Disable merging if you want separate clips per detection
+**Tracked Videos Missing:**
+- Verify video tracking is enabled in config
+- Check `/data/objects/detected/annotated_videos/` folder
+- Check logs for tracking errors
+- Ensure `lap` module is installed (should be automatic)
 
-#### Videos being deleted accidentally
-- **IMMEDIATE ACTION**: Set `auto_delete_non_matches: false`
-- Test thoroughly before re-enabling
-- Consider keeping original videos in separate folder
+**Videos Have No Bounding Boxes:**
+- Check that correct video is being served
+- Tracked videos should be named `tracked_{filename}.mp4`
+- Original videos don't have boxes
 
----
+### Performance Issues
 
-## API Reference
+**High CPU Usage:**
+- Normal during video processing
+- 60-100% CPU expected
+- Enable GPU support for faster processing
+- Reduce `object_frames` to 3-5
 
-### Species Management
+**Out of Memory:**
+- Reduce Docker memory limit
+- Process fewer videos at once
+- Close other applications
 
-#### List Species
-```http
-GET /api/species/list
-```
-
-Response:
-```json
-{
-  "species": [
-    {
-      "name": "hedgehog",
-      "parent_yolo_class": ["cat", "dog"],
-      "confidence_threshold": 0.75,
-      "has_model": true,
-      "training_images": 150
-    }
-  ]
-}
-```
-
-#### Add Species
-```http
-POST /api/species/add
-Content-Type: application/json
-
-{
-  "name": "hedgehog",
-  "parent_yolo_class": ["cat", "dog"],
-  "confidence_threshold": 0.75
-}
-```
-
-Response (with validation):
-```json
-{
-  "status": "success",
-  "message": "Added species 'hedgehog'",
-  "warning": {
-    "missing_labels": ["cat", "dog"],
-    "message": "Parent YOLO classes ['cat', 'dog'] are not in the detection list..."
-  }
-}
-```
-
-#### Get YOLO Classes List
-```http
-GET /api/yolo_classes
-```
-
-Response:
-```json
-{
-  "classes": ["person", "bicycle", "car", ...]
-}
-```
-
-#### Add Object Labels to Detection List
-```http
-POST /api/config/add_object_labels
-Content-Type: application/json
-
-{
-  "labels": ["cat", "dog"]
-}
-```
-
-Response:
-```json
-{
-  "status": "success",
-  "added_labels": ["cat", "dog"],
-  "current_labels": ["bird", "cat", "dog", "person"],
-  "message": "Added 2 label(s) to detection list"
-}
-```
-
-#### Upload Training Data
-```http
-POST /api/species/upload_training_data?species_name=hedgehog
-Content-Type: multipart/form-data
-
-files: [image1.jpg, image2.jpg, ...]
-```
-
-#### Train Species
-```http
-POST /api/species/train
-Content-Type: application/json
-
-{
-  "species_name": "hedgehog"
-}
-```
-
-#### Training Status
-```http
-GET /api/species/training_status
-```
-
-Response:
-```json
-{
-  "is_training": true,
-  "current_species": "hedgehog",
-  "device": "cuda",
-  "available_models": [...]
-}
-```
-
-#### List Trained Models
-```http
-GET /api/species/models
-```
-
-Response:
-```json
-{
-  "models": [
-    {
-      "species": "hedgehog",
-      "accuracy": 89.5,
-      "size_mb": 42.3,
-      "created": "2025-10-28T12:00:00",
-      "training_time": 1834
-    }
-  ]
-}
-```
+**Slow Processing:**
+- Enable GPU support (3-5x faster)
+- Use smaller YOLO model (`yolov8n` instead of `yolov8m`)
+- Reduce frames analyzed per video
+- Increase processing interval
 
 ---
 
-## Advanced Topics
+## YOLO Categories Reference
 
-### Hierarchical Classification
+### All 80 COCO Classes
 
-For fine-grained species identification (e.g., bird → finch → goldfinch):
+**Animals (11):**
+bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe
 
-```yaml
-species:
-  - name: bird
-    parent_yolo_class: [bird]
-    model_path: /data/models/bird_classifier.pt
-    confidence_threshold: 0.70
-    sub_classifiers:
-      - name: finch
-        model_path: /data/models/finch_classifier.pt
-        confidence_threshold: 0.65
-```
+**Vehicles (8):**
+bicycle, car, motorcycle, airplane, bus, train, truck, boat
 
-### Custom Model Architecture
+**People (1):**
+person
 
-Edit `src/training_manager.py` line 224 to use different architectures:
+**Outdoor Objects (5):**
+traffic light, fire hydrant, stop sign, parking meter, bench
 
-```python
-# Current: ResNet18
-model = models.resnet18(pretrained=True)
+**Sports & Recreation (10):**
+frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket
 
-# Alternatives:
-# model = models.resnet50(pretrained=True)  # More accurate, slower
-# model = models.efficientnet_b0(pretrained=True)  # Balanced
-# model = models.mobilenet_v3_small(pretrained=True)  # Faster, less accurate
-```
+**Indoor Objects (24):**
+bottle, wine glass, cup, fork, knife, spoon, bowl, chair, couch, potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, cell phone, book, clock, vase, scissors, teddy bear
 
-### Data Augmentation
+**Electronics & Appliances (6):**
+microwave, oven, toaster, sink, refrigerator, hair drier, toothbrush
 
-Controlled in config:
+**Personal Items (5):**
+backpack, umbrella, handbag, tie, suitcase
 
-```yaml
-training:
-  data_augmentation: true  # Enables random transforms
-```
-
-Augmentations applied:
-- Random crop
-- Horizontal flip
-- Rotation (±15°)
-- Color jitter (brightness, contrast, saturation)
+**Food (10):**
+banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake
 
 ---
 
-## Best Practices
+## Tips & Best Practices
 
-### Training
-1. **Start with quality over quantity**: 50 good images > 200 poor images
-2. **Vary your dataset**: Different times of day, weather, angles
-3. **Balance positive/negative samples**: System auto-collects negatives from YOLO
-4. **Test before production**: Train, test accuracy, then enable clip extraction
-5. **Monitor logs**: `docker logs -f crittercatcher-ai`
+### General Usage
+- Start with broad YOLO categories, narrow down with CLIP profiles later
+- Use "Select All" initially to see what your cameras capture
+- Review and confirm/reject regularly to keep system accurate
+- Check logs periodically for errors or issues
 
-### Clip Extraction
-1. **Test first**: Keep `auto_delete_non_matches: false` initially
-2. **Review extracted clips**: Verify accuracy before enabling auto-delete
-3. **Backup important videos**: Before enabling deletion
-4. **Start conservative**: High confidence threshold (0.80+)
-5. **Monitor disk space**: Extracted clips accumulate quickly
+### Detection Accuracy
+- Lower confidence = more detections but more false positives
+- Higher confidence = fewer detections but more accurate
+- Adjust based on your specific cameras and environment
+- Different cameras may need different thresholds
+
+### Storage Management
+- Confirmed videos go to `/data/sorted/` - monitor disk space
+- Rejected videos are deleted - won't be downloaded again
+- Tracked videos deleted after confirmation (originals kept)
+- Set `max_confirmed_images` to prevent unlimited growth
 
 ### Performance
-1. **GPU training**: 10-20x faster than CPU
-2. **Batch processing**: Process videos in batches during low-usage periods
-3. **Model size**: Smaller models (ResNet18) are faster for inference
-4. **Frame sampling**: Default 5 frames per video is usually sufficient
-
----
-
-## Support & Resources
-
-- **Project Repository**: https://github.com/Ahazii/CritterCatcherAI
-- **Docker Logs**: `docker logs -f crittercatcher-ai`
-- **Configuration**: `/app/config/config.yaml`
-- **Training Data**: `/data/training_data/`
-- **Models**: `/data/models/`
-- **Extracted Clips**: `/data/clips/`
+- Process during off-peak hours for better performance
+- Enable GPU if available for 3-5x speedup
+- Reduce `object_frames` if processing is too slow
+- Use `yolov8n` model for fastest processing
 
 ---
 
 ## Quick Reference
 
-### File Locations
-
-| Path | Description |
-|------|-------------|
-| `/app/config/config.yaml` | Main configuration |
-| `/data/training_data/SPECIES/train/` | Training images |
-| `/data/models/SPECIES_classifier.pt` | Trained model |
-| `/data/clips/SPECIES/` | Extracted clips |
-| `/data/objects/detected/` | YOLO detection images |
-| `/data/objects/specialized/` | Stage 2 detection metadata |
-
 ### Common Commands
 
 ```bash
 # View logs
-docker logs -f crittercatcher-ai
+docker logs -f CritterCatcherAI
 
 # Restart container
-docker restart crittercatcher-ai
-
-# Access container shell
-docker exec -it crittercatcher-ai /bin/bash
+docker restart CritterCatcherAI
 
 # Check disk space
-docker exec crittercatcher-ai df -h /data
+docker exec CritterCatcherAI df -h /data
 
-# List trained models
-ls -lh /mnt/user/appdata/crittercatcher/models/
+# Access container shell
+docker exec -it CritterCatcherAI /bin/bash
 ```
 
-### Training Checklist
+### File Locations
 
-- [ ] Species added to config
-- [ ] 50+ training images uploaded
-- [ ] Training completed successfully
-- [ ] Model accuracy >85%
-- [ ] Tested on sample videos
-- [ ] `specialized_detection.enabled: true`
-- [ ] Clip extraction configured
-- [ ] Safety toggle set appropriately
-- [ ] Plex folder mounted
+| Path | Description |
+|------|-------------|
+| `/config/config.yaml` | Main configuration |
+| `/data/downloads/` | Temporary video downloads |
+| `/data/review/{category}/` | YOLO-sorted videos pending review |
+| `/data/sorted/{category}/` | Confirmed videos |
+| `/data/objects/detected/annotated_videos/` | Tracked videos with bounding boxes |
+| `/data/tokens/ring_token.json` | Ring authentication token |
+| `/data/training/faces/` | Face recognition training data |
+
+### Default Settings
+
+| Setting | Default | Recommended |
+|---------|---------|-------------|
+| Confidence Threshold | 0.25 | 0.25-0.35 |
+| Object Frames | 5 | 5-10 |
+| Auto-Confirm Threshold | 0.85 | 0.80-0.90 |
+| Max Confirmed Images | 200 | 100-300 |
+| Process Interval | 60 min | 30-120 min |
+| Face Tolerance | 0.6 | 0.5-0.7 |
 
 ---
 
-**Happy Critter Catching!** 🦔🐦🦊
+## Support
+
+- **Documentation:** [TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)
+- **GitHub Issues:** https://github.com/Ahazii/CritterCatcherAI/issues
+- **Docker Logs:** `docker logs -f CritterCatcherAI`
+- **Config File:** `/config/config.yaml`
+
+---
+
+**Happy Monitoring!** 🎥🦔🐦🚗👤

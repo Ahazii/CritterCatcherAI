@@ -1,233 +1,247 @@
 # CritterCatcherAI
 
-A Docker container for Unraid that automatically downloads Ring doorbell videos, analyzes them with AI, and organizes them by detected subjects.
+**Intelligent video sorting system for Ring cameras using AI object detection and facial recognition**
 
-## Overview
+CritterCatcherAI automatically downloads videos from your Ring doorbell/cameras, analyzes them using a two-stage AI pipeline (YOLO + CLIP), and organizes them by detected subjects. Perfect for wildlife monitoring, security surveillance, and smart home automation.
 
-CritterCatcherAI monitors your Ring doorbell, downloads videos to a shared volume, analyzes them using open-source AI tools, and automatically sorts them into separate folders based on what (or who) was detected.
+---
 
-## Features
+## 🎯 Key Features
 
-- **Ring Video Download**: Uses a well-maintained unofficial Ring client supporting refresh tokens and 2FA
-- **Open-Vocabulary Detection**: Detect arbitrary objects like "hedgehog", "wren", "fox", etc.
-- **Face Recognition**: Identify specific people like family members or frequent visitors
-- **Automatic Organization**: Videos are automatically moved to class-specific shared volumes
-- **Image Review Automation**: Auto-confirm high-confidence detections and manage training data size
-- **Discovery Mode**: Automatically find new objects in your videos
-- **Specialized Species Training**: Train custom AI models for specific wildlife
-- **Web Interface**: Modern UI for monitoring, configuration, and training
-- **Unraid Optimized**: Designed to run seamlessly on Unraid servers
+### Two-Stage Detection Pipeline
+- **Stage 1: YOLO Detection** - Fast, broad categorization (80 object classes)
+- **Stage 2: CLIP Profiles** - Precise identification of specific animals/objects
+- **Face Recognition** - Identify specific people automatically
 
-## Architecture
+### Hybrid Workflow
+- Videos sorted by YOLO category first → `/data/review/{category}/`
+- Optional CLIP refinement moves high-confidence matches → `/data/sorted/{profile}/`
+- Review interface shows tracked videos with animated bounding boxes
+- Manual confirmation improves accuracy over time
 
-```
-Ring Doorbell → Download Videos → AI Analysis → Sort by Detection
-                     ↓                  ↓              ↓
-                Shared Volume    Object/Face     Class Volumes
-                                 Detection       (Hedgehogs, Birds, 
-                                                  People, etc.)
-```
+### Smart Video Processing
+- Automatic video downloads from Ring cameras
+- Object tracking with persistent IDs across frames
+- Browser-compatible H.264 encoding
+- Configurable confidence thresholds
+- Multi-select review interface
 
-## Detection Classes
+---
 
-Configure your own detection classes in `config/config.yaml`:
-- Animals: hedgehog, fox, cat, dog, squirrel
-- Birds: wren, finch, robin, crow
-- People: Claire, John, Delivery Person
-- Vehicles: car, bicycle, truck
-
-## Quick Start
-
-See [Installation Guide](#installation) below for detailed setup instructions.
-
-## Requirements
-
-- Unraid server (or any Docker host)
-- Ring account with video subscription
-- Shared storage volumes for video organization
-
-## Installation
+## 🚀 Quick Start
 
 ### Prerequisites
-
-- Unraid server (or any Docker host)
+- Unraid server (or Docker host)
 - Ring account with video subscription
-- Docker and Docker Compose installed
+- 8GB+ RAM, 4+ CPU cores recommended
 
-### Quick Start
+### Installation
 
-1. **Clone or download this repository to your Unraid server:**
+1. **Clone repository:**
    ```bash
    cd /mnt/user/appdata
-   git clone <repository-url> crittercatcher
+   git clone https://github.com/Ahazii/CritterCatcherAI.git crittercatcher
    cd crittercatcher
    ```
 
-2. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-   Update with your Ring credentials:
-   - `RING_USERNAME`: Your Ring account email
-   - `RING_PASSWORD`: Your Ring account password
-
-3. **Edit configuration (optional):**
-   ```bash
-   nano config/config.yaml
-   ```
-   Customize detection labels, confidence thresholds, and other settings.
-
-4. **Update volume paths in docker-compose.yml:**
-   Edit the volume mappings to match your Unraid share structure.
-
-5. **Build and start the container:**
+2. **Deploy container:**
    ```bash
    docker-compose up -d
    ```
 
-6. **Check logs:**
-   ```bash
-   docker logs -f crittercatcher-ai
-   ```
+3. **Access web interface:**
+   Open `http://YOUR_SERVER_IP:8080`
 
-### First-Time Setup
+4. **Authenticate with Ring:**
+   - Go to **Ring Setup** tab
+   - Enter credentials
+   - Complete 2FA if prompted
+   - System will start downloading videos automatically
 
-#### Ring Authentication
-On first run, the container will authenticate with Ring using your credentials. If you have 2FA enabled, you may need to:
-1. Run the container interactively: `docker-compose run --rm crittercatcher python src/main.py`
-2. Enter your 2FA code when prompted
-3. The refresh token will be saved for future automatic authentication
+---
 
-#### Face Recognition Setup
-To enable face recognition for specific people:
+## 📖 Basic Usage
 
-1. Create a directory with photos of the person:
-   ```bash
-   mkdir -p /mnt/user/appdata/crittercatcher/faces/training/Claire
-   ```
+### 1. Enable YOLO Categories
+Go to **YOLO Categories** tab and select which objects to detect:
+- Birds, cats, dogs, people, cars, etc.
+- Use "Select All" for maximum coverage
+- Categories persist across restarts
 
-2. Add 3-5 clear photos of the person's face to this directory
+### 2. Review Detected Videos
+Videos are automatically sorted to `/data/review/{category}/`:
+- Navigate to **Review** tab
+- View videos by category (car, dog, bird, person, etc.)
+- Tracked videos show animated bounding boxes
+- Confirm or reject videos
 
-3. Run the training script:
-   ```bash
-   docker exec -it crittercatcher-ai python -c "
-   from face_recognizer import FaceRecognizer
-   from pathlib import Path
-   fr = FaceRecognizer()
-   images = list(Path('/data/faces/training/Claire').glob('*.jpg'))
-   fr.add_person('Claire', images)
-   "
-   ```
+### 3. Create CLIP Profiles (Optional)
+For fine-grained detection (e.g., specific bird species):
+- Go to **CLIP Profiles** tab (coming soon)
+- Create profile for target animal
+- Upload training images
+- High-confidence matches auto-sort to profile folders
 
-4. Repeat for additional people
+### 4. Setup Face Recognition (Optional)
+- Go to **Face Training** tab
+- Confirm person videos to extract faces
+- Assign faces to people names
+- Future videos automatically identify people
 
-## Usage
+---
 
-### Monitoring
+## 📁 Directory Structure
 
-View real-time logs:
-```bash
-docker logs -f crittercatcher-ai
+```
+/data/
+├── downloads/              # Temporary Ring video downloads
+├── review/                 # YOLO-sorted videos pending review
+│   ├── car/               # All car detections
+│   ├── dog/               # All dog detections
+│   ├── bird/              # All bird detections
+│   └── person/            # All person detections
+├── sorted/                # Confirmed/auto-approved videos
+│   ├── {profile}/         # CLIP profile matches
+│   └── {person_name}/     # Face recognition matches
+└── objects/detected/
+    └── annotated_videos/  # Tracked videos with bounding boxes
 ```
 
-### Accessing Sorted Videos
+---
 
-Videos are automatically sorted into directories based on detection:
+## ⚙️ Configuration
+
+### Web Interface (Recommended)
+Most settings configurable via **Configuration** tab:
+- YOLO categories to monitor
+- Confidence thresholds
+- Auto-approval settings
+- Processing schedule
+
+### Manual Config
+Advanced users can edit `/config/config.yaml`:
+
+```yaml
+detection:
+  confidence_threshold: 0.25      # YOLO detection sensitivity (0.1-0.9)
+  object_frames: 5                # Frames to analyze per video
+
+scheduler:
+  auto_run: true                  # Enable automatic processing
+  interval_minutes: 60            # Check for new videos every hour
+
+image_review:
+  auto_confirm_threshold: 0.85    # Auto-confirm high confidence (≥85%)
+  max_confirmed_images: 200       # Max training images per label
 ```
-/mnt/user/Videos/CritterCatcher/sorted/
-├── hedgehog/
-│   └── FrontDoor_20240126_143022_12345.mp4
-├── fox/
-├── bird/
-├── people/
-│   ├── Claire/
-│   └── John/
-└── unknown/
-```
+
+---
+
+## 🔧 Common Tasks
+
+### Adjust Detection Sensitivity
+**More detections (may include false positives):**
+- Lower confidence threshold to 0.15-0.20
+
+**Fewer, more accurate detections:**
+- Raise confidence threshold to 0.35-0.45
+
+### Enable GPU Acceleration (Optional)
+Uncomment GPU section in `docker-compose.yml` for 3-5x faster processing
 
 ### Manual Processing
+Click **Process Now** button on Dashboard to trigger immediate video download and processing
 
-To process videos on-demand:
-```bash
-docker exec crittercatcher-ai python src/main.py
+---
+
+## 🐛 Troubleshooting
+
+### Ring Authentication Failed
+1. Check credentials in Ring Setup tab
+2. Complete 2FA verification
+3. Token is saved and persists across restarts
+
+### No Videos Being Downloaded
+- Verify Ring subscription is active
+- Check that cameras have recorded videos in timeframe (default: 24 hours)
+- Check Docker logs: `docker logs CritterCatcherAI`
+
+### Videos Show Black in Browser
+- Container automatically converts videos to H.264 for browser compatibility
+- Check logs for "Successfully converted to H.264" messages
+- Try different browser (Chrome/Firefox recommended)
+
+### YOLO Categories Not Persisting
+- Categories are saved to `/config/config.yaml`
+- Ensure config volume is mounted correctly
+- Check logs for save/load confirmation messages
+
+---
+
+## 📚 Documentation
+
+- **[USER_GUIDE.md](USER_GUIDE.md)** - Detailed user manual
+- **[TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)** - Architecture and API reference
+- **[RING_2FA_SETUP.md](RING_2FA_SETUP.md)** - Ring authentication guide
+- **[UNRAID_DEPLOYMENT.md](UNRAID_DEPLOYMENT.md)** - Unraid-specific deployment
+
+---
+
+## 🎯 Workflow Overview
+
+```
+Ring Camera Videos
+       ↓
+[Download & Track]
+       ↓
+YOLO Stage 1: Broad Detection
+       ↓
+Sort by Category → /data/review/{category}/
+       ↓
+Optional CLIP Stage 2: Precise Classification
+       ↓
+High Confidence → /data/sorted/{profile}/
+Low Confidence → Stays in review for manual confirmation
+       ↓
+User Reviews & Confirms
+       ↓
+System learns and improves accuracy
 ```
 
-## Configuration
+---
 
-### Main Configuration (config/config.yaml)
+## 🔍 Supported YOLO Categories (80 COCO Classes)
 
-**Detection Labels:** Add any object you want to detect
-```yaml
-detection:
-  object_labels:
-    - hedgehog
-    - your_custom_animal
-    - your_custom_object
-```
+**Animals:** bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe  
+**Vehicles:** bicycle, car, motorcycle, airplane, bus, train, truck, boat  
+**People:** person  
+**Outdoor:** traffic light, fire hydrant, stop sign, parking meter, bench  
+**[Full list in USER_GUIDE.md](USER_GUIDE.md#yolo-categories)**
 
-**Confidence Threshold:** Adjust detection sensitivity
-```yaml
-detection:
-  confidence_threshold: 0.25  # Lower = more detections, Higher = more accurate
-```
+---
 
-**Processing Schedule:** 
-```yaml
-run_once: false           # false = continuous, true = run once and exit
-interval_minutes: 60      # Check for new videos every 60 minutes
-```
+## 🆘 Support
 
-**Priority Mode:**
-```yaml
-detection:
-  priority: people  # or "objects" - determines what gets priority in sorting
-```
+- **GitHub Issues:** https://github.com/Ahazii/CritterCatcherAI/issues
+- **Docker Logs:** `docker logs -f CritterCatcherAI`
+- **Config File:** `/mnt/user/appdata/crittercatcher/config/config.yaml`
 
-**Image Review (New in v0.1.0):**
-```yaml
-image_review:
-  auto_confirm_threshold: 0.85  # Auto-confirm detections >= 85% confidence
-  max_confirmed_images: 200      # Keep max 200 confirmed images per label
-```
+---
 
-### Advanced Configuration
-
-**GPU Acceleration:** Uncomment the GPU section in docker-compose.yml if you have an NVIDIA GPU
-
-**Custom Volume Paths:** Edit docker-compose.yml volume mappings for your storage setup
-
-**Logging Level:** Set `LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR)
-
-## Troubleshooting
-
-### Ring Authentication Issues
-- Check credentials in `.env` file
-- If 2FA is enabled, run container interactively for initial setup
-- Delete `/mnt/user/appdata/crittercatcher/tokens/ring_token.json` to force re-authentication
-
-### No Detections
-- Lower `confidence_threshold` in config.yaml
-- Check logs for errors during video processing
-- Verify videos are being downloaded to `/data/downloads`
-
-### Video Tracking Not Working (1KB or 258-byte files)
-- **Symptom**: Annotated videos in `/data/objects/detected/annotated_videos/` are tiny (1KB or 258 bytes) and won't play
-- **Cause**: Missing `lap` module dependency for YOLOv8 tracking
-- **Solution**: The `lap` module is now included in `requirements.txt` and will be installed automatically during container build
-- **Manual Fix** (if needed): `docker exec crittercatcherai pip3 install lap>=0.5.0 && docker restart crittercatcherai`
-- **Verification**: Check logs for "Video tracking complete" with file size in MB (not bytes)
-
-### Face Recognition Not Working
-- Ensure face encodings are created (see Face Recognition Setup)
-- Add more training photos for better accuracy
-- Adjust `face_tolerance` in config.yaml
-
-### Performance Issues
-- Enable GPU support if available
-- Reduce `download_hours` to process fewer videos
-- Increase `interval_minutes` to reduce processing frequency
-
-## License
+## 📜 License
 
 MIT License - See LICENSE file for details
+
+---
+
+## 🙏 Acknowledgments
+
+Built with:
+- **YOLOv8** by Ultralytics (object detection)
+- **CLIP** by OpenAI (zero-shot classification)
+- **face_recognition** by Adam Geitgey (facial recognition)
+- **ring-doorbell** by tchellomello (Ring API client)
+
+---
+
+**Happy Critter Catching!** 🦔🐦🐶🚗👤

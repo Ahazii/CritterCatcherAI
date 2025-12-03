@@ -1,1 +1,36 @@
-1: There are no bounding boxes to help me to know what has been identified in the video. 2:the checkbox in the top left of the video icons is not working well. 3:in the review section, person tab, how do i tell the system what face is being identified? (there are no profiles to assign them to) 4: the metrics and analytics do not seem to work well. 5:
+Priority 1 Bug
+YOLO categories selection is still not being loaded or maybe not saved?
+FAce TRaining - Assigned Multiple faces to a name  - "Failed to load faces" - Did work though, on leaving and reloading tab it is ok.
+Widget Does not always load when leaving review and returning.
+
+
+1:if a video is triggered by movement, eg a car moving in the road,the car that is stationary is being identified. + If an object is identified, what happens if there is more than one object identified?
+
+2:look and feel. Dark Mode +The following tabs open a new page rather than sitting in the home window - YOLO Categories,  CLIP profiles, Review, Model Management, Face TRaining.
+
+3: Logs - do not work
+
+4: Widget - Does not work on the Process Now OR Download All Buttons
+
+5: New Mapping for MediaServer + location per species in that location + Threshold for moving? = Think about this one.
+
+6: Cleanup Downloads + Return Vids to Downloads buttons ???
+
+7: Process now function - keep doing until no videos to download.
+
+8: When Reviewing a video can a reject train the AI - or only for CLIP?
+
+9: Can I train with uploaded data from internet?
+
+10: Static Objects recur over and over - any solution to this?
+
+11: when I select a load of "Person" videos and confirm as person, face detection starts (the widget is working) but the images remain as selected and in the to review tab - remove them so further work can continue at the same time as the face detection runs. + if I leave the tab and re-open the tab they are still there and not seleceted.
+
+12: If confidence in a person detection is above a threshold - automatically pass it for face recognition.
+
+13: Sorting priority - do we need this, what does it do?
+
+14: what happens if a scheduled run occurs when reviewing?
+
+15: explain the folders and storage?
+

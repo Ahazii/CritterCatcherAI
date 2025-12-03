@@ -335,7 +335,7 @@ async function pollTaskProgress(taskId) {
                 clearInterval(window.pollIntervals.get(taskId));
                 window.pollIntervals.delete(taskId);
                 
-                // Remove from active tasks after 2 seconds (reduced from 5s)
+                // Remove from active tasks after 0.5 seconds (faster dismissal)
                 setTimeout(() => {
                     window.activeTasks.delete(taskId);
                     saveTasksToStorage(); // Update storage after removal
@@ -344,14 +344,14 @@ async function pollTaskProgress(taskId) {
                     // Hide indicator if no more active tasks
                     if (window.activeTasks.size === 0) {
                         document.getElementById('statusWidgetIndicator').style.display = 'none';
-                        // Auto-close widget if no more tasks (reduced from 2s to 1s)
+                        // Auto-close widget if no more tasks
                         setTimeout(() => {
                             if (window.activeTasks.size === 0) {
                                 document.getElementById('statusWidget').style.display = 'none';
                             }
-                        }, 1000);
+                        }, 500);
                     }
-                }, 2000);
+                }, 500);
             }
         }
     } catch (error) {

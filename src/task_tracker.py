@@ -173,10 +173,19 @@ class TaskTracker:
         Returns:
             True if task was completed, False if task not found
         """
-        success = self.update_task(task_id, status=TaskStatus.COMPLETED, message=message)
-        if success:
-            self._cleanup_old_tasks()
-        return success
+        # Set current=total to show 100% progress on completion
+        task = self.tasks.get(task_id)
+        if task:
+            success = self.update_task(
+                task_id,
+                status=TaskStatus.COMPLETED,
+                current=task.total,  # Ensure progress shows 100%
+                message=message
+            )
+            if success:
+                self._cleanup_old_tasks()
+            return success
+        return False
     
     def fail_task(self, task_id: str, error: str) -> bool:
         """
