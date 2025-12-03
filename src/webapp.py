@@ -102,7 +102,7 @@ app_state = {
     }
 }
 
-CONFIG_PATH = Path("/app/config/config.yaml")
+CONFIG_PATH = Path("/config/config.yaml")
 FACE_TRAINING_PATH = Path("/data/faces/training")
 UNKNOWN_FACES_PATH = Path("/data/faces/unknown")
 SORTED_PATH = Path("/data/sorted")
@@ -132,10 +132,10 @@ async def startup_event():
         
         # Copy config.yaml if it doesn't exist
         if not CONFIG_PATH.exists():
-            default_config = Path("/app/config/config.yaml")
+            default_config = Path("/app/config/config.yaml")  # Template in image
             if default_config.exists():
                 import shutil
-                shutil.copy(default_config, CONFIG_PATH)
+                shutil.copy(default_config, CONFIG_PATH)  # Copy to /config volume
                 logger.info(f"Copied default config to {CONFIG_PATH}")
             else:
                 logger.warning(f"Default config not found at {default_config}")
@@ -334,7 +334,7 @@ async def get_logs(lines: int = 500, level: Optional[str] = None):
         level: Optional filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
     try:
-        log_file = Path("/app/config/crittercatcher.log")
+        log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
             return {
@@ -376,7 +376,7 @@ async def get_logs(lines: int = 500, level: Optional[str] = None):
 async def download_logs():
     """Download full log file."""
     try:
-        log_file = Path("/app/config/crittercatcher.log")
+        log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
             raise HTTPException(status_code=404, detail="Log file not found")
@@ -397,7 +397,7 @@ async def download_logs():
 async def clear_logs():
     """Clear/rotate current log file."""
     try:
-        log_file = Path("/app/config/crittercatcher.log")
+        log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
             return {

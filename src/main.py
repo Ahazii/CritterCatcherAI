@@ -41,7 +41,7 @@ def setup_logging(config: dict = None):
         numeric_level = logging.INFO
     
     # Create log file directory
-    log_dir = Path("/app/config")
+    log_dir = Path("/config")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "crittercatcher.log"
     
@@ -78,7 +78,7 @@ def setup_logging(config: dict = None):
     logger.info(f"Logging initialized: level={log_level}, file={log_file}")
 
 
-def load_config(config_path: str = "/app/config/config.yaml") -> dict:
+def load_config(config_path: str = "/config/config.yaml") -> dict:
     """Load configuration from YAML file."""
     logger = logging.getLogger(__name__)
     
@@ -88,10 +88,10 @@ def load_config(config_path: str = "/app/config/config.yaml") -> dict:
     
     # Copy default config if it doesn't exist
     if not Path(config_path).exists():
-        default_config = Path("/app/config/config.yaml")
+        default_config = Path("/app/config/config.yaml")  # Template in image
         if default_config.exists():
             import shutil
-            shutil.copy(default_config, config_path)
+            shutil.copy(default_config, config_path)  # Copy to /config volume
             logger.info(f"Copied default config to {config_path}")
         else:
             logger.warning(f"Default config not found at {default_config}")
