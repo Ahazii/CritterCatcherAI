@@ -245,33 +245,41 @@ def process_videos(config: dict, manual_trigger: bool = False):
         logger.info(f"Found {len(existing_videos)} existing videos in downloads folder")
         videos_to_process = existing_videos
     else:
-        # No existing videos - download new ones
-        logger.info("No existing videos found - downloading recent Ring videos")
-        video_hours = ring_config.get('download_hours', 24)
-        video_limit = ring_config.get('download_limit')
-        
-        logger.info(f"Download parameters: hours={video_hours}, limit={video_limit}")
+        # No existing videos - download ALL available videos from Ring
+        # Uses download_history.db to prevent duplicate downloads
+        logger.info("No existing videos found - downloading ALL available videos from Ring")
+        logger.info("Using database-tracked download to prevent duplicates")
         
         # Update progress: downloading
         try:
             from webapp import app_state
-            app_state["processing_progress"]["current_step"] = f"Downloading videos from Ring (last {video_hours}h)..."
+            app_state["processing_progress"]["current_step"] = "Downloading all available videos from Ring..."
             app_state["processing_progress"]["phase"] = "downloading"
         except:
             pass
         
         try:
-            downloaded_videos = ring_downloader.download_recent_videos(
-                hours=video_hours,
-                limit=video_limit
+            # Use download_all_videos() which checks database to prevent re-downloads
+            # hours=None means download ALL available videos (not time-limited)
+            stats = ring_downloader.download_all_videos(
+                hours=None,  # Download ALL available videos
+                skip_existing=True  # Skip videos already in database
             )
             
-            if not downloaded_videos:
-                logger.info("No new videos available from Ring for the specified time range")
-                logger.info(f"Check: 1) Ring cameras recorded videos in last {video_hours}h, 2) Ring account has access, 3) Videos not already downloaded")
+            logger.info(f"Download statistics:")
+            logger.info(f"  - New downloads: {stats['new_downloads']}")
+            logger.info(f"  - Already downloaded (skipped): {stats['already_downloaded']}")
+            logger.info(f"  - Unavailable (404): {stats['unavailable']}")
+            logger.info(f"  - Failed: {stats['failed']}")
+            
+            if stats['new_downloads'] == 0:
+                logger.info("No new videos to process - all available videos already downloaded")
+                logger.info(f"Database prevented {stats['already_downloaded']} duplicate downloads")
                 return
             
-            logger.info(f"Successfully downloaded {len(downloaded_videos)} new videos from Ring")
+            # Get the newly downloaded files from downloads folder
+            downloaded_videos = list(download_path_obj.glob("*.mp4")) if download_path_obj.exists() else []
+            logger.info(f"Found {len(downloaded_videos)} videos in downloads folder after download")
             videos_to_process = downloaded_videos
             
         except Exception as download_error:
@@ -652,9 +660,24 @@ def process_videos(config: dict, manual_trigger: bool = False):
         except Exception as e:
             logger.error(f"Failed to process video {video_path.name}: {e}", exc_info=True)
     
+    # Post-processing verification: Check if downloads folder is empty
+    logger.info("="*80)
+    logger.info("POST-PROCESSING VERIFICATION")
+    logger.info("="*80)
+    
+    remaining_videos = list(download_path_obj.glob("*.mp4")) if download_path_obj.exists() else []
+    if remaining_videos:
+        logger.warning(f"⚠ {len(remaining_videos)} videos remain in downloads folder after processing:")
+        for video in remaining_videos:
+            logger.warning(f"  - {video.name}")
+        logger.warning("Check logs above for processing errors or skipped videos")
+    else:
+        logger.info("✓ All videos successfully processed and moved from downloads folder")
+    
     # Log statistics
     stats = video_sorter.get_stats()
     logger.info(f"Sorting statistics: {stats}")
+    logger.info("="*80)
 
 
 def main():
