@@ -1052,9 +1052,9 @@
                         <option value="30days">Last 30 Days</option>
                         <option value="all">All Available</option>
                     </select>
-                    <button class="btn btn-warning" onclick="downloadAllVideos()">⬇ Download All</button>
+                    <button class="btn btn-warning" onclick="downloadAllVideos()" title="Download videos from Ring cameras only (does not process them)">⬇ Download All</button>
                 </div>
-                <button class="btn btn-success" onclick="triggerProcessing()" id="processNowBtn">▶ Process Now</button>
+                <button class="btn btn-success" onclick="triggerProcessing()" id="processNowBtn" title="Download (if needed) and process all videos with YOLO detection, CLIP refinement, and face recognition">▶ Process Now</button>
                 <button class="btn btn-danger" onclick="stopProcessing()" id="stopProcessingBtn" style="display: none;">⏹ Stop</button>
             </div>
         </div>

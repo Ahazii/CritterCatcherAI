@@ -250,6 +250,8 @@ def process_videos(config: dict, manual_trigger: bool = False):
         video_hours = ring_config.get('download_hours', 24)
         video_limit = ring_config.get('download_limit')
         
+        logger.info(f"Download parameters: hours={video_hours}, limit={video_limit}")
+        
         # Update progress: downloading
         try:
             from webapp import app_state
@@ -258,16 +260,24 @@ def process_videos(config: dict, manual_trigger: bool = False):
         except:
             pass
         
-        downloaded_videos = ring_downloader.download_recent_videos(
-            hours=video_hours,
-            limit=video_limit
-        )
-        
-        if not downloaded_videos:
-            logger.info("No new videos to process")
+        try:
+            downloaded_videos = ring_downloader.download_recent_videos(
+                hours=video_hours,
+                limit=video_limit
+            )
+            
+            if not downloaded_videos:
+                logger.info("No new videos available from Ring for the specified time range")
+                logger.info(f"Check: 1) Ring cameras recorded videos in last {video_hours}h, 2) Ring account has access, 3) Videos not already downloaded")
+                return
+            
+            logger.info(f"Successfully downloaded {len(downloaded_videos)} new videos from Ring")
+            videos_to_process = downloaded_videos
+            
+        except Exception as download_error:
+            logger.error(f"Failed to download videos from Ring: {download_error}", exc_info=True)
+            logger.error("Scheduled run will retry on next cycle")
             return
-        
-        videos_to_process = downloaded_videos
     
     logger.info(f"Processing {len(videos_to_process)} videos")
     
