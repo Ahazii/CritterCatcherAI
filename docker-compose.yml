@@ -21,7 +21,8 @@ services:
     # Volume mappings for Unraid
     volumes:
       # Configuration (read-write so web UI can update settings)
-      - ./config:/app/config
+      # Maps to /config inside container (matching Unraid template)
+      - ./config:/config
       
       # Main data directory - contains all application data
       # This should be on a volume with sufficient space for video frames and training data
