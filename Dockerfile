@@ -1,24 +1,26 @@
 # Use NVIDIA CUDA base image for GPU support
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+# CUDA 12.4 is latest stable with good PyTorch support
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
 
-# Install Python 3.11
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.11 and all build dependencies in one layer
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
     python3.11 \
     python3.11-dev \
+    python3.11-distutils \
     python3-pip \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies for dlib, opencv, face_recognition, and H.264 video encoding
-RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
     wget \
+    pkg-config \
+    libffi-dev \
+    libssl-dev \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -29,15 +31,21 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libx264-dev \
     ffmpeg \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && python3.11 -m pip install --upgrade pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
 
 # Copy requirements file
 COPY requirements.txt .
 
 # Install Python dependencies
-# Install torch with CUDA 12.1 support for GPU acceleration
+# Install torch with CUDA 12.4 support for GPU acceleration
 # Pin to torch 2.5.1 for compatibility with ultralytics (torch 2.6+ has breaking changes)
-RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+RUN pip3 install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 
 # Install dlib with optimizations
 RUN pip install --no-cache-dir dlib
