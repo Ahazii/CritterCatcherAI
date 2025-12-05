@@ -670,11 +670,9 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
             auth_result = await asyncio.to_thread(rd.authenticate_with_2fa, username, password, code_2fa)
             if auth_result:
                 logger.info("2FA authentication successful")
-                # Trigger processing in background
-                background_tasks.add_task(trigger_initial_processing)
                 return {
                     "status": "success",
-                    "message": "Ring authentication successful. Token saved. Starting video processing..."
+                    "message": "Ring authentication successful. Token saved. Use 'Download All' to get videos."
                 }
             else:
                 logger.warning("2FA authentication failed")
@@ -687,11 +685,9 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
                 auth_result = await asyncio.to_thread(rd.authenticate, username, password)
                 if auth_result:
                     logger.info("Authentication successful without 2FA")
-                    # Trigger processing in background
-                    background_tasks.add_task(trigger_initial_processing)
                     return {
                         "status": "success",
-                        "message": "Ring authentication successful. Token saved. Starting video processing..."
+                        "message": "Ring authentication successful. Token saved. Use 'Download All' to get videos."
                     }
                 else:
                     logger.warning("Authentication failed")
