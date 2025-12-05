@@ -224,10 +224,7 @@ function loadTasksFromStorage() {
                     details: task.details,
                     error: task.error
                 });
-                // Resume polling for active tasks
-                if (task.status === 'running' || task.status === 'pending') {
-                    startPolling(task.id);
-                }
+                // NOTE: Don't start polling here - let the init function validate and start polling
             });
             console.log(`Restored ${tasks.length} task(s) from storage`);
         }
@@ -414,29 +411,45 @@ function updateStatusWidget() {
 
 // Load tasks from storage and show widget if there are active tasks
 // Execute immediately since this script loads dynamically after DOMContentLoaded
-(function() {
+(async function() {
     // Load persisted tasks first
     loadTasksFromStorage();
     
-    // Clean up completed/failed tasks from localStorage on page load
+    // AGGRESSIVE CLEANUP: Validate ALL tasks against backend on page load
     const tasksToRemove = [];
+    
     for (const [taskId, task] of window.activeTasks.entries()) {
+        // Remove completed/failed tasks immediately
         if (task.status === 'completed' || task.status === 'failed') {
             tasksToRemove.push(taskId);
+            continue;
+        }
+        
+        // Validate running/pending tasks against backend
+        try {
+            const response = await fetch(`/api/progress/${taskId}`);
+            if (response.status === 404) {
+                // Task doesn't exist on backend - remove it
+                console.log(`Stale task ${taskId} (${task.name}) not found on backend - removing`);
+                tasksToRemove.push(taskId);
+            }
+        } catch (error) {
+            console.error(`Failed to validate task ${taskId}:`, error);
+            // On error, keep the task and let normal polling handle it
         }
     }
     
-    // Remove completed/failed tasks
+    // Remove stale tasks
     tasksToRemove.forEach(taskId => {
         window.activeTasks.delete(taskId);
     });
     
     if (tasksToRemove.length > 0) {
-        console.log(`Cleaned up ${tasksToRemove.length} completed/failed task(s) from storage`);
+        console.log(`Cleaned up ${tasksToRemove.length} stale task(s) from localStorage`);
         saveTasksToStorage();
     }
     
-    // Show widget/indicator if there are active tasks
+    // Show widget/indicator if there are active tasks remaining
     if (window.activeTasks.size > 0) {
         const hasActiveTasks = Array.from(window.activeTasks.values())
             .some(t => t.status === 'running' || t.status === 'pending');
@@ -444,6 +457,13 @@ function updateStatusWidget() {
         if (hasActiveTasks) {
             document.getElementById('statusWidgetIndicator').style.display = 'block';
             updateStatusWidget();
+            
+            // Start polling for remaining valid tasks
+            for (const [taskId, task] of window.activeTasks.entries()) {
+                if (task.status === 'running' || task.status === 'pending') {
+                    startPolling(taskId);
+                }
+            }
         }
     }
 })();
