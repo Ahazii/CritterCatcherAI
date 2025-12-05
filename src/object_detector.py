@@ -76,7 +76,7 @@ class ObjectDetector:
     
     def extract_frames(self, video_path: Path, num_frames: int = 5) -> List[np.ndarray]:
         """
-        Extract representative frames from video.
+        Extract representative frames from video with robust error handling.
         
         Args:
             video_path: Path to video file
@@ -85,29 +85,75 @@ class ObjectDetector:
         Returns:
             List of frame images as numpy arrays
         """
-        cap = cv2.VideoCapture(str(video_path))
+        # Try multiple backends if first fails
+        backends = [
+            (cv2.CAP_FFMPEG, "FFMPEG"),
+            (cv2.CAP_ANY, "ANY"),
+        ]
         
-        if not cap.isOpened():
-            logger.error(f"Failed to open video: {video_path}")
+        cap = None
+        for backend, name in backends:
+            try:
+                cap = cv2.VideoCapture(str(video_path), backend)
+                if cap.isOpened():
+                    logger.debug(f"Opened video with {name} backend")
+                    break
+                else:
+                    cap = None
+            except Exception as e:
+                logger.debug(f"Failed to open with {name} backend: {e}")
+                cap = None
+        
+        if cap is None or not cap.isOpened():
+            logger.error(f"Failed to open video with any backend: {video_path}")
             return []
         
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        
-        # Extract frames evenly distributed throughout the video
-        frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
-        
-        frames = []
-        for idx in frame_indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ret, frame = cap.read()
-            if ret:
-                # Convert BGR to RGB
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(frame_rgb)
-        
-        cap.release()
-        logger.debug(f"Extracted {len(frames)} frames from {video_path.name}")
-        return frames
+        try:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            # Validate video properties
+            if total_frames <= 0 or width <= 0 or height <= 0:
+                logger.error(f"Invalid video properties: {width}x{height}, {total_frames} frames")
+                cap.release()
+                return []
+            
+            logger.debug(f"Video properties: {width}x{height}, {total_frames} frames")
+            
+            # Extract frames evenly distributed throughout the video
+            frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
+            
+            frames = []
+            for idx in frame_indices:
+                try:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ret, frame = cap.read()
+                    
+                    if ret and frame is not None:
+                        # Validate frame dimensions
+                        if frame.shape[0] <= 0 or frame.shape[1] <= 0:
+                            logger.warning(f"Invalid frame dimensions at index {idx}: {frame.shape}")
+                            continue
+                        
+                        # Convert BGR to RGB
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        frames.append(frame_rgb)
+                    else:
+                        logger.debug(f"Failed to read frame at index {idx}")
+                except Exception as e:
+                    logger.warning(f"Error extracting frame {idx}: {e}")
+                    continue
+            
+            cap.release()
+            logger.debug(f"Extracted {len(frames)}/{num_frames} frames from {video_path.name}")
+            return frames
+            
+        except Exception as e:
+            logger.error(f"Error during frame extraction: {e}", exc_info=True)
+            if cap:
+                cap.release()
+            return []
     
     def detect_objects_in_frame(self, frame: np.ndarray, video_name: str = None, frame_idx: int = None, save_detections: bool = True, return_bboxes: bool = False) -> Dict[str, float]:
         """
@@ -579,20 +625,25 @@ class ObjectDetector:
                             output_path.unlink()
                         return {}
                 
+                # Validate frame before processing
+                if frame is None or frame.shape[0] <= 0 or frame.shape[1] <= 0:
+                    logger.warning(f"Invalid frame {frame_count}, skipping")
+                    continue
+                
                 # Track objects in frame (YOLOv8 tracking with persistent IDs)
+                # Use detection-only mode to avoid Lucas-Kanade tracking errors
                 try:
-                    results = self.model.track(frame, persist=True, verbose=False)
-                except Exception as track_error:
-                    # If tracking fails (e.g. due to lap module), log but continue with detection
-                    logger.warning(f"Tracking failed on frame {frame_count}: {track_error}")
-                    # Fall back to simple detection without tracking
+                    # Use simple detection instead of tracking to avoid lkpyramid.cpp errors
+                    # Tracking has issues with frame dimension mismatches
+                    results = self.model(frame, verbose=False)
+                except Exception as detect_error:
+                    logger.error(f"Detection failed on frame {frame_count}: {detect_error}")
+                    # Write the frame without annotations
                     try:
-                        results = self.model(frame, verbose=False)
-                    except Exception as detect_error:
-                        logger.error(f"Both tracking and detection failed on frame {frame_count}: {detect_error}")
-                        # Write the frame without annotations
                         out.write(frame)
-                        continue
+                    except Exception as write_error:
+                        logger.error(f"Failed to write frame {frame_count}: {write_error}")
+                    continue
                 
                 # Process tracking results
                 if results and len(results) > 0:

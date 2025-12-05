@@ -11,16 +11,21 @@ from typing import Dict, Optional
 class GPUMonitor:
     """Monitor GPU usage and log periodically."""
     
-    def __init__(self, logger: logging.Logger, log_interval: int = 5, log_on_idle: bool = False):
+    def __init__(self, logger: Optional[logging.Logger] = None, log_interval: int = 5, log_on_idle: bool = False):
         """
         Initialize GPU monitor.
         
         Args:
-            logger: Logger instance for output
+            logger: Logger instance for output (creates default if None)
             log_interval: Seconds between log entries
             log_on_idle: Whether to log when GPU is idle (0% usage)
         """
-        self.logger = logger
+        # Create logger if not provided
+        if logger is None:
+            self.logger = logging.getLogger(__name__)
+        else:
+            self.logger = logger
+            
         self.log_interval = log_interval
         self.log_on_idle = log_on_idle
         self._monitoring = False
@@ -28,12 +33,20 @@ class GPUMonitor:
         self.gpu_available = False
         self.handle = None
         self.gpu_name = "No GPU detected"
+        self.pynvml = None
         
         # Try to initialize NVML (NVIDIA Management Library)
         try:
             import pynvml
             self.pynvml = pynvml
             pynvml.nvmlInit()
+            
+            # Get device count to validate GPU access
+            device_count = pynvml.nvmlDeviceGetCount()
+            if device_count == 0:
+                self.logger.warning("No NVIDIA GPUs detected")
+                return
+            
             self.gpu_available = True
             self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             self.gpu_name = pynvml.nvmlDeviceGetName(self.handle)
@@ -41,16 +54,31 @@ class GPUMonitor:
             # Decode if bytes (Python 3)
             if isinstance(self.gpu_name, bytes):
                 self.gpu_name = self.gpu_name.decode('utf-8')
+            
+            # Test that we can actually read GPU stats
+            try:
+                test_util = pynvml.nvmlDeviceGetUtilizationRates(self.handle)
+                self.logger.info(f"GPU monitoring available: {self.gpu_name}")
+            except Exception as test_error:
+                self.logger.warning(f"GPU detected but monitoring unavailable: {test_error}")
+                self.gpu_available = False
                 
-            self.logger.info(f"GPU monitoring available: {self.gpu_name}")
         except ImportError:
             self.logger.warning("pynvml not installed - GPU monitoring unavailable")
         except Exception as e:
-            self.logger.warning(f"GPU monitoring unavailable: {e}")
+            self.logger.warning(f"GPU monitoring initialization failed: {e}")
+            # Clean up partial initialization
+            if self.pynvml:
+                try:
+                    self.pynvml.nvmlShutdown()
+                except:
+                    pass
     
     def start_monitoring(self):
         """Start background GPU monitoring thread."""
         if not self.gpu_available or self._monitoring:
+            if not self.gpu_available:
+                self.logger.debug("Cannot start GPU monitoring - GPU not available")
             return
         
         self._monitoring = True
@@ -88,7 +116,8 @@ class GPUMonitor:
                 )
                 
             except Exception as e:
-                self.logger.error(f"GPU monitoring error: {e}")
+                self.logger.error(f"GPU monitoring error: {e}", exc_info=True)
+                self._monitoring = False
                 break
             
             time.sleep(self.log_interval)
@@ -133,7 +162,8 @@ class GPUMonitor:
     
     def __del__(self):
         """Cleanup NVML on destruction."""
-        if self.gpu_available:
+        self.stop_monitoring()
+        if self.gpu_available and self.pynvml:
             try:
                 self.pynvml.nvmlShutdown()
             except:
