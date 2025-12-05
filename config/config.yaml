@@ -98,6 +98,14 @@ logging:
   # ERROR: Error messages for failures
   # CRITICAL: Critical errors that may cause system failure
   level: INFO
+  
+  # GPU monitoring (NVIDIA GPUs only)
+  gpu_monitoring:
+    enabled: true
+    interval_seconds: 5       # Log GPU stats every 5 seconds
+    log_on_idle: false        # Skip logging when GPU is idle (0%)
+    max_scale_percent: 10     # UI color scale maximum (10% = video transcoding)
+                              # Adjust to 15 or 20 if workload increases
 
 # Application settings
 # Run once and exit, or run continuously

@@ -18,6 +18,7 @@ from face_recognizer import FaceRecognizer
 from animal_profile import AnimalProfileManager
 from clip_vit_classifier import CLIPVitClassifier
 from face_profile import FaceProfileManager
+from gpu_monitor import GPUMonitor
 import cv2
 import tempfile
 
@@ -737,6 +738,22 @@ def main():
     
     logger = logging.getLogger(__name__)
     logger.info("Starting CritterCatcherAI")
+    
+    # Initialize GPU monitoring
+    gpu_config = config.get('logging', {}).get('gpu_monitoring', {})
+    gpu_monitor = GPUMonitor(
+        logger=logger,
+        log_interval=gpu_config.get('interval_seconds', 5),
+        log_on_idle=gpu_config.get('log_on_idle', False)
+    )
+    if gpu_config.get('enabled', True):
+        gpu_monitor.start_monitoring()
+    else:
+        logger.info("GPU monitoring disabled in config")
+    
+    # Make gpu_monitor available to webapp
+    import webapp
+    webapp.gpu_monitor = gpu_monitor
     
     # Start web server in separate thread
     import threading

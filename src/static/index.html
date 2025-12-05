@@ -1011,6 +1011,33 @@
             border-color: var(--text-secondary);
             color: var(--text-secondary);
         }
+        
+        /* GPU Indicator */
+        .gpu-indicator {
+            cursor: help;
+            transition: color 0.5s ease, opacity 0.5s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .gpu-indicator svg {
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+            transition: all 0.3s ease;
+        }
+        
+        .gpu-indicator:hover svg {
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+            transform: scale(1.05);
+        }
+        
+        .gpu-percentage {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            min-width: 45px;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -1036,6 +1063,25 @@
             <div class="header-actions">
                 <div id="schedulerBadge" class="scheduler-badge" style="display: none;" title="Next scheduled run">
                     ⏰ <span id="schedulerCountdown">--:--:--</span>
+                </div>
+                <!-- GPU Indicator -->
+                <div id="gpu-indicator" class="gpu-indicator" title="Loading...">
+                    <svg width="48" height="32" viewBox="0 0 48 32" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Stylish GPU chip icon with letters -->
+                        <rect x="2" y="4" width="44" height="24" rx="2" 
+                              fill="none" stroke="currentColor" stroke-width="2"/>
+                        <!-- Circuit lines -->
+                        <line x1="0" y1="10" x2="2" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="0" y1="16" x2="2" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="0" y1="22" x2="2" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="46" y1="10" x2="48" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="46" y1="16" x2="48" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="46" y1="22" x2="48" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                        <!-- GPU Text -->
+                        <text x="24" y="20" font-family="monospace" font-size="10" 
+                              font-weight="bold" text-anchor="middle" fill="currentColor">GPU</text>
+                    </svg>
+                    <span id="gpu-percentage" class="gpu-percentage">0.0%</span>
                 </div>
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">🌙</button>
                 <select id="refreshRate" class="form-select" onchange="updateRefreshRate()" title="Status refresh rate">
@@ -1435,6 +1481,10 @@
         let allYoloClassesConfig = [];
         let selectedObjectLabels = [];
         
+        // GPU monitoring
+        let currentGpuUsage = 0;
+        let gpuMaxScale = 10;  // Default, will be loaded from config
+        
         // Theme Management
         function toggleTheme() {
             const html = document.documentElement;
@@ -1597,6 +1647,77 @@
             const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
             
             countdown.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        // GPU Indicator Update
+        async function updateGpuIndicator() {
+            try {
+                const response = await fetch('/api/system/gpu');
+                const data = await response.json();
+                
+                const indicator = document.getElementById('gpu-indicator');
+                const percentageText = document.getElementById('gpu-percentage');
+                const usage = data.usage_percent;
+                currentGpuUsage = usage;
+                
+                // Update percentage text
+                percentageText.textContent = `${usage.toFixed(1)}%`;
+                
+                // Determine color based on usage (relative to max scale)
+                const scalePercent = (usage / gpuMaxScale) * 100;
+                let color, status;
+                if (usage === 0) {
+                    color = '#000000'; status = 'Idle';
+                    indicator.style.opacity = '0.3';  // Semi-transparent when idle
+                } else if (scalePercent <= 30) {
+                    color = '#0066ff'; status = 'Light';
+                    indicator.style.opacity = '1.0';  // Opaque when active
+                } else if (scalePercent <= 50) {
+                    color = '#00ccff'; status = 'Moderate';
+                    indicator.style.opacity = '1.0';
+                } else if (scalePercent <= 70) {
+                    color = '#ffcc00'; status = 'High';
+                    indicator.style.opacity = '1.0';
+                } else if (scalePercent <= 90) {
+                    color = '#ff6600'; status = 'Very High';
+                    indicator.style.opacity = '1.0';
+                } else {
+                    color = '#ff0000'; status = 'Maximum';
+                    indicator.style.opacity = '1.0';
+                }
+                
+                // Apply color
+                indicator.style.color = color;
+                
+                // Update tooltip with dynamic scale
+                const tooltip = `GPU Usage: ${usage.toFixed(1)}% (${status})\n` +
+                               `Model: ${data.name}\n` +
+                               `Memory: ${data.memory_used_mb}MB / ${data.memory_total_mb}MB (${data.memory_percent.toFixed(1)}%)\n\n` +
+                               `Color Scale (0-${gpuMaxScale}%):\n` +
+                               `⬛ Black: Idle (0%)\n` +
+                               `🟦 Blue: Light (0-${(gpuMaxScale * 0.3).toFixed(1)}%)\n` +
+                               `🟦 Cyan: Moderate (${(gpuMaxScale * 0.3).toFixed(1)}-${(gpuMaxScale * 0.5).toFixed(1)}%)\n` +
+                               `🟨 Yellow: High (${(gpuMaxScale * 0.5).toFixed(1)}-${(gpuMaxScale * 0.7).toFixed(1)}%)\n` +
+                               `🟧 Orange: Very High (${(gpuMaxScale * 0.7).toFixed(1)}-${(gpuMaxScale * 0.9).toFixed(1)}%)\n` +
+                               `🟥 Red: Maximum (${(gpuMaxScale * 0.9).toFixed(1)}%+)`;
+                indicator.title = tooltip;
+            } catch (err) {
+                const indicator = document.getElementById('gpu-indicator');
+                indicator.style.color = '#666';
+                indicator.style.opacity = '0.5';
+                indicator.title = 'GPU monitoring unavailable';
+            }
+        }
+        
+        // Fetch GPU config on page load
+        async function loadGpuConfig() {
+            try {
+                const response = await fetch('/api/system/gpu/config');
+                const config = await response.json();
+                gpuMaxScale = config.max_scale_percent || 10;
+            } catch (err) {
+                console.error('Failed to load GPU config:', err);
+            }
         }
         
         async function fetchStatus() {
@@ -3284,6 +3405,12 @@
             
             // Check Ring auth status
             checkRingAuthStatus();
+            
+            // Initialize GPU monitoring
+            loadGpuConfig().then(() => {
+                updateGpuIndicator();  // Initial update
+                setInterval(updateGpuIndicator, 2000);  // Update every 2 seconds
+            });
             
             // Start fetching status
             fetchStatus();

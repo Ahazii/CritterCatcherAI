@@ -120,6 +120,9 @@ review_manager: Optional[ReviewManager] = None
 # Global download tracker
 download_tracker: Optional[DownloadTracker] = None
 
+# Global GPU monitor (set by main.py)
+gpu_monitor = None
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -321,6 +324,51 @@ async def update_config(config_data: dict):
     except Exception as e:
         logger.error(f"Failed to update config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= GPU Monitoring API Endpoints =============
+
+@app.get("/api/system/gpu")
+async def get_gpu_usage():
+    """Get current GPU utilization."""
+    if gpu_monitor:
+        return gpu_monitor.get_current_stats()
+    else:
+        return {
+            "usage_percent": 0.0,
+            "name": "GPU monitoring not initialized",
+            "memory_used_mb": 0,
+            "memory_total_mb": 0,
+            "memory_percent": 0.0,
+            "error": "GPU monitor not available"
+        }
+
+
+@app.get("/api/system/gpu/config")
+async def get_gpu_config():
+    """Get GPU indicator configuration."""
+    try:
+        if CONFIG_PATH.exists():
+            with open(CONFIG_PATH, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            gpu_config = config.get('logging', {}).get('gpu_monitoring', {})
+            return {
+                "max_scale_percent": gpu_config.get('max_scale_percent', 10),
+                "enabled": gpu_config.get('enabled', True)
+            }
+        else:
+            # Default values
+            return {
+                "max_scale_percent": 10,
+                "enabled": True
+            }
+    except Exception as e:
+        logger.error(f"Failed to load GPU config: {e}")
+        return {
+            "max_scale_percent": 10,
+            "enabled": True
+        }
 
 
 # ============= Logging API Endpoints =============
