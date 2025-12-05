@@ -314,6 +314,24 @@ function startTaskTracking(taskId, taskName = "Processing") {
 async function pollTaskProgress(taskId) {
     try {
         const response = await fetch(`/api/progress/${taskId}`);
+        
+        // Handle 404 - task no longer exists on backend (was cleaned up)
+        if (response.status === 404) {
+            console.log(`Task ${taskId} not found on backend - removing from tracking`);
+            clearInterval(window.pollIntervals.get(taskId));
+            window.pollIntervals.delete(taskId);
+            window.activeTasks.delete(taskId);
+            saveTasksToStorage();
+            updateStatusWidget();
+            
+            // Hide widget if no more tasks
+            if (window.activeTasks.size === 0) {
+                document.getElementById('statusWidgetIndicator').style.display = 'none';
+                document.getElementById('statusWidget').style.display = 'none';
+            }
+            return;
+        }
+        
         const data = await response.json();
         
         // Update task info
@@ -399,6 +417,24 @@ function updateStatusWidget() {
 (function() {
     // Load persisted tasks first
     loadTasksFromStorage();
+    
+    // Clean up completed/failed tasks from localStorage on page load
+    const tasksToRemove = [];
+    for (const [taskId, task] of window.activeTasks.entries()) {
+        if (task.status === 'completed' || task.status === 'failed') {
+            tasksToRemove.push(taskId);
+        }
+    }
+    
+    // Remove completed/failed tasks
+    tasksToRemove.forEach(taskId => {
+        window.activeTasks.delete(taskId);
+    });
+    
+    if (tasksToRemove.length > 0) {
+        console.log(`Cleaned up ${tasksToRemove.length} completed/failed task(s) from storage`);
+        saveTasksToStorage();
+    }
     
     // Show widget/indicator if there are active tasks
     if (window.activeTasks.size > 0) {
