@@ -1,4 +1,14 @@
-FROM python:3.11
+# Use NVIDIA CUDA base image for GPU support
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# Install Python 3.11
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -25,9 +35,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies
-# Install torch first with CPU-only version to save space and time
+# Install torch with CUDA 12.1 support for GPU acceleration
 # Pin to torch 2.5.1 for compatibility with ultralytics (torch 2.6+ has breaking changes)
-RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
 
 # Install dlib with optimizations
 RUN pip install --no-cache-dir dlib

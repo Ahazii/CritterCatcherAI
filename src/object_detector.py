@@ -67,8 +67,21 @@ class ObjectDetector:
         self.all_labels = list(self.labels)
         
         logger.info(f"Initializing YOLOv8 model: {self.model_name}")
+        
+        # Check if CUDA is available and configure device
+        import torch
+        if torch.cuda.is_available():
+            device = 'cuda'
+            gpu_name = torch.cuda.get_device_name(0)
+            logger.info(f"CUDA available - using GPU: {gpu_name}")
+        else:
+            device = 'cpu'
+            logger.warning("CUDA not available - using CPU (performance will be significantly slower)")
+        
         self.model = YOLO(self.model_name)
-        logger.info(f"Model loaded: {self.model_name} - {len(YOLO_COCO_CLASSES)} COCO classes available")
+        # Move model to GPU if available
+        self.model.to(device)
+        logger.info(f"Model loaded: {self.model_name} on {device} - {len(YOLO_COCO_CLASSES)} COCO classes available")
         
         logger.info(f"Initialized ObjectDetector with {len(self.labels)} tracked labels")
         if not self.labels:
