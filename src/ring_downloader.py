@@ -128,8 +128,8 @@ class RingDownloader:
                     self.auth.fetch_token(username, password)
                     
                     # Save token for future use
-                    # Access token from internal OAuth session
-                    token_data = self.auth._oauth.token
+                    # Access token from Auth object (ring-doorbell library API)
+                    token_data = self.auth.token
                     self.token_file.parent.mkdir(parents=True, exist_ok=True)
                     with open(self.token_file, 'w') as f:
                         json.dump(token_data, f)
@@ -181,8 +181,8 @@ class RingDownloader:
             self.auth.fetch_token(username, password, code_2fa)
             
             # Save token for future use
-            # Access token from internal OAuth session
-            token_data = self.auth._oauth.token
+            # Access token from Auth object (ring-doorbell library API)
+            token_data = self.auth.token
             self.token_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.token_file, 'w') as f:
                 json.dump(token_data, f)
