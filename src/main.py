@@ -859,7 +859,13 @@ def main():
                     logger.error(f"Scheduled processing failed: {e}", exc_info=True)
                 finally:
                     app_state["is_processing"] = False
-                    app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
+                    app_state["processing_progress"] = {
+                        "current_video": None,
+                        "current_step": None,
+                        "videos_processed": 0,
+                        "videos_total": 0,
+                        "start_time": None
+                    }
             
             logger.info(f"Sleeping for {current_interval} minutes (next run: {next_run_time.strftime('%Y-%m-%d %H:%M:%S')})")
             

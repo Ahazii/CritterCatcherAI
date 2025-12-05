@@ -779,7 +779,13 @@ async def trigger_processing(background_tasks: BackgroundTasks):
             task_tracker.fail_task(task_id, str(e))
         finally:
             app_state["is_processing"] = False
-            app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
+            app_state["processing_progress"] = {
+                "current_video": None,
+                "current_step": None,
+                "videos_processed": 0,
+                "videos_total": 0,
+                "start_time": None
+            }
     
     background_tasks.add_task(process_task)
     logger.info("Processing task added to background queue")
@@ -872,6 +878,13 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
             task_tracker.fail_task(task_id, str(e))
         finally:
             app_state["is_processing"] = False
+            app_state["processing_progress"] = {
+                "current_video": None,
+                "current_step": None,
+                "videos_processed": 0,
+                "videos_total": 0,
+                "start_time": None
+            }
     
     background_tasks.add_task(download_task)
     logger.info("Download all task added to background queue")
