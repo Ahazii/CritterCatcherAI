@@ -737,7 +737,25 @@ def main():
     setup_logging(config)
     
     logger = logging.getLogger(__name__)
+    
+    # Log startup with Docker info
+    logger.info("="*80)
     logger.info("Starting CritterCatcherAI")
+    try:
+        # Get Docker container info
+        hostname = os.environ.get('HOSTNAME', 'unknown')
+        import subprocess
+        git_sha = subprocess.run(
+            ['sh', '-c', 'cat /app/git_sha.txt 2>/dev/null || echo "unknown"'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        ).stdout.strip()
+        logger.info(f"  Container: {hostname}")
+        logger.info(f"  Git SHA: {git_sha[:12] if git_sha != 'unknown' else 'unknown'}")
+    except Exception as e:
+        logger.debug(f"Could not get Docker info: {e}")
+    logger.info("="*80)
     
     # Initialize GPU monitoring
     gpu_config = config.get('logging', {}).get('gpu_monitoring', {})

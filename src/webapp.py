@@ -45,28 +45,56 @@ def get_app_version():
     return "v0.1.0-dev"
 
 
-def get_build_date():
-    """Get Docker image build date from build_date.txt file or fallback"""
+def get_docker_image_id():
+    """Get Docker image ID/hash from running container"""
+    import subprocess
+    try:
+        # Try to get hostname (container ID)
+        hostname = os.environ.get('HOSTNAME', '')
+        if hostname:
+            # Get the image ID of the running container
+            result = subprocess.run(
+                ['sh', '-c', f'cat /proc/self/cgroup | grep docker | head -1 | sed "s/.*\///" | cut -c1-12'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+    except Exception as e:
+        logger.debug(f"Could not get Docker image ID: {e}")
+    
+    # Fallback to build date file
     build_date_file = Path('/app/build_date.txt')
     try:
         if build_date_file.exists():
             with open(build_date_file, 'r') as f:
                 build_date = f.read().strip()
                 if build_date:
-                    return build_date
+                    return f"Built: {build_date}"
     except Exception as e:
         logger.debug(f"Could not read build_date file: {e}")
     
-    # Fallback
+    # Final fallback
     return "Unknown"
+
+
+def get_build_date():
+    """Deprecated - use get_docker_image_id() instead. Kept for backwards compatibility."""
+    return get_docker_image_id()
 
 # Initialize FastAPI app
 app = FastAPI(title="CritterCatcherAI", version="1.0.0")
 
-# Log version on startup
+# Log version and Docker info on startup
 app_version = get_app_version()
-app_build_date = get_build_date()
-logger.info(f"CritterCatcherAI starting up - Version: {app_version}, Built: {app_build_date}")
+docker_image_id = get_docker_image_id()
+logger.info("="*80)
+logger.info(f"CritterCatcherAI starting up")
+logger.info(f"  Version: {app_version}")
+logger.info(f"  Docker Image: {docker_image_id}")
+logger.info(f"  Container: {os.environ.get('HOSTNAME', 'unknown')}")
+logger.info("="*80)
 
 # Add CORS middleware
 app.add_middleware(
@@ -182,10 +210,10 @@ async def root():
     if not index_file.exists():
         return HTMLResponse("<h1>CritterCatcherAI</h1><p>Web interface loading...</p>")
     
-    # Inject version and build date into HTML
+    # Inject version and Docker image ID into HTML
     html_content = index_file.read_text()
     html_content = html_content.replace('{{version}}', get_app_version())
-    html_content = html_content.replace('{{build_date}}', get_build_date())
+    html_content = html_content.replace('{{build_date}}', get_docker_image_id())  # Now shows Docker image ID
     return HTMLResponse(content=html_content, status_code=200)
 
 
