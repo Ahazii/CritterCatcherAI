@@ -645,8 +645,9 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
         # Try to authenticate
         if code_2fa:
             logger.info(f"Attempting 2FA authentication for {username}")
-            # Use 2FA authentication method
-            if rd.authenticate_with_2fa(username, password, code_2fa):
+            # Use 2FA authentication method - run in thread pool
+            auth_result = await asyncio.to_thread(rd.authenticate_with_2fa, username, password, code_2fa)
+            if auth_result:
                 logger.info("2FA authentication successful")
                 # Trigger processing in background
                 background_tasks.add_task(trigger_initial_processing)
@@ -661,7 +662,9 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
             # Try regular authentication first - expect 2FA error
             logger.info(f"Attempting authentication for {username}")
             try:
-                if rd.authenticate(username, password):
+                # Run sync authentication in thread pool to avoid event loop conflict
+                auth_result = await asyncio.to_thread(rd.authenticate, username, password)
+                if auth_result:
                     logger.info("Authentication successful without 2FA")
                     # Trigger processing in background
                     background_tasks.add_task(trigger_initial_processing)
