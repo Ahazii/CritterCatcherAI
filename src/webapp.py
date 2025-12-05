@@ -46,23 +46,16 @@ def get_app_version():
 
 
 def get_docker_image_id():
-    """Get Docker image ID/hash from running container"""
-    import subprocess
+    """Get Docker container ID from /etc/hostname"""
     try:
-        # Try to get hostname (container ID)
-        hostname = os.environ.get('HOSTNAME', '')
-        if hostname:
-            # Get the image ID of the running container
-            result = subprocess.run(
-                ['sh', '-c', f'cat /proc/self/cgroup | grep docker | head -1 | sed "s/.*\///" | cut -c1-12'],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
+        # Docker sets /etc/hostname to the container ID
+        hostname_file = Path('/etc/hostname')
+        if hostname_file.exists():
+            container_id = hostname_file.read_text().strip()
+            if container_id and len(container_id) >= 12:
+                return container_id[:12]  # Short format (first 12 chars)
     except Exception as e:
-        logger.debug(f"Could not get Docker image ID: {e}")
+        logger.debug(f"Could not get Docker container ID: {e}")
     
     # Fallback to build date file
     build_date_file = Path('/app/build_date.txt')

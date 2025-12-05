@@ -742,8 +742,15 @@ def main():
     logger.info("="*80)
     logger.info("Starting CritterCatcherAI")
     try:
-        # Get Docker container info
-        hostname = os.environ.get('HOSTNAME', 'unknown')
+        # Get Docker container ID from /etc/hostname
+        hostname_file = Path('/etc/hostname')
+        if hostname_file.exists():
+            container_id = hostname_file.read_text().strip()[:12]
+            logger.info(f"  Container ID: {container_id}")
+        else:
+            logger.info(f"  Container ID: {os.environ.get('HOSTNAME', 'unknown')}")
+        
+        # Get Git SHA if available
         import subprocess
         git_sha = subprocess.run(
             ['sh', '-c', 'cat /app/git_sha.txt 2>/dev/null || echo "unknown"'],
@@ -751,8 +758,8 @@ def main():
             text=True,
             timeout=2
         ).stdout.strip()
-        logger.info(f"  Container: {hostname}")
-        logger.info(f"  Git SHA: {git_sha[:12] if git_sha != 'unknown' else 'unknown'}")
+        if git_sha and git_sha != 'unknown':
+            logger.info(f"  Git Commit: {git_sha[:12]}")
     except Exception as e:
         logger.debug(f"Could not get Docker info: {e}")
     logger.info("="*80)
