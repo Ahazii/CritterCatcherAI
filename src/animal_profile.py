@@ -66,6 +66,15 @@ class AnimalProfileManager:
         
         description = text_description or f"a {name.lower()}"
         
+        # Validate text description length (CLIP has 77 token limit)
+        token_count = self._count_tokens(description)
+        if token_count > 77:
+            raise ValueError(
+                f"Text description is too long ({token_count} tokens). "
+                f"CLIP model has a 77 token limit. Please shorten your description. "
+                f"Example: 'a hedgehog with spines' instead of a long paragraph."
+            )
+        
         profile = AnimalProfile(
             id=profile_id,
             name=name,
@@ -74,7 +83,7 @@ class AnimalProfileManager:
         )
         
         self._save_profile(profile)
-        logger.info(f"Created animal profile: {name}")
+        logger.info(f"Created animal profile: {name} (text: {token_count} tokens)")
         return profile
     
     def get_profile(self, profile_id: str) -> Optional[AnimalProfile]:
@@ -101,6 +110,16 @@ class AnimalProfileManager:
         profile = self.get_profile(profile_id)
         if not profile:
             raise ValueError(f"Profile '{profile_id}' not found")
+        
+        # Validate text_description if being updated
+        if 'text_description' in kwargs:
+            token_count = self._count_tokens(kwargs['text_description'])
+            if token_count > 77:
+                raise ValueError(
+                    f"Text description is too long ({token_count} tokens). "
+                    f"CLIP model has a 77 token limit. Please shorten your description. "
+                    f"Example: 'a small brown hedgehog' instead of a long paragraph."
+                )
         
         for key, value in kwargs.items():
             if hasattr(profile, key):
@@ -130,6 +149,15 @@ class AnimalProfileManager:
     def _profile_exists(self, profile_id: str) -> bool:
         """Check if profile exists."""
         return (self.base_path / f"{profile_id}.json").exists()
+    
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens in text using CLIP's tokenizer approximation."""
+        # Simple approximation: split on whitespace and punctuation
+        # CLIP tokenizer is more complex, but this is close enough for validation
+        import re
+        # Split on whitespace and common punctuation
+        tokens = re.findall(r"\w+|[^\w\s]", text.lower())
+        return len(tokens)
     
     def _save_profile(self, profile: AnimalProfile):
         """Save profile to disk."""

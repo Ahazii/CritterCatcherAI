@@ -579,11 +579,24 @@
 
                 <!-- Text Description -->
                 <div class="form-group">
-                    <label for="textDescription">Animal Description</label>
-                    <textarea id="textDescription" 
-                              placeholder="e.g., a small spiky hedgehog with brown fur">
+                    <label for="textDescription">Animal Description (CLIP) *</label>
+                    <textarea id="textDescription" rows="3"
+                              placeholder="e.g., a small brown hedgehog with spines"
+                              oninput="updateTokenCount()" maxlength="400">
                     </textarea>
-                    <small>Used by CLIP/ViT for accurate identification. Leave blank for auto-generated.</small>
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-top: 0.5rem;">
+                        <small style="color: var(--text-secondary); flex: 1;">
+                            <strong style="color: var(--accent-color);">Keep it short and specific!</strong><br>
+                            • Maximum 77 tokens (~10-12 words)<br>
+                            • Focus on key visual features<br>
+                            • Example: "a small brown hedgehog with spiky quills"<br>
+                            • NOT: long paragraphs or detailed descriptions
+                        </small>
+                        <div style="text-align: right;">
+                            <div id="tokenCount" style="font-weight: bold; font-size: 0.875rem;">0 tokens</div>
+                            <small id="tokenWarning" style="color: var(--text-secondary);"></small>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Confidence Threshold -->
@@ -738,6 +751,7 @@
 
                     updateThresholdDisplay();
                     updateRetrainingDisplay();
+                    updateTokenCount();  // Update token count for loaded description
                     document.getElementById('profileModal').classList.add('active');
                 })
                 .catch(err => showAlert('Error loading profile: ' + err, 'error'));
@@ -759,6 +773,32 @@
             document.getElementById('retrainingValue').textContent = value.toFixed(2);
             document.getElementById('retrainingPercent').textContent = (value * 100).toFixed(0) + '%';
         }
+        
+        function updateTokenCount() {
+            const text = document.getElementById('textDescription').value;
+            // Approximate CLIP tokenization: split on whitespace and punctuation
+            const tokens = text.toLowerCase().match(/\w+|[^\w\s]/g) || [];
+            const count = tokens.length;
+            
+            const countEl = document.getElementById('tokenCount');
+            const warningEl = document.getElementById('tokenWarning');
+            
+            countEl.textContent = `${count} tokens`;
+            
+            if (count > 77) {
+                countEl.style.color = 'var(--danger-color)';
+                warningEl.textContent = '⚠️ Too long!';
+                warningEl.style.color = 'var(--danger-color)';
+            } else if (count > 60) {
+                countEl.style.color = 'var(--warning-color)';
+                warningEl.textContent = 'Getting close';
+                warningEl.style.color = 'var(--warning-color)';
+            } else {
+                countEl.style.color = 'var(--success-color)';
+                warningEl.textContent = 'Good length';
+                warningEl.style.color = 'var(--success-color)';
+            }
+        }
 
         function handleSaveProfile(event) {
             event.preventDefault();
@@ -770,11 +810,19 @@
                 showAlert('Please select at least one YOLO category', 'error');
                 return;
             }
+            
+            // Validate text description token count
+            const textDescription = document.getElementById('textDescription').value;
+            const tokens = textDescription.toLowerCase().match(/\w+|[^\w\s]/g) || [];
+            if (tokens.length > 77) {
+                showAlert(`Text description is too long (${tokens.length} tokens). Maximum is 77 tokens. Please shorten your description.`, 'error');
+                return;
+            }
 
             const profileData = {
                 name: document.getElementById('profileName').value,
                 yolo_categories: selectedCategories,
-                text_description: document.getElementById('textDescription').value,
+                text_description: textDescription,
                 confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
                 requires_manual_confirmation: document.getElementById('requiresManualConfirmation').checked,
                 auto_approval_enabled: document.getElementById('autoApprovalEnabled').checked,
