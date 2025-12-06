@@ -2507,6 +2507,37 @@ async def get_top_frames(profile_id: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/animal-profiles/{profile_id}/frame/{filename}")
+async def get_frame_image(profile_id: str, filename: str):
+    """Serve a specific training frame image."""
+    try:
+        from fastapi.responses import FileResponse
+        
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Security: validate filename to prevent directory traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        # Get frame path
+        frame_path = Path("/data/training") / profile_id / "confirmed" / filename
+        
+        if not frame_path.exists():
+            raise HTTPException(status_code=404, detail="Frame not found")
+        
+        return FileResponse(frame_path, media_type="image/jpeg")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve frame: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============= YOLO Categories Management =============
 
 @app.get("/api/yolo-categories")
@@ -2972,6 +3003,103 @@ async def list_face_profiles():
         }
     except Exception as e:
         logger.error(f"Failed to list face profiles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/face-profiles/{profile_id}/stats")
+async def get_face_profile_stats(profile_id: str):
+    """Get detailed stats for a face profile including sample images."""
+    try:
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        profile = face_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Count training images
+        training_path = Path(profile.training_images_path)
+        training_images = []
+        if training_path.exists():
+            training_images = list(training_path.glob("*.jpg"))
+        
+        # Count face encodings from face_recognizer
+        encoding_count = 0
+        if face_recognizer:
+            # Access face_recognizer's known_faces dictionary
+            from face_recognizer import FaceRecognizer
+            encoding_path = Path("/data/faces/encodings.pkl")
+            if encoding_path.exists():
+                import pickle
+                try:
+                    with open(encoding_path, 'rb') as f:
+                        encodings_data = pickle.load(f)
+                        # encodings_data is dict: {person_name: [encoding1, encoding2, ...]}
+                        if profile.name in encodings_data:
+                            encoding_count = len(encodings_data[profile.name])
+                except Exception as e:
+                    logger.warning(f"Failed to load encodings for count: {e}")
+        
+        # Get sample images (up to 6 recent ones)
+        sample_images = []
+        for img in sorted(training_images, key=lambda x: x.stat().st_mtime, reverse=True)[:6]:
+            sample_images.append({
+                "filename": img.name,
+                "path": str(img),
+                "timestamp": datetime.fromtimestamp(img.stat().st_mtime).isoformat()
+            })
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": profile.id,
+                "name": profile.name,
+                "confidence_threshold": profile.confidence_threshold,
+                "enabled": profile.enabled,
+                "confirmed_count": profile.confirmed_count,
+                "rejected_count": profile.rejected_count,
+                "accuracy_percentage": profile.accuracy_percentage
+            },
+            "stats": {
+                "training_image_count": len(training_images),
+                "encoding_count": encoding_count,
+                "sample_images": sample_images
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get face profile stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/face-profiles/{profile_id}/image/{filename}")
+async def get_face_training_image(profile_id: str, filename: str):
+    """Serve a face training image."""
+    try:
+        from fastapi.responses import FileResponse
+        
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        profile = face_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Security: validate filename
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        image_path = Path(profile.training_images_path) / filename
+        
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        return FileResponse(image_path, media_type="image/jpeg")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve face image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
