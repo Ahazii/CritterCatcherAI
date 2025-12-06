@@ -2379,7 +2379,7 @@ async def reject_images(profile_id: str, request: dict):
 
 @app.post("/api/animal-profiles/{profile_id}/retrain")
 async def trigger_retrain(profile_id: str, request: dict = None):
-    """Trigger model retraining for a profile."""
+    """Trigger model retraining for a profile (NOT IMPLEMENTED - stub only)."""
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
@@ -2388,9 +2388,9 @@ async def trigger_retrain(profile_id: str, request: dict = None):
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         
-        logger.info(f"Retraining triggered for profile: {profile.name}")
+        logger.warning(f"Retrain endpoint called for '{profile.name}' but CLIP fine-tuning not implemented")
         
-        # TODO: Phase 9 - Implement actual retraining logic
+        # TODO: Phase 9 - Implement actual CLIP fine-tuning
         # This would involve:
         # 1. Loading training data from /data/training/{profile_id}/
         # 2. Fine-tuning the CLIP/ViT model
@@ -2398,16 +2398,112 @@ async def trigger_retrain(profile_id: str, request: dict = None):
         # 4. Updating model metadata
         
         return {
-            "status": "success",
+            "status": "not_implemented",
             "profile_id": profile_id,
             "profile_name": profile.name,
-            "message": f"Retraining started for '{profile.name}'. This will run in the background.",
-            "note": "Actual model retraining implementation pending for Phase 9"
+            "message": "CLIP fine-tuning not yet implemented. Use 'Mark Training Complete' to dismiss the recommendation.",
+            "note": "Actual CLIP fine-tuning implementation pending"
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to trigger retrain: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/animal-profiles/{profile_id}/mark-trained")
+async def mark_training_complete(profile_id: str):
+    """Mark training as manually completed to clear retraining recommendation."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        from datetime import datetime
+        
+        # Update profile
+        animal_profile_manager.update_profile(
+            profile_id,
+            training_manually_completed=True,
+            last_training_date=datetime.now().isoformat()
+        )
+        
+        logger.info(f"Training marked as complete for '{profile.name}'")
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "message": f"Training marked as complete for '{profile.name}'",
+            "last_training_date": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to mark training complete: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/animal-profiles/{profile_id}/top-frames")
+async def get_top_frames(profile_id: str, limit: int = 10):
+    """Get top N highest-confidence frames for a profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Get confirmed training frames
+        training_dir = Path("/data/training") / profile_id / "confirmed"
+        
+        if not training_dir.exists():
+            return {
+                "status": "success",
+                "profile_id": profile_id,
+                "profile_name": profile.name,
+                "frames": [],
+                "message": "No training data found"
+            }
+        
+        # Load frames with metadata
+        frames_with_confidence = []
+        for img_file in training_dir.glob("*.jpg"):
+            metadata_file = img_file.with_suffix(".jpg.json")
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    frames_with_confidence.append({
+                        "filename": img_file.name,
+                        "confidence": metadata.get('confidence', 0.0),
+                        "description": metadata.get('description', ''),
+                        "timestamp": metadata.get('timestamp', '')
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to load metadata for {img_file}: {e}")
+        
+        # Sort by confidence (highest first) and limit
+        frames_with_confidence.sort(key=lambda x: x['confidence'], reverse=True)
+        top_frames = frames_with_confidence[:limit]
+        
+        logger.info(f"Returning {len(top_frames)} top frames for '{profile.name}'")
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "frames": top_frames,
+            "total_frames": len(frames_with_confidence)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get top frames: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -23,6 +23,8 @@ class AnimalProfile:
     rejected_count: int = 0
     retraining_threshold: float = 0.85
     confirmation_count_recommendation: int = 50
+    last_training_date: Optional[str] = None  # ISO format datetime
+    training_manually_completed: bool = False  # User marked training as done
     
     @property
     def accuracy_percentage(self) -> float:
@@ -35,6 +37,10 @@ class AnimalProfile:
     @property
     def should_recommend_retraining(self) -> tuple:
         """Check if retraining should be recommended. Returns (bool, message)."""
+        # Don't recommend if user manually marked training as complete
+        if self.training_manually_completed:
+            return False, ""
+        
         total = self.confirmed_count + self.rejected_count
         
         # By accuracy
