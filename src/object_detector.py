@@ -70,10 +70,13 @@ class ObjectDetector:
         
         # Check if CUDA is available and configure device
         import torch
+        import os
         if torch.cuda.is_available():
             device = 'cuda'
             gpu_name = torch.cuda.get_device_name(0)
             logger.info(f"CUDA available - using GPU: {gpu_name}")
+            logger.info(f"NVIDIA_VISIBLE_DEVICES: {os.environ.get('NVIDIA_VISIBLE_DEVICES', 'not set')}")
+            logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')}")
         else:
             device = 'cpu'
             logger.warning("CUDA not available - using CPU (performance will be significantly slower)")

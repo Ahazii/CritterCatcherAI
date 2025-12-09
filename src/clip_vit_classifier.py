@@ -26,6 +26,8 @@ class CLIPVitClassifier:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         
         logger.info(f"Loading CLIP model: {model_name} on {self.device}")
+        import os
+        logger.info(f"NVIDIA_VISIBLE_DEVICES: {os.environ.get('NVIDIA_VISIBLE_DEVICES', 'not set')}")
         try:
             self.processor = CLIPProcessor.from_pretrained(model_name)
             self.model = CLIPModel.from_pretrained(model_name)
