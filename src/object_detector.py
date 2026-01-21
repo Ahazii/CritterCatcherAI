@@ -614,6 +614,7 @@ class ObjectDetector:
             # Track detections
             all_detections = {}
             frame_count = 0
+            use_tracking = True
             
             logger.info("Processing frames with object tracking...")
             
@@ -646,20 +647,38 @@ class ObjectDetector:
                     logger.warning(f"Invalid frame {frame_count}, skipping")
                     continue
                 
-                # Track objects in frame (YOLOv8 tracking with persistent IDs)
-                # Use detection-only mode to avoid Lucas-Kanade tracking errors
                 try:
-                    # Use simple detection instead of tracking to avoid lkpyramid.cpp errors
-                    # Tracking has issues with frame dimension mismatches
-                    results = self.model(frame, verbose=False)
+                    if use_tracking:
+                        # Try persistent tracking first for stable IDs across frames
+                        results = self.model.track(frame, persist=True, verbose=False)
+                    else:
+                        results = self.model(frame, verbose=False)
                 except Exception as detect_error:
-                    logger.error(f"Detection failed on frame {frame_count}: {detect_error}")
-                    # Write the frame without annotations
-                    try:
-                        out.write(frame)
-                    except Exception as write_error:
-                        logger.error(f"Failed to write frame {frame_count}: {write_error}")
-                    continue
+                    if use_tracking:
+                        # Fallback to detection-only if tracking fails
+                        use_tracking = False
+                        logger.warning(
+                            f"Tracking failed on frame {frame_count}, "
+                            f"falling back to detection-only: {detect_error}"
+                        )
+                        try:
+                            results = self.model(frame, verbose=False)
+                        except Exception as fallback_error:
+                            logger.error(f"Detection failed on frame {frame_count}: {fallback_error}")
+                            # Write the frame without annotations
+                            try:
+                                out.write(frame)
+                            except Exception as write_error:
+                                logger.error(f"Failed to write frame {frame_count}: {write_error}")
+                            continue
+                    else:
+                        logger.error(f"Detection failed on frame {frame_count}: {detect_error}")
+                        # Write the frame without annotations
+                        try:
+                            out.write(frame)
+                        except Exception as write_error:
+                            logger.error(f"Failed to write frame {frame_count}: {write_error}")
+                        continue
                 
                 # Process tracking results
                 if results and len(results) > 0:

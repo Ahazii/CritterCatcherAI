@@ -449,19 +449,8 @@ def process_videos(config: dict, manual_trigger: bool = False):
             recognized_people = set()
             
             if face_recognition_enabled and detected_objects and 'person' in detected_objects:
-                # Check if any enabled Animal Profile includes "person" category
-                try:
-                    all_profiles = profile_manager.list_profiles()
-                    person_profile_exists = any(
-                        p.enabled and 'person' in p.yolo_categories
-                        for p in all_profiles
-                    )
-                    
-                    if person_profile_exists:
-                        should_run_face_recognition = True
-                        logger.info("Face Recognition routing triggered (person detected + profile enabled + FR enabled)")
-                except Exception as e:
-                    logger.error(f"Error checking Animal Profiles for face recognition: {e}")
+                should_run_face_recognition = True
+                logger.info("Face Recognition routing triggered (person detected + FR enabled)")
             
             if should_run_face_recognition:
                 # Update progress: face recognition
