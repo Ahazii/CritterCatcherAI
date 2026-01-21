@@ -395,7 +395,12 @@ class RingDownloader:
         
         return False, "Max retries exceeded"
     
-    def download_all_videos(self, hours: Optional[int] = None, skip_existing: bool = True) -> dict:
+    def download_all_videos(
+        self,
+        hours: Optional[int] = None,
+        skip_existing: bool = True,
+        download_limit: Optional[int] = None
+    ) -> dict:
         """
         Download all available videos from Ring, optionally filtered by time.
         Uses download tracker to prevent duplicate downloads.
@@ -403,12 +408,17 @@ class RingDownloader:
         Args:
             hours: Number of hours to look back (None = all available)
             skip_existing: If True, skip videos that already exist on disk or in database
+            download_limit: Maximum number of new videos to download (None = unlimited)
             
         Returns:
             dict: Statistics with keys: new_downloads, already_downloaded, unavailable, failed
         """
         if not self.ring:
             logger.error("Not authenticated with Ring")
+            return {'new_downloads': 0, 'already_downloaded': 0, 'unavailable': 0, 'failed': 0}
+
+        if download_limit is not None and download_limit <= 0:
+            logger.info("Download limit set to 0 - skipping downloads")
             return {'new_downloads': 0, 'already_downloaded': 0, 'unavailable': 0, 'failed': 0}
         
         downloaded_files = []
@@ -519,6 +529,11 @@ class RingDownloader:
                         # Add delay between downloads to respect rate limits
                         if DELAY_BETWEEN_DOWNLOADS > 0:
                             time.sleep(DELAY_BETWEEN_DOWNLOADS)
+
+                        # Stop if download limit reached
+                        if download_limit is not None and len(downloaded_files) >= download_limit:
+                            logger.info(f"Download limit reached ({download_limit}). Stopping further downloads.")
+                            break
                     else:
                         # Handle 404 (unavailable) separately
                         if error_msg == "404_NOT_FOUND":
@@ -534,8 +549,16 @@ class RingDownloader:
                             else:
                                 logger.error(f"Failed to download {filename}: {error_msg}")
                         
+                # Stop after this device if limit reached
+                if download_limit is not None and len(downloaded_files) >= download_limit:
+                    break
+
             except Exception as e:
                 logger.error(f"Error processing {device.name}: {e}", exc_info=True)
+
+            # Stop after this device if limit reached
+            if download_limit is not None and len(downloaded_files) >= download_limit:
+                break
         
         # Provide detailed summary
         logger.info(f"="*80)

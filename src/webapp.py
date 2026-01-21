@@ -846,6 +846,16 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=f"Invalid time_range: {time_range}")
     
     logger.info(f"Download All: time_range={time_range}, hours={hours}")
+
+    # Read optional download limit from config
+    download_limit = None
+    try:
+        if CONFIG_PATH.exists():
+            with open(CONFIG_PATH, 'r') as f:
+                config = yaml.safe_load(f) or {}
+            download_limit = config.get('ring', {}).get('download_limit')
+    except Exception as e:
+        logger.warning(f"Failed to read download_limit from config: {e}")
     
     # Create task tracker entry
     time_desc = f"last {time_range}" if time_range != 'all' else "all available videos"
@@ -872,7 +882,11 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
             task_tracker.update_task(task_id, current=30, message="Downloading videos...")
             
             # Download all videos
-            stats = rd.download_all_videos(hours=hours, skip_existing=True)
+            stats = rd.download_all_videos(
+                hours=hours,
+                skip_existing=True,
+                download_limit=download_limit
+            )
             logger.info(
                 f"Download All Complete: {stats['new_downloads']} new, "
                 f"{stats['already_downloaded']} already downloaded, "

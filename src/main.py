@@ -246,9 +246,9 @@ def process_videos(config: dict, manual_trigger: bool = False):
         logger.info(f"Found {len(existing_videos)} existing videos in downloads folder")
         videos_to_process = existing_videos
     else:
-        # No existing videos - download ALL available videos from Ring
+        # No existing videos - download recent videos from Ring
         # Uses download_history.db to prevent duplicate downloads
-        logger.info("No existing videos found - downloading ALL available videos from Ring")
+        logger.info("No existing videos found - downloading recent videos from Ring")
         logger.info("Using database-tracked download to prevent duplicates")
         
         # Update progress: downloading
@@ -261,10 +261,10 @@ def process_videos(config: dict, manual_trigger: bool = False):
         
         try:
             # Use download_all_videos() which checks database to prevent re-downloads
-            # hours=None means download ALL available videos (not time-limited)
             stats = ring_downloader.download_all_videos(
-                hours=None,  # Download ALL available videos
-                skip_existing=True  # Skip videos already in database
+                hours=ring_config.get('download_hours'),
+                skip_existing=True,  # Skip videos already in database
+                download_limit=ring_config.get('download_limit')
             )
             
             logger.info(f"Download statistics:")

@@ -421,7 +421,7 @@ class ObjectDetector:
         try:
             # Load config to check auto-confirm threshold
             import yaml
-            config_path = Path("/app/config/config.yaml")
+            config_path = Path("/config/config.yaml")
             auto_confirm_threshold = 0.85  # Default
             max_confirmed = 200  # Default
             
