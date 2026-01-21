@@ -96,3 +96,9 @@ Troubleshooting
 - No CLIP matches: ensure profile exists in /data/animal_profiles and includes
   the detected YOLO category, and lower confidence_threshold if needed.
 - Missing videos: check Ring auth, logs, and download_hours window.
+
+Supported YOLO Categories
+- Animals: bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe
+- Vehicles: bicycle, car, motorcycle, airplane, bus, train, truck, boat
+- People: person
+- Outdoor: traffic light, fire hydrant, stop sign, parking meter, bench

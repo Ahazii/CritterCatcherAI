@@ -213,7 +213,7 @@ System learns and improves accuracy
 **Vehicles:** bicycle, car, motorcycle, airplane, bus, train, truck, boat  
 **People:** person  
 **Outdoor:** traffic light, fire hydrant, stop sign, parking meter, bench  
-**[Full list in USER_GUIDE.md](USER_GUIDE.md#yolo-categories)**
+**[Full list in Documentation.md](Documentation.md#supported-yolo-categories)**
 
 ---
 
