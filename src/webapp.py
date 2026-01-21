@@ -2786,7 +2786,7 @@ async def list_review_categories():
     try:
         review_base = Path("/data/review")
         if not review_base.exists():
-            return {"status": "success", "categories": []}
+            return {"status": "success", "categories": [], "total_videos": 0}
         
         categories = []
         for category_dir in review_base.iterdir():
@@ -2818,7 +2818,7 @@ async def list_category_videos(category: str):
     try:
         category_dir = Path("/data/review") / category
         if not category_dir.exists():
-            return {"status": "success", "videos": []}
+            return {"status": "success", "category": category, "video_count": 0, "videos": []}
         
         videos = []
         tracked_videos_dir = Path("/data/objects/detected/annotated_videos")
