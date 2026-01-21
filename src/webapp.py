@@ -251,6 +251,7 @@ async def get_status():
             time_remaining = int(avg_time_per_video * remaining_videos)
     
     return {
+        "status": "success",
         "is_processing": app_state["is_processing"],
         "last_run": app_state["last_run"],
         "uptime": "Running",
@@ -321,6 +322,7 @@ async def get_config():
             }
             
             return {
+                "status": "success",
                 "config": config,
                 "env_vars": env_vars
             }

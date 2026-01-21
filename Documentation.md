@@ -84,7 +84,28 @@ POST /api/ring/authenticate
 
 Docker
 Dockerfile uses a CUDA runtime base image for GPU support. For CPU-only hosts,
-ensure your environment supports the CUDA image or provide a CPU-only build.
+use a CPU-only build or ensure the CUDA runtime image is supported.
+
+Deployment essentials:
+- Ports: 8080
+- Volumes: /config, /data
+- Build args: PUID, PGID
+- Env: LOG_LEVEL, RUN_ONCE, TZ, LOG_TO_FILE
+
+Example docker-compose:
+version: "3.8"
+services:
+  crittercatcher:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config
+      - ./data:/data
+    environment:
+      - LOG_LEVEL=INFO
+      - RUN_ONCE=false
+      - TZ=UTC
 
 Testing
 Automated tests are available.
