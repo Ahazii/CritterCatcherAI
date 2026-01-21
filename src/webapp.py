@@ -347,6 +347,12 @@ async def update_config(config_data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/config/save")
+async def update_config_save(config_data: dict):
+    """Spec alias for updating configuration."""
+    return await update_config(config_data)
+
+
 # ============= GPU Monitoring API Endpoints =============
 
 @app.get("/api/system/gpu")
@@ -723,6 +729,12 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
         error_msg = str(e)
         logger.error(f"Ring authentication error: {error_msg}", exc_info=True)
         raise HTTPException(status_code=500, detail=error_msg)
+
+
+@app.post("/api/ring/authenticate")
+async def ring_authenticate_alias(credentials: dict, background_tasks: BackgroundTasks):
+    """Spec alias for Ring authentication."""
+    return await ring_authenticate(credentials, background_tasks)
 
 
 @app.get("/api/ring/status")
@@ -3670,6 +3682,26 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
     except Exception as e:
         logger.error(f"Failed to start reject videos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/confirm")
+async def confirm_videos_alias(request: dict, background_tasks: BackgroundTasks):
+    """Spec alias for confirming review videos."""
+    category = request.get("category")
+    filenames = request.get("filenames", [])
+    if not category:
+        raise HTTPException(status_code=400, detail="Missing category")
+    return await confirm_videos(category, {"filenames": filenames}, background_tasks)
+
+
+@app.post("/api/review/reject")
+async def reject_videos_alias(request: dict, background_tasks: BackgroundTasks):
+    """Spec alias for rejecting review videos."""
+    category = request.get("category")
+    filenames = request.get("filenames", [])
+    if not category:
+        raise HTTPException(status_code=400, detail="Missing category")
+    return await reject_videos(category, {"filenames": filenames}, background_tasks)
 
 
 def start_web_server(host: str = "0.0.0.0", port: int = None):

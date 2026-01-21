@@ -376,6 +376,12 @@ UMASK=0000                  # File permissions (rwxrwxrwx)
 http://localhost:8080
 ```
 
+### Compatibility Note
+The API includes compatibility aliases for earlier and documented routes. The
+spec endpoints remain valid, and the application may also expose additional
+routes used by the current UI. When both exist, the spec route delegates to the
+current implementation.
+
 ### Status & Configuration
 
 #### GET /api/status
