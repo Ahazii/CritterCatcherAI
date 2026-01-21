@@ -41,10 +41,14 @@ def setup_logging(config: dict = None):
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
     
-    # Create log file directory
-    log_dir = Path("/config")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "crittercatcher.log"
+    # Check if file logging is enabled (defaults to stdout + file)
+    log_to_file = True
+    if config:
+        log_to_file = config.get('logging', {}).get('file', {}).get('enabled', False)
+    if os.environ.get('LOG_TO_FILE', '').lower() in ('1', 'true', 'yes'):
+        log_to_file = True
+    
+    log_file = Path("/config") / "crittercatcher.log"
     
     # Create formatters
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -53,15 +57,6 @@ def setup_logging(config: dict = None):
     # Console handler (stdout)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
-    
-    # File handler with rotation (10MB max, keep 5 backups)
-    file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=10*1024*1024,  # 10 MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setFormatter(formatter)
     
     # Configure root logger
     root_logger = logging.getLogger()
@@ -72,11 +67,23 @@ def setup_logging(config: dict = None):
     
     # Add handlers
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+    
+    if log_to_file:
+        log_dir = log_file.parent
+        log_dir.mkdir(parents=True, exist_ok=True)
+        # File handler with rotation (10MB max, keep 5 backups)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10 MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
     
     # Log initialization
     logger = logging.getLogger(__name__)
-    logger.info(f"Logging initialized: level={log_level}, file={log_file}")
+    logger.info(f"Logging initialized: level={log_level}, file_logging={log_to_file}")
 
 
 def load_config(config_path: str = "/config/config.yaml") -> dict:

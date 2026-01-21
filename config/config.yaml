@@ -99,6 +99,10 @@ logging:
   # CRITICAL: Critical errors that may cause system failure
   level: INFO
   
+  # Optional file logging (default: disabled)
+  file:
+    enabled: true
+  
   # GPU monitoring (NVIDIA GPUs only)
   gpu_monitoring:
     enabled: true

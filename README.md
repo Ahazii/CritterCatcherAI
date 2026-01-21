@@ -180,10 +180,7 @@ Click **Process Now** button on Dashboard to trigger immediate video download an
 
 ## 📚 Documentation
 
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Detailed user manual
-- **[TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)** - Architecture and API reference
-- **[RING_2FA_SETUP.md](RING_2FA_SETUP.md)** - Ring authentication guide
-- **[UNRAID_DEPLOYMENT.md](UNRAID_DEPLOYMENT.md)** - Unraid-specific deployment
+- **[Documentation.md](Documentation.md)** - Full user and technical documentation
 
 ---
 

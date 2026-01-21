@@ -76,11 +76,31 @@ def get_build_date():
     """Deprecated - use get_docker_image_id() instead. Kept for backwards compatibility."""
     return get_docker_image_id()
 
+
+def is_file_logging_enabled() -> bool:
+    """Check if file logging is enabled via config or env."""
+    if os.environ.get('LOG_TO_FILE', '').lower() in ('1', 'true', 'yes'):
+        return True
+    if os.environ.get('LOG_TO_FILE', '').lower() in ('0', 'false', 'no'):
+        return False
+    
+    try:
+        if CONFIG_PATH.exists():
+            with open(CONFIG_PATH, 'r') as f:
+                config = yaml.safe_load(f) or {}
+            return bool(config.get('logging', {}).get('file', {}).get('enabled', True))
+    except Exception as e:
+        logger.debug(f"Failed to read logging config: {e}")
+    
+    return True
+
+# Version resolved once at startup for consistency
+app_version = get_app_version()
+
 # Initialize FastAPI app
-app = FastAPI(title="CritterCatcherAI", version="1.0.0")
+app = FastAPI(title="CritterCatcherAI", version=app_version)
 
 # Log version and Docker info on startup
-app_version = get_app_version()
 docker_image_id = get_docker_image_id()
 logger.info("="*80)
 logger.info(f"CritterCatcherAI starting up")
@@ -234,7 +254,7 @@ async def get_status():
         "is_processing": app_state["is_processing"],
         "last_run": app_state["last_run"],
         "uptime": "Running",
-        "version": "1.0.0",
+        "version": app_version,
         "processing_progress": {
             "current_video": progress["current_video"],
             "current_step": progress["current_step"],
@@ -245,6 +265,21 @@ async def get_status():
         } if app_state["is_processing"] else None,
         "scheduler": app_state["scheduler"]
     }
+
+
+@app.get("/api/status/stream")
+async def stream_status():
+    """Stream status updates over SSE."""
+    async def event_generator():
+        while True:
+            try:
+                status = await get_status()
+                yield {"event": "status", "data": json.dumps(status)}
+            except Exception as e:
+                logger.debug(f"Status stream error: {e}")
+            await asyncio.sleep(1)
+
+    return EventSourceResponse(event_generator())
 
 
 @app.get("/api/stats")
@@ -409,6 +444,13 @@ async def get_logs(lines: int = 500, level: Optional[str] = None):
         level: Optional filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
     try:
+        if not is_file_logging_enabled():
+            return {
+                "status": "success",
+                "logs": [],
+                "message": "File logging is disabled"
+            }
+        
         log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
@@ -451,6 +493,9 @@ async def get_logs(lines: int = 500, level: Optional[str] = None):
 async def download_logs():
     """Download full log file."""
     try:
+        if not is_file_logging_enabled():
+            raise HTTPException(status_code=400, detail="File logging is disabled")
+        
         log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
@@ -472,6 +517,12 @@ async def download_logs():
 async def clear_logs():
     """Clear/rotate current log file."""
     try:
+        if not is_file_logging_enabled():
+            return {
+                "status": "success",
+                "message": "File logging is disabled"
+            }
+        
         log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
