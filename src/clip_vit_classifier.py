@@ -14,7 +14,12 @@ logger = logging.getLogger(__name__)
 class CLIPVitClassifier:
     """Text-based image classifier using CLIP for animal identification."""
     
-    def __init__(self, model_name: str = "openai/clip-vit-base-patch32", device: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "openai/clip-vit-base-patch32",
+        device: Optional[str] = None,
+        force_cpu: bool = False
+    ):
         """
         Initialize CLIP classifier.
         
@@ -23,7 +28,10 @@ class CLIPVitClassifier:
             device: Device to use ('cuda', 'cpu', or None for auto-detection)
         """
         self.model_name = model_name
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        if force_cpu:
+            self.device = "cpu"
+        else:
+            self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         
         logger.info(f"Loading CLIP model: {model_name} on {self.device}")
         import os

@@ -187,11 +187,16 @@ def process_videos(config: dict, manual_trigger: bool = False):
     if not yolo_model.endswith('.pt'):
         yolo_model = f"{yolo_model}.pt"
     
+    force_cpu = os.environ.get('FORCE_CPU', '').lower() in ('1', 'true', 'yes')
+    if detection_config.get('force_cpu', False):
+        force_cpu = True
+    
     object_detector = ObjectDetector(
         labels=active_categories,
         confidence_threshold=detection_config.get('confidence_threshold', 0.25),
         num_frames=detection_config.get('object_frames', 5),
-        model_name=yolo_model
+        model_name=yolo_model,
+        force_cpu=force_cpu
     )
     
     # Initialize face recognizer
@@ -507,7 +512,7 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         # Lazy load CLIP classifier
                         if clip_classifier is None:
                             logger.info("Initializing CLIP classifier for Stage 2")
-                            clip_classifier = CLIPVitClassifier()
+                            clip_classifier = CLIPVitClassifier(force_cpu=force_cpu)
                         
                         # Extract frames from video for CLIP analysis
                         temp_dir = None

@@ -48,6 +48,7 @@ Key settings:
 - detection.confidence_threshold
 - detection.object_frames
 - detection.yolo_model
+- detection.force_cpu
 - ring.download_hours
 - ring.download_limit
 - scheduler.auto_run
@@ -83,8 +84,8 @@ POST /api/stop
 POST /api/ring/authenticate
 
 Docker
-Dockerfile uses a CUDA runtime base image for GPU support. For CPU-only hosts,
-use a CPU-only build or ensure the CUDA runtime image is supported.
+The application uses the GPU automatically when available and falls back to CPU
+when not. The container can run on CPU-only hosts without changes.
 
 Deployment essentials:
 - Ports: 8080
@@ -106,6 +107,14 @@ services:
       - LOG_LEVEL=INFO
       - RUN_ONCE=false
       - TZ=UTC
+
+Optional GPU (NVIDIA):
+- Ensure the NVIDIA container runtime is installed.
+- Enable device reservations for GPU if desired. Without this, the container
+  runs in CPU mode even on a GPU host.
+
+Force CPU:
+- Set detection.force_cpu: true in /config/config.yaml or toggle it in the UI.
 
 Testing
 Automated tests are available.

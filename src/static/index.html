@@ -2160,6 +2160,7 @@
                 const faceFrames = detection.face_frames || 10;
                 const faceModel = detection.face_model || 'hog';
                 const priority = detection.priority || 'people';
+                const forceCpu = detection.force_cpu === true;
                 
                 // Image Review settings
                 const imageReview = data.config.image_review || {};
@@ -2198,6 +2199,16 @@
                                style="width: 100%;">
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                             Number of video frames to analyze for object detection. More frames = more accurate but slower processing. Recommended: 5-10
+                        </p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="forceCpu" ${forceCpu ? 'checked' : ''} style="width: auto;">
+                            Force CPU (disable GPU acceleration)
+                        </label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Forces CPU usage even if a GPU is available. Useful for troubleshooting or reserving GPU for other tasks.
                         </p>
                     </div>
                     
@@ -2412,6 +2423,7 @@
                             object_labels: currentObjectLabels,  // Preserve existing labels from Species Training
                             confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
                             object_frames: parseInt(document.getElementById('objectFrames').value),
+                            force_cpu: document.getElementById('forceCpu').checked,
                             face_tolerance: parseFloat(document.getElementById('faceTolerance').value),
                             face_frames: parseInt(document.getElementById('faceFrames').value),
                             face_model: document.getElementById('faceModel').value,

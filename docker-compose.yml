@@ -45,6 +45,11 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
+    # Alternatively (Compose v2):
+    # device_requests:
+    #   - driver: nvidia
+    #     count: 1
+    #     capabilities: [gpu]
     
     # Network mode
     network_mode: bridge

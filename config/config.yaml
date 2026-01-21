@@ -62,6 +62,9 @@ detection:
   # Face detection model: "hog" (fast, CPU-friendly) or "cnn" (accurate, GPU recommended)
   face_model: hog
   
+  # Force CPU even if GPU is available
+  force_cpu: false
+  
   # Priority for sorting: "people" or "objects"
   # "people" = prioritize face recognition over object detection
   # "objects" = prioritize object detection over face recognition

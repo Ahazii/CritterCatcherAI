@@ -36,7 +36,8 @@ class ObjectDetector:
     
     def __init__(self, labels: List[str], confidence_threshold: float = 0.25, num_frames: int = 5, 
                  detected_objects_path: str = "/data/objects/detected", 
-                 model_name: str = "yolov8n.pt"):
+                 model_name: str = "yolov8n.pt",
+                 force_cpu: bool = False):
         """
         Initialize the object detector.
         
@@ -71,7 +72,10 @@ class ObjectDetector:
         # Check if CUDA is available and configure device
         import torch
         import os
-        if torch.cuda.is_available():
+        if force_cpu:
+            device = 'cpu'
+            logger.info("Force CPU enabled - using CPU for YOLO")
+        elif torch.cuda.is_available():
             device = 'cuda'
             gpu_name = torch.cuda.get_device_name(0)
             logger.info(f"CUDA available - using GPU: {gpu_name}")

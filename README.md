@@ -125,6 +125,7 @@ Advanced users can edit `/config/config.yaml`:
 detection:
   confidence_threshold: 0.25      # YOLO detection sensitivity (0.1-0.9)
   object_frames: 5                # Frames to analyze per video
+  force_cpu: false                # Force CPU even if GPU is available
 
 scheduler:
   auto_run: true                  # Enable automatic processing
@@ -148,6 +149,9 @@ image_review:
 
 ### Enable GPU Acceleration (Optional)
 Uncomment GPU section in `docker-compose.yml` for 3-5x faster processing
+
+### Force CPU (Optional)
+Use the Configuration tab or set `detection.force_cpu: true` in config to disable GPU use.
 
 ### Manual Processing
 Click **Process Now** button on Dashboard to trigger immediate video download and processing
