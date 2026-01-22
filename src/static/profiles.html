@@ -927,8 +927,11 @@
                                             ✓ Training completed: ${new Date(profile.last_training_date).toLocaleDateString()}
                                         </div>` 
                                         : '')}
-                                <div id="training-${profile.id}" style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);">
-                                    Training status: loading...
+                                <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                    <div id="training-${profile.id}" style="font-size: 0.875rem; color: var(--text-secondary);">
+                                        Training status: loading...
+                                    </div>
+                                    <button class="btn btn-small" onclick="loadTrainingStatus('${profile.id}')">Refresh status</button>
                                 </div>
                                 <div id="viz-${profile.id}" style="display: none; margin-top: 1rem;"></div>
                             </div>
