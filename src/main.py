@@ -546,18 +546,31 @@ def process_videos(config: dict, manual_trigger: bool = False):
                             cap.release()
                             logger.info(f"Extracted {len(frame_paths)} frames for CLIP analysis")
                             
-                            # Run CLIP for each matching profile
+                            # Run CLIP or classifier for each matching profile
                             profile_results = []
                             for profile in matching_profiles:
                                 logger.debug(f"Running CLIP for profile: {profile.name} ({profile.text_description})")
+                                classifier_path = None
+                                if profile.classifier_model_path:
+                                    classifier_path = Path(profile.classifier_model_path)
+                                else:
+                                    classifier_path = Path("/data/models") / profile.id / "classifier.json"
                                 
-                                scores = clip_classifier.score_batch(frame_paths, profile.text_description)
-                                avg_confidence = sum(scores) / len(scores) if scores else 0.0
+                                classifier_data = CLIPVitClassifier.load_classifier(classifier_path)
+                                if classifier_data:
+                                    scores = clip_classifier.score_with_classifier(frame_paths, classifier_data)
+                                    avg_confidence = sum(scores) / len(scores) if scores else 0.0
+                                    method = "classifier"
+                                else:
+                                    scores = clip_classifier.score_batch(frame_paths, profile.text_description)
+                                    avg_confidence = sum(scores) / len(scores) if scores else 0.0
+                                    method = "text"
                                 
                                 profile_results.append({
                                     "profile_id": profile.id,
                                     "profile_name": profile.name,
                                     "confidence": avg_confidence,
+                                    "method": method,
                                     "threshold": profile.confidence_threshold,
                                     "auto_approval_enabled": profile.auto_approval_enabled,
                                     "requires_manual_confirmation": profile.requires_manual_confirmation

@@ -81,6 +81,7 @@ For fine-grained detection (e.g., specific bird species):
 - Create profile for target animal
 - Upload training images
 - High-confidence matches auto-sort to profile folders
+ - Training runs automatically in batches of 10 confirmed positives (requires negatives)
 
 ### 4. Setup Face Recognition (Optional)
 - Go to **Face Training** tab

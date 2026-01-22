@@ -53,6 +53,9 @@ Key settings:
 - ring.download_limit
 - scheduler.auto_run
 - scheduler.interval_minutes
+- animal_training.enabled
+- animal_training.batch_size
+- animal_training.min_negatives
 
 Logging
 - Default: stdout/stderr and /config/crittercatcher.log
@@ -67,6 +70,13 @@ Minimum fields:
 - yolo_categories (must include the YOLO class that triggers the profile)
 - text_description
 - confidence_threshold
+
+Animal Training
+- Training uses a lightweight classifier on CLIP embeddings.
+- Triggered automatically after every 10 new confirmed positives.
+- Requires negative samples from rejected images.
+- Classifier stored at /data/models/{profile_id}/classifier.json.
+- Falls back to text-based CLIP scoring if no classifier exists.
 
 API Reference (selected)
 GET /api/status

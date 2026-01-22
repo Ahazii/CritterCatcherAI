@@ -177,6 +177,121 @@ class CLIPVitClassifier:
             logger.error(f"Error comparing descriptions for {image_path}: {e}", exc_info=True)
             raise RuntimeError(f"Failed to compare descriptions: {e}")
 
+    def get_image_embeddings(self, image_paths: list, batch_size: int = 8) -> np.ndarray:
+        """Extract normalized CLIP image embeddings for a list of image paths."""
+        embeddings = []
+        valid_paths = []
+        
+        for image_path in image_paths:
+            path_obj = Path(image_path)
+            if path_obj.exists():
+                valid_paths.append(path_obj)
+            else:
+                logger.warning(f"Image not found for embedding: {image_path}")
+        
+        if not valid_paths:
+            return np.zeros((0, 0), dtype=np.float32)
+        
+        for i in range(0, len(valid_paths), batch_size):
+            batch_paths = valid_paths[i:i + batch_size]
+            images = [Image.open(p).convert("RGB") for p in batch_paths]
+            
+            inputs = self.processor(
+                images=images,
+                return_tensors="pt",
+                padding=True
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                image_features = self.model.get_image_features(**inputs)
+            
+            # Normalize embeddings
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            embeddings.append(image_features.cpu().numpy())
+        
+        return np.vstack(embeddings)
+
+    def train_classifier(
+        self,
+        positive_paths: list,
+        negative_paths: list,
+        model_path: Path,
+        epochs: int = 200,
+        learning_rate: float = 0.1,
+        l2: float = 0.001,
+        batch_size: int = 8
+    ) -> dict:
+        """Train a lightweight binary classifier on CLIP embeddings."""
+        pos_embeddings = self.get_image_embeddings(positive_paths, batch_size=batch_size)
+        neg_embeddings = self.get_image_embeddings(negative_paths, batch_size=batch_size)
+        
+        if pos_embeddings.size == 0 or neg_embeddings.size == 0:
+            raise ValueError("Need both positive and negative embeddings for training")
+        
+        X = np.vstack([pos_embeddings, neg_embeddings]).astype(np.float32)
+        y = np.concatenate([
+            np.ones(pos_embeddings.shape[0], dtype=np.float32),
+            np.zeros(neg_embeddings.shape[0], dtype=np.float32)
+        ])
+        
+        # Initialize weights
+        weights = np.zeros(X.shape[1], dtype=np.float32)
+        bias = 0.0
+        
+        def sigmoid(z):
+            return 1.0 / (1.0 + np.exp(-z))
+        
+        for _ in range(epochs):
+            logits = X.dot(weights) + bias
+            probs = sigmoid(logits)
+            error = probs - y
+            
+            grad_w = (X.T.dot(error) / len(y)) + (l2 * weights)
+            grad_b = float(np.mean(error))
+            
+            weights -= learning_rate * grad_w
+            bias -= learning_rate * grad_b
+        
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        model_data = {
+            "weights": weights.tolist(),
+            "bias": bias,
+            "threshold": 0.5,
+            "positive_count": int(pos_embeddings.shape[0]),
+            "negative_count": int(neg_embeddings.shape[0]),
+        }
+        
+        with open(model_path, 'w') as f:
+            json.dump(model_data, f)
+        
+        return model_data
+
+    @staticmethod
+    def load_classifier(model_path: Path) -> Optional[dict]:
+        """Load a classifier from disk."""
+        if not model_path.exists():
+            return None
+        try:
+            with open(model_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load classifier {model_path}: {e}")
+            return None
+
+    def score_with_classifier(self, image_paths: list, model_data: dict, batch_size: int = 8) -> list:
+        """Score images using a trained classifier."""
+        embeddings = self.get_image_embeddings(image_paths, batch_size=batch_size)
+        if embeddings.size == 0:
+            return []
+        
+        weights = np.array(model_data["weights"], dtype=np.float32)
+        bias = float(model_data["bias"])
+        
+        logits = embeddings.dot(weights) + bias
+        probs = 1.0 / (1.0 + np.exp(-logits))
+        return probs.tolist()
+
 
 class AnimalIdentifier:
     """High-level API for identifying animals using CLIP."""

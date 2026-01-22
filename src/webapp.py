@@ -2086,6 +2086,38 @@ async def get_animal_profile(profile_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/animal-profiles/{profile_id}/training-status")
+async def get_animal_profile_training_status(profile_id: str):
+    """Get training status for an animal profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        model_path = Path(profile.classifier_model_path) if profile.classifier_model_path else Path("/data/models") / profile.id / "classifier.json"
+        model_present = model_path.exists()
+        
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "model_present": model_present,
+            "model_path": str(model_path),
+            "last_training_date": profile.last_training_date,
+            "last_trained_confirmed": profile.last_trained_confirmed,
+            "last_trained_rejected": profile.last_trained_rejected,
+            "confirmed_count": profile.confirmed_count,
+            "rejected_count": profile.rejected_count
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get training status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.put("/api/animal-profiles/{profile_id}")
 async def update_animal_profile(profile_id: str, request: dict):
     """Update animal profile settings."""
@@ -2668,7 +2700,8 @@ async def get_yolo_categories():
         return {
             "status": "success",
             "categories": categories_info,
-            "total_categories": len(YOLO_COCO_CLASSES)
+            "total_categories": len(YOLO_COCO_CLASSES),
+            "total_enabled": sum(1 for c in categories_info if c["is_enabled"])
         }
     except HTTPException:
         raise

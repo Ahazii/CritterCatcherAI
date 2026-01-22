@@ -24,6 +24,9 @@ class AnimalProfile:
     retraining_threshold: float = 0.85
     confirmation_count_recommendation: int = 50
     last_training_date: Optional[str] = None  # ISO format datetime
+    last_trained_confirmed: int = 0
+    last_trained_rejected: int = 0
+    classifier_model_path: Optional[str] = None
     training_manually_completed: bool = False  # User marked training as done
     
     @property

@@ -120,3 +120,13 @@ run_once: false
 
 # Legacy interval setting (kept for backward compatibility)
 interval_minutes: 60
+
+# Animal profile training (CLIP embedding classifier)
+animal_training:
+  enabled: true
+  batch_size: 10          # Train after every 10 new confirmed positives
+  min_negatives: 10       # Minimum negative samples required
+  epochs: 200
+  learning_rate: 0.1
+  l2: 0.001
+  batch_size_embeddings: 8

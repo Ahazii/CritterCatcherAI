@@ -79,6 +79,84 @@ class ReviewManager:
         """
         self.profile_manager = profile_manager
         self.base_data_path = Path(base_data_path)
+        self.clip_classifier = None
+
+    def _load_training_config(self) -> dict:
+        config_path = Path("/config/config.yaml")
+        defaults = {
+            "enabled": True,
+            "batch_size": 10,
+            "min_negatives": 10,
+            "epochs": 200,
+            "learning_rate": 0.1,
+            "l2": 0.001,
+            "batch_size_embeddings": 8
+        }
+        try:
+            if config_path.exists():
+                import yaml
+                with open(config_path, "r") as f:
+                    config = yaml.safe_load(f) or {}
+                return {**defaults, **(config.get("animal_training", {}) or {})}
+        except Exception as e:
+            logger.warning(f"Failed to load training config: {e}")
+        return defaults
+
+    def _maybe_train_profile(self, profile: AnimalProfile):
+        config = self._load_training_config()
+        if not config.get("enabled", True):
+            return
+        
+        batch_size = int(config.get("batch_size", 10))
+        if (profile.confirmed_count - profile.last_trained_confirmed) < batch_size:
+            return
+        
+        # Require negatives
+        min_negatives = int(config.get("min_negatives", 10))
+        positives_dir = self.base_data_path / "training" / profile.id / "confirmed"
+        negatives_dir = self.base_data_path / "training" / profile.id / "rejected"
+        
+        positive_paths = sorted(str(p) for p in positives_dir.glob("*.jpg")) if positives_dir.exists() else []
+        negative_paths = sorted(str(p) for p in negatives_dir.glob("*.jpg")) if negatives_dir.exists() else []
+        
+        if len(positive_paths) < batch_size or len(negative_paths) < min_negatives:
+            logger.info(
+                f"Skipping training for {profile.id}: "
+                f"{len(positive_paths)} positives, {len(negative_paths)} negatives"
+            )
+            return
+        
+        from clip_vit_classifier import CLIPVitClassifier
+        if self.clip_classifier is None:
+            force_cpu = False
+            try:
+                import yaml
+                with open("/config/config.yaml", "r") as f:
+                    full_config = yaml.safe_load(f) or {}
+                force_cpu = bool(full_config.get("detection", {}).get("force_cpu", False))
+            except Exception:
+                force_cpu = False
+            self.clip_classifier = CLIPVitClassifier(force_cpu=force_cpu)
+        
+        model_path = self.base_data_path / "models" / profile.id / "classifier.json"
+        try:
+            self.clip_classifier.train_classifier(
+                positive_paths=positive_paths,
+                negative_paths=negative_paths,
+                model_path=model_path,
+                epochs=int(config.get("epochs", 200)),
+                learning_rate=float(config.get("learning_rate", 0.1)),
+                l2=float(config.get("l2", 0.001)),
+                batch_size=int(config.get("batch_size_embeddings", 8))
+            )
+            profile.last_trained_confirmed = profile.confirmed_count
+            profile.last_trained_rejected = profile.rejected_count
+            profile.classifier_model_path = str(model_path)
+            profile.last_training_date = datetime.now().isoformat()
+            self.profile_manager._save_profile(profile)
+            logger.info(f"Trained classifier for {profile.id}")
+        except Exception as e:
+            logger.error(f"Failed training for {profile.id}: {e}")
     
     def list_pending_reviews(self, profile_id: str) -> List[ReviewFrame]:
         """
@@ -177,6 +255,7 @@ class ReviewManager:
             # Update accuracy tracking
             profile.confirmed_count += 1
             self.profile_manager._save_profile(profile)
+            self._maybe_train_profile(profile)
             
             logger.info(f"Confirmed frame {frame_filename} for {profile.name}")
             return True
@@ -284,6 +363,7 @@ class ReviewManager:
             results["updated_accuracy"] = profile.accuracy_percentage
             results["confirmed_count"] = profile.confirmed_count
             results["rejected_count"] = profile.rejected_count
+            self._maybe_train_profile(profile)
         
         logger.info(
             f"Bulk confirm for {profile_id}: {len(results['confirmed'])} confirmed, "
