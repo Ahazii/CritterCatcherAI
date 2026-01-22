@@ -919,7 +919,7 @@
                                             ✓ Mark Training Complete
                                         </button>
                                         <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; font-style: italic;">
-                                            Note: CLIP fine-tuning not yet implemented. This will dismiss the recommendation.
+                                            Note: Training uses a lightweight classifier on CLIP embeddings.
                                         </p>
                                     </div>` 
                                     : (profile.last_training_date ? 
@@ -927,6 +927,9 @@
                                             ✓ Training completed: ${new Date(profile.last_training_date).toLocaleDateString()}
                                         </div>` 
                                         : '')}
+                                <div id="training-${profile.id}" style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);">
+                                    Training status: loading...
+                                </div>
                                 <div id="viz-${profile.id}" style="display: none; margin-top: 1rem;"></div>
                             </div>
                             <div class="profile-actions">
@@ -939,8 +942,35 @@
                             </div>
                         </div>
                     `).join('');
+
+                    profiles.forEach(profile => loadTrainingStatus(profile.id));
                 })
                 .catch(err => showAlert('Error loading profiles: ' + err, 'error'));
+        }
+
+        function loadTrainingStatus(profileId) {
+            fetch(`/api/animal-profiles/${profileId}/training-status`)
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById(`training-${profileId}`);
+                    if (!el) return;
+                    if (data.status !== 'success') {
+                        el.textContent = 'Training status unavailable';
+                        return;
+                    }
+                    const modelState = data.model_present ? 'trained' : 'not trained';
+                    const lastTrained = data.last_training_date
+                        ? new Date(data.last_training_date).toLocaleDateString()
+                        : 'never';
+                    const progress = `${data.confirmed_count - data.last_trained_confirmed}/10 new positives`;
+                    el.textContent = `Training status: ${modelState}, last trained: ${lastTrained}, progress: ${progress}`;
+                })
+                .catch(() => {
+                    const el = document.getElementById(`training-${profileId}`);
+                    if (el) {
+                        el.textContent = 'Training status unavailable';
+                    }
+                });
         }
 
         function toggleProfile(profileId, enable) {
