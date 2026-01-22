@@ -682,11 +682,36 @@
 
         let currentProfileId = null;
 
+        const trainingConfig = {
+            batchSize: 10,
+            minNegatives: 10
+        };
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initializeYoloCategories();
-            loadProfiles();
+            loadTrainingConfig().finally(loadProfiles);
         });
+
+        function loadTrainingConfig() {
+            return fetch('/api/config')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status !== 'success' || !data.config) {
+                        return;
+                    }
+                    const animalTraining = data.config.animal_training || {};
+                    const batchSize = parseInt(animalTraining.batch_size, 10);
+                    const minNegatives = parseInt(animalTraining.min_negatives, 10);
+                    if (!Number.isNaN(batchSize)) {
+                        trainingConfig.batchSize = batchSize;
+                    }
+                    if (!Number.isNaN(minNegatives)) {
+                        trainingConfig.minNegatives = minNegatives;
+                    }
+                })
+                .catch(() => {});
+        }
 
         function initializeYoloCategories() {
             const container = document.getElementById('yoloCategories');
@@ -965,8 +990,12 @@
                     const lastTrained = data.last_training_date
                         ? new Date(data.last_training_date).toLocaleDateString()
                         : 'never';
-                    const progress = `${data.confirmed_count - data.last_trained_confirmed}/10 new positives`;
-                    el.textContent = `Training status: ${modelState}, last trained: ${lastTrained}, progress: ${progress}`;
+                    const newPositives = data.confirmed_count - data.last_trained_confirmed;
+                    const nextBatchTarget = data.last_trained_confirmed + trainingConfig.batchSize;
+                    const progress = `${newPositives}/${trainingConfig.batchSize} new positives`;
+                    const negatives = `${data.rejected_count}/${trainingConfig.minNegatives} negatives`;
+                    const nextBatch = `next batch at ${nextBatchTarget} confirmed`;
+                    el.textContent = `Training status: ${modelState}, last trained: ${lastTrained}, progress: ${progress}, ${negatives}, ${nextBatch}`;
                 })
                 .catch(() => {
                     const el = document.getElementById(`training-${profileId}`);
