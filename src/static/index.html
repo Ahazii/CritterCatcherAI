@@ -2169,6 +2169,11 @@
                 
                 // Face Recognition settings
                 const faceRecognitionEnabled = data.config.face_recognition?.enabled || false;
+
+                // Pathway settings
+                const pathways = data.config.pathways || {};
+                const mediaPathway = pathways.media || {};
+                const securityPathway = pathways.security || {};
                 
                 const form = document.getElementById('configForm');
                 form.innerHTML = `
@@ -2330,6 +2335,40 @@
                             HOG is faster and works well on CPU. CNN is more accurate but requires more processing power.
                         </p>
                     </div>
+
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+
+                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">🧭 Pathways</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="mediaPathwayEnabled" ${mediaPathway.enabled !== false ? 'checked' : ''} style="width: auto;">
+                            Enable Media Pathway (CLIP profiles)
+                        </label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            When enabled, CLIP profile matches can auto-save to /data/sorted/{profile}.
+                        </p>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem;">
+                            <input type="checkbox" id="mediaAllCameras" style="width: auto;">
+                            Use all cameras for Media pathway
+                        </label>
+                        <div id="mediaCameraList" style="margin-top: 0.5rem;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="securityPathwayEnabled" ${securityPathway.enabled !== false ? 'checked' : ''} style="width: auto;">
+                            Enable Security Pathway (unknown people)
+                        </label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            When enabled, unknown people can be saved to /data/sorted/security/unknown.
+                        </p>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem;">
+                            <input type="checkbox" id="securityAllCameras" style="width: auto;">
+                            Use all cameras for Security pathway
+                        </label>
+                        <div id="securityCameraList" style="margin-top: 0.5rem;"></div>
+                    </div>
                     
                     <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
                     
@@ -2372,6 +2411,8 @@
                     <div id="configMessage" style="margin-top: 1rem;"></div>
                 `;
                 
+                await loadPathwayCameras(data.config);
+
                 // Load and display log file info
                 loadLogFileInfo();
                 
@@ -2399,6 +2440,61 @@
                 document.getElementById('intervalMinutes').disabled = !autoRun;
             }
         }
+
+        async function loadPathwayCameras(config) {
+            const mediaList = document.getElementById('mediaCameraList');
+            const securityList = document.getElementById('securityCameraList');
+            if (!mediaList || !securityList) return;
+
+            try {
+                const response = await fetch('/api/cameras');
+                const data = await response.json();
+                const cameras = data.cameras || [];
+
+                const pathways = config.pathways || {};
+                const mediaCameras = pathways.media?.cameras || [];
+                const securityCameras = pathways.security?.cameras || [];
+
+                const mediaAll = document.getElementById('mediaAllCameras');
+                const securityAll = document.getElementById('securityAllCameras');
+                mediaAll.checked = mediaCameras.length === 0;
+                securityAll.checked = securityCameras.length === 0;
+
+                const renderList = (container, pathway, selected, allToggle) => {
+                    if (cameras.length === 0) {
+                        container.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">No cameras detected yet.</p>';
+                        return;
+                    }
+                    container.innerHTML = cameras.map(name => `
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0;">
+                            <input type="checkbox" data-pathway="${pathway}" data-camera="${name}" ${selected.includes(name) ? 'checked' : ''}>
+                            ${name}
+                        </label>
+                    `).join('');
+
+                    const inputs = container.querySelectorAll('input[type="checkbox"]');
+                    inputs.forEach(input => {
+                        input.disabled = allToggle.checked;
+                    });
+
+                    allToggle.addEventListener('change', () => {
+                        inputs.forEach(input => {
+                            input.disabled = allToggle.checked;
+                            if (allToggle.checked) {
+                                input.checked = false;
+                            }
+                        });
+                    });
+                };
+
+                renderList(mediaList, 'media', mediaCameras, mediaAll);
+                renderList(securityList, 'security', securityCameras, securityAll);
+            } catch (error) {
+                console.error('Failed to load cameras:', error);
+                mediaList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Failed to load camera list.</p>';
+                securityList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Failed to load camera list.</p>';
+            }
+        }
         
         async function saveConfig() {
             try {
@@ -2407,6 +2503,15 @@
                 const currentData = await currentResponse.json();
                 const currentObjectLabels = currentData.config?.detection?.object_labels || [];
                 
+                const getSelectedCameras = (pathway) => {
+                    return Array.from(document.querySelectorAll(`input[data-pathway="${pathway}"]`))
+                        .filter(input => input.checked)
+                        .map(input => input.getAttribute('data-camera'));
+                };
+
+                const mediaAll = document.getElementById('mediaAllCameras')?.checked ?? true;
+                const securityAll = document.getElementById('securityAllCameras')?.checked ?? true;
+
                 const config = {
                     config: {
                         paths: {
@@ -2441,6 +2546,18 @@
                         },
                         logging: {
                             level: document.getElementById('logLevel').value
+                        },
+                        pathways: {
+                            media: {
+                                enabled: document.getElementById('mediaPathwayEnabled')?.checked ?? true,
+                                cameras: mediaAll ? [] : getSelectedCameras('media'),
+                                profiles: currentData.config?.pathways?.media?.profiles || []
+                            },
+                            security: {
+                                enabled: document.getElementById('securityPathwayEnabled')?.checked ?? true,
+                                cameras: securityAll ? [] : getSelectedCameras('security'),
+                                unknown_only: true
+                            }
                         },
                         run_once: false,
                         interval_minutes: parseInt(document.getElementById('intervalMinutes').value)  // Keep for backwards compatibility

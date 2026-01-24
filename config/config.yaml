@@ -121,6 +121,17 @@ run_once: false
 # Legacy interval setting (kept for backward compatibility)
 interval_minutes: 60
 
+# Pathways (camera-specific routing)
+pathways:
+  media:
+    enabled: true
+    cameras: []            # Empty = all cameras
+    profiles: []           # Empty = all profiles
+  security:
+    enabled: true
+    cameras: []            # Empty = all cameras
+    unknown_only: true     # Save only unknown people
+
 # Animal profile training (CLIP embedding classifier)
 animal_training:
   enabled: true

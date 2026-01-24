@@ -375,6 +375,14 @@
                     <select id="profileSelect">
                         <option value="">-- Select Profile --</option>
                     </select>
+                    <label style="margin-left: 10px; font-size: 0.9rem;">
+                        <input type="checkbox" id="extractFrames" checked>
+                        Extract training frames
+                    </label>
+                    <label style="margin-left: 10px; font-size: 0.9rem;">
+                        <input type="checkbox" id="saveNegatives">
+                        Save rejects as negatives (selected profile)
+                    </label>
                     <button class="btn btn-small" onclick="assignToProfile()" id="assignBtn" disabled>→ Assign</button>
                 </div>
             </div>
@@ -778,6 +786,7 @@
             }
             
             const filenames = Array.from(selectedVideos);
+            const extractFrames = document.getElementById('extractFrames').checked;
             
             try {
                 const response = await fetch('/api/review/assign-to-profile', {
@@ -786,14 +795,18 @@
                     body: JSON.stringify({
                         category: currentCategory,
                         filenames: filenames,
-                        profile_id: profileId
+                        profile_id: profileId,
+                        extract_frames: extractFrames
                     })
                 });
                 
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    alert(`✓ Assigned ${data.moved_count} video(s) to ${data.profile_name}`);
+                    const extractedInfo = extractFrames
+                        ? ` and extracted ${data.extracted_frames || 0} frame(s)`
+                        : '';
+                    alert(`✓ Assigned ${data.moved_count} video(s) to ${data.profile_name}${extractedInfo}`);
                     await loadCategories();
                 } else {
                     alert('Failed to assign videos');
@@ -932,8 +945,22 @@
                 alert('No videos selected');
                 return;
             }
+
+            const saveNegatives = document.getElementById('saveNegatives').checked;
+            const profileSelect = document.getElementById('profileSelect');
+            const profileId = profileSelect.value;
+            const profileName = profileSelect.options[profileSelect.selectedIndex]?.text || 'selected profile';
+
+            if (saveNegatives && !profileId) {
+                alert('Please select a profile to save negatives');
+                return;
+            }
             
-            if (!confirm(`Reject and delete ${selectedVideos.size} video(s)?`)) {
+            const confirmMessage = saveNegatives
+                ? `Reject ${selectedVideos.size} video(s) and save negative training frames for ${profileName}?\n\nThis will:\n• Extract frames into the profile's rejected training set\n• Delete the original videos from review`
+                : `Reject and delete ${selectedVideos.size} video(s)?`;
+
+            if (!confirm(confirmMessage)) {
                 return;
             }
             
@@ -944,7 +971,10 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        filenames: filenames
+                        filenames: filenames,
+                        save_as_negative: saveNegatives,
+                        extract_frames: saveNegatives,
+                        profile_id: profileId || null
                     })
                 });
                 

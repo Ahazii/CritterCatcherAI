@@ -5,6 +5,8 @@ FastAPI-based web GUI for monitoring and configuration.
 import os
 import logging
 import asyncio
+import re
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -25,6 +27,7 @@ from review_feedback import ReviewManager
 from face_profile import FaceProfile, FaceProfileManager
 from task_tracker import task_tracker, TaskStatus
 from download_tracker import DownloadTracker
+from processing_pipeline import FrameExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,14 @@ def get_app_version():
     
     # Fallback version
     return "v0.1.0-dev"
+
+
+def _extract_camera_name(filename: str) -> Optional[str]:
+    """Extract camera name from a Ring video filename."""
+    match = re.match(r"^(.*)_\d{8}_\d{6}_.+\.mp4$", filename)
+    if match:
+        return match.group(1)
+    return None
 
 
 def get_docker_image_id():
@@ -330,6 +341,32 @@ async def get_config():
             raise HTTPException(status_code=404, detail="Configuration file not found")
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/cameras")
+async def list_cameras():
+    """List known camera names from stored videos."""
+    try:
+        cameras = set()
+        base_paths = [
+            Path("/data/downloads"),
+            Path("/data/review"),
+            Path("/data/sorted")
+        ]
+        for base_path in base_paths:
+            if not base_path.exists():
+                continue
+            for video_path in base_path.rglob("*.mp4"):
+                camera_name = _extract_camera_name(video_path.name)
+                if camera_name:
+                    cameras.add(camera_name)
+        return {
+            "status": "success",
+            "cameras": sorted(cameras)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list cameras: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2973,6 +3010,7 @@ async def assign_videos_to_profile(request: dict):
         category = request.get('category')
         filenames = request.get('filenames', [])
         profile_id = request.get('profile_id')
+        extract_frames = bool(request.get('extract_frames', True))
         
         if not category or not filenames or not profile_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
@@ -2984,6 +3022,21 @@ async def assign_videos_to_profile(request: dict):
         # Move videos from review to profile's training folder
         import shutil
         results = {"moved": [], "failed": []}
+        total_extracted_frames = 0
+        confirmed_increment = 0
+
+        max_frames_per_video = 10
+        if extract_frames and CONFIG_PATH.exists():
+            try:
+                with open(CONFIG_PATH, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+                batch_size = int(config.get("animal_training", {}).get("batch_size", 10))
+                if batch_size > 0:
+                    max_frames_per_video = min(batch_size, 30)
+            except Exception as config_err:
+                logger.warning(f"Failed to read training config: {config_err}")
+
+        frame_extractor = FrameExtractor(target_fps=1) if extract_frames else None
         
         for filename in filenames:
             try:
@@ -2997,6 +3050,40 @@ async def assign_videos_to_profile(request: dict):
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 
                 dest_path = dest_dir / filename
+
+                extracted_for_video = 0
+                if extract_frames:
+                    temp_dir = Path(tempfile.mkdtemp(prefix="profile_frames_"))
+                    try:
+                        frame_paths = frame_extractor.extract_frames(
+                            str(source_path),
+                            str(temp_dir),
+                            max_frames=max_frames_per_video
+                        )
+
+                        safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
+                        for idx, frame_path in enumerate(frame_paths):
+                            frame_name = f"{safe_stem}_frame_{idx:06d}.jpg"
+                            dest_frame_path = dest_dir / frame_name
+                            shutil.move(frame_path, dest_frame_path)
+
+                            metadata = {
+                                "source_video": filename,
+                                "profile_id": profile_id,
+                                "frame_index": idx,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            metadata_path = Path(str(dest_frame_path) + ".json")
+                            with open(metadata_path, "w") as metadata_file:
+                                json.dump(metadata, metadata_file, indent=2)
+
+                        extracted_for_video = len(frame_paths)
+                        total_extracted_frames += extracted_for_video
+                    except Exception as extract_err:
+                        logger.error(f"Failed to extract frames from {filename}: {extract_err}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": f"Frame extraction failed: {extract_err}"})
+                    finally:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
                 
                 # Move video
                 shutil.move(str(source_path), str(dest_path))
@@ -3010,13 +3097,18 @@ async def assign_videos_to_profile(request: dict):
                 results["moved"].append(filename)
                 
                 # Increment confirmed count
-                profile.confirmed_count += 1
+                if extract_frames:
+                    confirmed_increment += extracted_for_video
+                else:
+                    confirmed_increment += 1
                 
             except Exception as e:
                 logger.error(f"Failed to move {filename}: {e}")
                 results["failed"].append({"filename": filename, "error": str(e)})
         
         # Save updated profile
+        if confirmed_increment > 0:
+            profile.confirmed_count += confirmed_increment
         animal_profile_manager._save_profile(profile)
         
         logger.info(f"Assigned {len(results['moved'])} videos to {profile.name}")
@@ -3027,6 +3119,8 @@ async def assign_videos_to_profile(request: dict):
             "profile_name": profile.name,
             "moved_count": len(results["moved"]),
             "failed_count": len(results["failed"]),
+            "extracted_frames": total_extracted_frames,
+            "confirm_increment": confirmed_increment,
             "results": results,
             "message": f"Assigned {len(results['moved'])} videos to '{profile.name}'"
         }
@@ -3686,12 +3780,23 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
     
     try:
         filenames = request.get('filenames', [])
+        save_as_negative = bool(request.get('save_as_negative', False))
+        extract_frames = bool(request.get('extract_frames', True))
+        profile_id = request.get('profile_id')
         
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
         
         # Try to get a matching profile (optional)
-        profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
+        profile = None
+        if save_as_negative:
+            if not profile_id:
+                raise HTTPException(status_code=400, detail="Missing profile_id for negative training")
+            profile = animal_profile_manager.get_profile(profile_id) if animal_profile_manager else None
+            if not profile:
+                raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        else:
+            profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
         
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Starting video rejection...")
@@ -3701,8 +3806,23 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
             try:
                 task_tracker.start_task(task_id, message="Deleting videos...")
                 results = {"deleted": [], "failed": []}
+                total_extracted_frames = 0
+                rejected_increment = 0
                 
                 review_path = Path("/data/review") / category
+
+                max_frames_per_video = 10
+                if save_as_negative and extract_frames and CONFIG_PATH.exists():
+                    try:
+                        with open(CONFIG_PATH, 'r') as f:
+                            config = yaml.safe_load(f) or {}
+                        min_negatives = int(config.get("animal_training", {}).get("min_negatives", 10))
+                        if min_negatives > 0:
+                            max_frames_per_video = min(min_negatives, 30)
+                    except Exception as config_err:
+                        logger.warning(f"Failed to read training config: {config_err}")
+
+                frame_extractor = FrameExtractor(target_fps=1) if (save_as_negative and extract_frames) else None
                 
                 for idx, filename in enumerate(filenames, 1):
                     try:
@@ -3716,6 +3836,45 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                         
                         video_path = review_path / filename
                         if video_path.exists():
+                            extracted_for_video = 0
+                            if save_as_negative and extract_frames:
+                                temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
+                                try:
+                                    frame_paths = frame_extractor.extract_frames(
+                                        str(video_path),
+                                        str(temp_dir),
+                                        max_frames=max_frames_per_video
+                                    )
+
+                                    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
+                                    negatives_dir = Path("/data/training") / profile.id / "rejected"
+                                    negatives_dir.mkdir(parents=True, exist_ok=True)
+
+                                    for frame_idx, frame_path in enumerate(frame_paths):
+                                        frame_name = f"{safe_stem}_neg_{frame_idx:06d}.jpg"
+                                        dest_frame_path = negatives_dir / frame_name
+                                        shutil.move(frame_path, dest_frame_path)
+
+                                        metadata = {
+                                            "source_video": filename,
+                                            "profile_id": profile.id,
+                                            "category": category,
+                                            "frame_index": frame_idx,
+                                            "label": "negative",
+                                            "timestamp": datetime.now().isoformat()
+                                        }
+                                        metadata_path = Path(str(dest_frame_path) + ".json")
+                                        with open(metadata_path, "w") as metadata_file:
+                                            json.dump(metadata, metadata_file, indent=2)
+
+                                    extracted_for_video = len(frame_paths)
+                                    total_extracted_frames += extracted_for_video
+                                except Exception as extract_err:
+                                    logger.error(f"Failed to extract negatives from {filename}: {extract_err}", exc_info=True)
+                                    results["failed"].append({"filename": filename, "error": f"Negative extraction failed: {extract_err}"})
+                                finally:
+                                    shutil.rmtree(temp_dir, ignore_errors=True)
+
                             # Extract event_id from filename (format: CameraName_timestamp_eventid.mp4)
                             try:
                                 event_id = filename.split('_')[-1].split('.')[0]
@@ -3742,6 +3901,10 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                 logger.debug(f"Deleted tracked video: tracked_{filename}")
                             
                             logger.info(f"Rejected and deleted {filename} for category {category} (DB entry preserved)")
+                            if save_as_negative and extract_frames:
+                                rejected_increment += extracted_for_video
+                            else:
+                                rejected_increment += 1
                         else:
                             results["failed"].append({"filename": filename, "error": "File not found"})
                         
@@ -3751,17 +3914,18 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                 
                 # Update profile accuracy if profile exists
                 if profile:
-                    new_rejected = profile.rejected_count + len(results["deleted"])
-                    animal_profile_manager.update_accuracy(category, profile.confirmed_count, new_rejected)
-                    updated_profile = animal_profile_manager.get_profile(category)
+                    new_rejected = profile.rejected_count + rejected_increment
+                    animal_profile_manager.update_accuracy(profile.id, profile.confirmed_count, new_rejected)
+                    updated_profile = animal_profile_manager.get_profile(profile.id)
                     acc_msg = f" Accuracy: {updated_profile.accuracy_percentage:.1f}%"
                 else:
                     acc_msg = ""
                 
                 # Task completed
+                extracted_msg = f" Extracted {total_extracted_frames} negative frames." if total_extracted_frames else ""
                 task_tracker.complete_task(
                     task_id,
-                    message=f"Completed! Deleted {len(results['deleted'])} videos.{acc_msg}"
+                    message=f"Completed! Deleted {len(results['deleted'])} videos.{extracted_msg}{acc_msg}"
                 )
                 
             except Exception as e:
@@ -3801,7 +3965,13 @@ async def reject_videos_alias(request: dict, background_tasks: BackgroundTasks):
     filenames = request.get("filenames", [])
     if not category:
         raise HTTPException(status_code=400, detail="Missing category")
-    return await reject_videos(category, {"filenames": filenames}, background_tasks)
+    payload = {
+        "filenames": filenames,
+        "save_as_negative": request.get("save_as_negative", False),
+        "extract_frames": request.get("extract_frames", True),
+        "profile_id": request.get("profile_id")
+    }
+    return await reject_videos(category, payload, background_tasks)
 
 
 def start_web_server(host: str = "0.0.0.0", port: int = None):

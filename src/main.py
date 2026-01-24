@@ -3,6 +3,7 @@ CritterCatcherAI - Main application.
 Orchestrates video download, analysis, and sorting.
 """
 import os
+import re
 import sys
 import time
 import logging
@@ -10,6 +11,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import yaml
+from typing import Optional
 
 from ring_downloader import RingDownloader
 from object_detector import ObjectDetector
@@ -117,6 +119,32 @@ def load_config(config_path: str = "/config/config.yaml") -> dict:
         return {}
 
 
+def _extract_camera_name(filename: str) -> Optional[str]:
+    """Extract camera name from a Ring video filename."""
+    match = re.match(r"^(.*)_\d{8}_\d{6}_.+\.mp4$", filename)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _camera_allowed(pathway_config: dict, camera_name: Optional[str]) -> bool:
+    """Check if a camera is allowed for a pathway."""
+    cameras = pathway_config.get("cameras", []) if pathway_config else []
+    if not cameras:
+        return True  # empty list = all cameras
+    if not camera_name:
+        return True  # unknown camera -> allow
+    return camera_name in cameras
+
+
+def _profile_allowed(pathway_config: dict, profile_id: str) -> bool:
+    """Check if a profile is allowed for a pathway."""
+    profiles = pathway_config.get("profiles", []) if pathway_config else []
+    if not profiles:
+        return True
+    return profile_id in profiles
+
+
 def process_videos(config: dict, manual_trigger: bool = False):
     """Main video processing pipeline.
     
@@ -132,6 +160,9 @@ def process_videos(config: dict, manual_trigger: bool = False):
     
     ring_config = config.get('ring', {})
     detection_config = config.get('detection', {})
+    pathways = config.get('pathways', {})
+    media_pathway = pathways.get('media', {})
+    security_pathway = pathways.get('security', {})
     
     # Allow environment variable overrides for key settings
     if os.environ.get('DOWNLOAD_HOURS'):
@@ -341,6 +372,10 @@ def process_videos(config: dict, manual_trigger: bool = False):
             if not video_path.exists():
                 logger.debug(f"Skipping {video_path.name}: already processed or moved")
                 continue
+
+            camera_name = _extract_camera_name(video_path.name)
+            if camera_name:
+                logger.debug(f"Detected camera name: {camera_name}")
             
             # Update progress
             try:
@@ -480,8 +515,30 @@ def process_videos(config: dict, manual_trigger: bool = False):
             clip_stage2_result = None
             final_destination = None
             should_move_to_sorted = False  # Track if CLIP approved moving to sorted
-            
-            if detected_objects:
+
+            # Security pathway: save unknown people from selected cameras
+            security_routed = False
+            if security_pathway.get("enabled", True) and detected_objects and 'person' in detected_objects:
+                if _camera_allowed(security_pathway, camera_name):
+                    unknown_only = security_pathway.get("unknown_only", True)
+                    if not recognized_people or not unknown_only:
+                        try:
+                            if recognized_people and not unknown_only:
+                                person_label = list(recognized_people)[0]
+                                final_destination = video_sorter.move_video(video_path, f"security/{person_label}")
+                            else:
+                                final_destination = video_sorter.move_video(video_path, "security/unknown")
+                            logger.info(f"SECURITY PATHWAY: Saved person event to {final_destination}")
+                            video_path = final_destination
+                            security_routed = True
+                        except Exception as security_err:
+                            logger.error(f"Failed to move video to security pathway: {security_err}", exc_info=True)
+                    else:
+                        logger.info("SECURITY PATHWAY: Known person detected, leaving in review")
+                else:
+                    logger.info(f"SECURITY PATHWAY: Camera '{camera_name}' not enabled, leaving in review")
+
+            if detected_objects and not security_routed:
                 # Get YOLO categories that were detected
                 detected_categories = list(detected_objects.keys())
                 logger.debug(f"YOLO detected categories: {detected_categories}")
@@ -599,10 +656,21 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                     final_destination = video_path  # Keep in current YOLO category folder
                                 elif best_result['confidence'] >= best_result['threshold']:
                                     if best_result['auto_approval_enabled']:
-                                        # High confidence + auto-approval -> move to sorted
-                                        should_move_to_sorted = True
-                                        clip_stage2_result['auto_approved'] = True
-                                        logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Moving to sorted (confidence: {best_result['confidence']:.2f})")
+                                        media_enabled = media_pathway.get("enabled", True)
+                                        if not media_enabled:
+                                            logger.info("MEDIA PATHWAY: Disabled, leaving in review")
+                                            final_destination = video_path
+                                        elif not _camera_allowed(media_pathway, camera_name):
+                                            logger.info(f"MEDIA PATHWAY: Camera '{camera_name}' not enabled, leaving in review")
+                                            final_destination = video_path
+                                        elif not _profile_allowed(media_pathway, best_result['profile_id']):
+                                            logger.info(f"MEDIA PATHWAY: Profile '{best_result['profile_id']}' not enabled, leaving in review")
+                                            final_destination = video_path
+                                        else:
+                                            # High confidence + auto-approval -> move to sorted
+                                            should_move_to_sorted = True
+                                            clip_stage2_result['auto_approved'] = True
+                                            logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Moving to sorted (confidence: {best_result['confidence']:.2f})")
                                     else:
                                         # High confidence but no auto-approval -> stays in YOLO review
                                         logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Staying in YOLO review (auto-approval disabled)")
