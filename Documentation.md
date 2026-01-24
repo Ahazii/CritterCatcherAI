@@ -26,6 +26,7 @@ Workflow
    - Score frames against profile text description.
    - High confidence can auto-approve into /data/sorted/{profile}/.
 5) Optional face recognition matches people and routes to /data/sorted/person/{name}/.
+6) Optional pathways route media/security by camera.
 
 Directory Structure
 /data/
@@ -53,6 +54,11 @@ Key settings:
 - ring.download_limit
 - scheduler.auto_run
 - scheduler.interval_minutes
+- pathways.media.enabled
+- pathways.media.cameras
+- pathways.media.profiles
+- pathways.security.enabled
+- pathways.security.cameras
 - animal_training.enabled
 - animal_training.batch_size
 - animal_training.min_negatives
@@ -77,12 +83,25 @@ Animal Training
 - Requires negative samples from rejected images.
 - Classifier stored at /data/models/{profile_id}/classifier.json.
 - Falls back to text-based CLIP scoring if no classifier exists.
+- Training requires JPG frames in /data/training/{profile}/confirmed and /data/training/{profile}/rejected.
+- Review UI can extract frames when assigning to a profile or saving rejects as negatives.
+
+Pathways (Media + Security)
+- Media pathway: saves CLIP profile matches to /data/sorted/{profile} (camera-scoped).
+- Security pathway: saves unknown people to /data/sorted/security/unknown (camera-scoped).
+- Empty camera list = all cameras.
+
+Review Actions (Training)
+- Assign to profile: extracts training frames into /data/training/{profile}/confirmed.
+- Reject as negatives: extracts frames into /data/training/{profile}/rejected.
+- Reject without negatives deletes the video and does not train.
 
 API Reference (selected)
 GET /api/status
 GET /api/status/stream (SSE)
 GET /api/config
 POST /api/config/save
+GET /api/cameras
 GET /api/yolo-categories
 POST /api/yolo-categories/manual/toggle
 GET /api/review/categories
@@ -136,6 +155,12 @@ Troubleshooting
 - No CLIP matches: ensure profile exists in /data/animal_profiles and includes
   the detected YOLO category, and lower confidence_threshold if needed.
 - Missing videos: check Ring auth, logs, and download_hours window.
+- Training not happening: ensure confirmed/rejected JPG frames exist in /data/training/{profile}/.
+- Unknown people not saved: enable Security pathway and select cameras.
+
+Operational Notes
+- Camera names are derived from the Ring video filename prefix.
+- Pathways are configured in /config/config.yaml under pathways.media and pathways.security.
 
 Supported YOLO Categories
 - Animals: bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe

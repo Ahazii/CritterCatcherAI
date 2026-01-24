@@ -12,12 +12,14 @@ CritterCatcherAI automatically downloads videos from your Ring doorbell/cameras,
 - **Stage 1: YOLO Detection** - Fast, broad categorization (80 object classes)
 - **Stage 2: CLIP Profiles** - Precise identification of specific animals/objects
 - **Face Recognition** - Identify specific people automatically
+- **Pathways** - Camera-scoped media/security routing
 
 ### Hybrid Workflow
 - Videos sorted by YOLO category first → `/data/review/{category}/`
 - Optional CLIP refinement moves high-confidence matches → `/data/sorted/{profile}/`
 - Review interface shows tracked videos with animated bounding boxes
 - Manual confirmation improves accuracy over time
+- Camera-scoped pathways can auto-route media/security outputs
 
 ### Smart Video Processing
 - Automatic video downloads from Ring cameras
@@ -74,6 +76,8 @@ Videos are automatically sorted to `/data/review/{category}/`:
 - View videos by category (car, dog, bird, person, etc.)
 - Tracked videos show animated bounding boxes
 - Confirm or reject videos
+- Assign to profile to extract training frames
+- Reject as negatives to improve profile training
 
 ### 3. Create CLIP Profiles (Optional)
 For fine-grained detection (e.g., specific bird species):
@@ -135,6 +139,16 @@ scheduler:
 image_review:
   auto_confirm_threshold: 0.85    # Auto-confirm high confidence (≥85%)
   max_confirmed_images: 200       # Max training images per label
+
+pathways:
+  media:
+    enabled: true                 # Media pathway for CLIP profiles
+    cameras: []                   # Empty = all cameras
+    profiles: []                  # Empty = all profiles
+  security:
+    enabled: true                 # Security pathway for unknown people
+    cameras: []                   # Empty = all cameras
+    unknown_only: true
 ```
 
 ---
@@ -156,6 +170,11 @@ Use the Configuration tab or set `detection.force_cpu: true` in config to disabl
 
 ### Manual Processing
 Click **Process Now** button on Dashboard to trigger immediate video download and processing
+
+### Camera-Scoped Pathways
+Use Config → Pathways to choose which cameras feed:
+- Media pathway (CLIP profile auto-saves)
+- Security pathway (unknown people)
 
 ---
 
@@ -180,6 +199,10 @@ Click **Process Now** button on Dashboard to trigger immediate video download an
 - Categories are saved to `/config/config.yaml`
 - Ensure config volume is mounted correctly
 - Check logs for save/load confirmation messages
+
+### Training Not Happening
+- Ensure confirmed/rejected JPG frames exist in `/data/training/{profile}/`
+- Use “Assign to profile” and “Reject as negatives” in Review
 
 ---
 

@@ -15,6 +15,7 @@ Scope
 - Docker build/runtime documentation and images
 - Logging behavior and documentation
 - Test documentation accuracy
+- Review and training workflow (profile assignment, negatives, pathways)
 
 Assumptions
 - The current spec is authoritative and code should conform to it
@@ -71,10 +72,17 @@ Plan
    - Update docs to reflect existing tests and how to run them.
    - Add container-based test guidance where feasible.
 
+11) Training workflow and pathways
+   - Ensure review actions create training frames (positives and negatives).
+   - Expose training status and controls in the UI.
+   - Add media/security pathways with camera scoping.
+   - Document pathway behavior and configuration.
+
 Deliverables
 - Code updates in src/ to match API and behavior
 - Updated TECHNICAL_SPECIFICATION.md and README.md
 - Optional additional docs for deployment variants (CPU vs GPU)
+- Updated Documentation.md to cover pathways and training workflow
 
 Validation
 - API verification via curl or browser
