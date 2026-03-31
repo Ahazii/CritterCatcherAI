@@ -471,16 +471,54 @@
                 const data = await response.json();
                 profiles = data.profiles || [];
                 
-                const select = document.getElementById('profileSelect');
-                select.innerHTML = '<option value="">-- Select Profile --</option>';
-                profiles.forEach(profile => {
+                updateProfileDropdown();
+            } catch (error) {
+                console.error('Failed to load profiles:', error);
+            }
+        }
+        
+        function updateProfileDropdown() {
+            const select = document.getElementById('profileSelect');
+            select.innerHTML = '<option value="">-- Select Profile --</option>';
+            
+            if (profiles.length === 0) {
+                return;
+            }
+            
+            // Separate profiles into matching and non-matching categories
+            const matching = profiles.filter(p => 
+                p.enabled && p.yolo_categories && p.yolo_categories.some(cat => 
+                    cat.toLowerCase() === currentCategory?.toLowerCase()
+                )
+            );
+            const others = profiles.filter(p => !matching.includes(p));
+            
+            // Add matching profiles first (if any)
+            if (matching.length > 0) {
+                const matchGroup = document.createElement('optgroup');
+                matchGroup.label = `✓ Monitors "${currentCategory}"`;
+                matching.forEach(profile => {
                     const option = document.createElement('option');
                     option.value = profile.id;
                     option.textContent = profile.name;
-                    select.appendChild(option);
+                    matchGroup.appendChild(option);
                 });
-            } catch (error) {
-                console.error('Failed to load profiles:', error);
+                select.appendChild(matchGroup);
+            }
+            
+            // Add other profiles (if any)
+            if (others.length > 0) {
+                const otherGroup = document.createElement('optgroup');
+                otherGroup.label = '📂 Other Profiles';
+                others.forEach(profile => {
+                    const option = document.createElement('option');
+                    option.value = profile.id;
+                    // Show which categories this profile monitors
+                    const categories = profile.yolo_categories ? profile.yolo_categories.join(', ') : 'none';
+                    option.textContent = `${profile.name} (monitors: ${categories})`;
+                    otherGroup.appendChild(option);
+                });
+                select.appendChild(otherGroup);
             }
         }
 
@@ -523,6 +561,9 @@
             });
             
             selectedVideos.clear();
+            
+            // Update profile dropdown to reflect current category
+            updateProfileDropdown();
             
             // Show/hide "Confirm Person" button based on category
             const confirmPersonBtn = document.getElementById('confirmPersonBtn');

@@ -3085,7 +3085,7 @@ async def assign_videos_to_profile(request: dict):
                     finally:
                         shutil.rmtree(temp_dir, ignore_errors=True)
                 
-                # Move video
+                # Move video to training folder
                 shutil.move(str(source_path), str(dest_path))
                 
                 # Move metadata if exists
@@ -3093,6 +3093,42 @@ async def assign_videos_to_profile(request: dict):
                 if metadata_source.exists():
                     metadata_dest = dest_path.with_suffix(dest_path.suffix + ".json")
                     shutil.move(str(metadata_source), str(metadata_dest))
+                
+                # ALSO copy video to sorted folder for user to keep
+                sorted_dir = Path("/data/sorted") / profile_id
+                sorted_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions for created folders (per user rule)
+                try:
+                    import stat
+                    sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as perm_err:
+                    logger.warning(f"Could not set permissions on {sorted_dir}: {perm_err}")
+                
+                sorted_video_path = sorted_dir / filename
+                
+                # Handle duplicates in sorted folder
+                if sorted_video_path.exists():
+                    counter = 1
+                    stem = Path(filename).stem
+                    suffix = Path(filename).suffix
+                    while sorted_video_path.exists():
+                        new_name = f"{stem}_{counter}{suffix}"
+                        sorted_video_path = sorted_dir / new_name
+                        counter += 1
+                
+                try:
+                    # Copy video to sorted folder
+                    shutil.copy2(str(dest_path), str(sorted_video_path))
+                    logger.info(f"Copied video to sorted/{profile_id}: {filename}")
+                    
+                    # Copy metadata to sorted folder
+                    if metadata_dest.exists():
+                        sorted_metadata_path = sorted_video_path.with_suffix(sorted_video_path.suffix + ".json")
+                        shutil.copy2(str(metadata_dest), str(sorted_metadata_path))
+                except Exception as copy_err:
+                    logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
+                    # Don't fail the whole operation if sorted copy fails
                 
                 results["moved"].append(filename)
                 
@@ -3111,7 +3147,7 @@ async def assign_videos_to_profile(request: dict):
             profile.confirmed_count += confirmed_increment
         animal_profile_manager._save_profile(profile)
         
-        logger.info(f"Assigned {len(results['moved'])} videos to {profile.name}")
+        logger.info(f"Assigned {len(results['moved'])} videos to {profile.name} (training + sorted)")
         
         return {
             "status": "success",
@@ -3122,7 +3158,7 @@ async def assign_videos_to_profile(request: dict):
             "extracted_frames": total_extracted_frames,
             "confirm_increment": confirmed_increment,
             "results": results,
-            "message": f"Assigned {len(results['moved'])} videos to '{profile.name}'"
+            "message": f"Assigned {len(results['moved'])} videos to '{profile.name}' (saved to /data/sorted/{profile_id}/ + training data)"
         }
     except HTTPException:
         raise
