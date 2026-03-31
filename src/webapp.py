@@ -2405,9 +2405,9 @@ async def get_pending_reviews(profile_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/animal-profiles/{profile_id}/frame/{filename}")
-async def get_frame_image(profile_id: str, filename: str):
-    """Serve frame image with border."""
+@app.get("/api/animal-profiles/{profile_id}/review-frame/{filename}")
+async def get_review_frame_image(profile_id: str, filename: str):
+    """Serve frame image from review folder (for pending review interface)."""
     try:
         from PIL import Image, ImageOps
         import io
@@ -2419,7 +2419,7 @@ async def get_frame_image(profile_id: str, filename: str):
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         
-        # Construct frame path
+        # Construct frame path from review folder
         frame_path = Path("/data") / "review" / profile_id / filename
         
         if not frame_path.exists():
@@ -2437,7 +2437,7 @@ async def get_frame_image(profile_id: str, filename: str):
         bordered_image.save(img_bytes, format='JPEG')
         img_bytes.seek(0)
         
-        logger.debug(f"Serving frame: {profile_id}/{filename}")
+        logger.debug(f"Serving review frame: {profile_id}/{filename}")
         
         return StreamingResponse(
             iter([img_bytes.getvalue()]),

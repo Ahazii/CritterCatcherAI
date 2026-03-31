@@ -1,0 +1,9 @@
+Download all - even when ALL AVAILABLE selected does not... doing it, and then doing it again - downloads more.
+
+When reviewing
+Select all the row at the top of the review screen and reject - videos remain. even when no more videos available
+Later this worked.
+
+Return to downloads button leaves the unknown videos behind
+
+What to do with "unknown" videos - cannot assign to anything

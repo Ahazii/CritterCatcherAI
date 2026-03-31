@@ -983,24 +983,73 @@
                     const el = document.getElementById(`training-${profileId}`);
                     if (!el) return;
                     if (data.status !== 'success') {
-                        el.textContent = 'Training status unavailable';
+                        el.innerHTML = '<span style="color: var(--text-secondary);">Training status unavailable</span>';
                         return;
                     }
+                    
                     const modelState = data.model_present ? 'trained' : 'not trained';
                     const lastTrained = data.last_training_date
                         ? new Date(data.last_training_date).toLocaleDateString()
                         : 'never';
                     const newPositives = data.confirmed_count - data.last_trained_confirmed;
                     const nextBatchTarget = data.last_trained_confirmed + trainingConfig.batchSize;
-                    const progress = `${newPositives}/${trainingConfig.batchSize} new positives`;
-                    const negatives = `${data.rejected_count}/${trainingConfig.minNegatives} negatives`;
-                    const nextBatch = `next batch at ${nextBatchTarget} confirmed`;
-                    el.textContent = `Training status: ${modelState}, last trained: ${lastTrained}, progress: ${progress}, ${negatives}, ${nextBatch}`;
+                    
+                    // Calculate if ready to train
+                    const hasEnoughPositives = data.confirmed_count >= trainingConfig.batchSize;
+                    const hasEnoughNegatives = data.rejected_count >= trainingConfig.minNegatives;
+                    const readyToTrain = hasEnoughPositives && hasEnoughNegatives && !data.model_present;
+                    
+                    // Build status HTML with visual indicators
+                    el.innerHTML = `
+                        <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; font-size: 0.875rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+                                <div>
+                                    <strong>Model:</strong> 
+                                    <span style="color: ${data.model_present ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: bold;">
+                                        ${modelState}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Positives:</strong> 
+                                    <span style="color: ${hasEnoughPositives ? 'var(--success-color)' : 'var(--warning-color)'}; font-weight: bold;">
+                                        ${data.confirmed_count}
+                                    </span>
+                                    <span style="color: var(--text-secondary);">
+                                        / ${trainingConfig.batchSize} needed
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Negatives:</strong> 
+                                    <span style="color: ${hasEnoughNegatives ? 'var(--success-color)' : 'var(--danger-color)'}; font-weight: bold;">
+                                        ${data.rejected_count}
+                                    </span>
+                                    <span style="color: var(--text-secondary);">
+                                        / ${trainingConfig.minNegatives} needed
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>New since training:</strong> 
+                                    <span style="color: var(--accent-color); font-weight: bold;">
+                                        +${newPositives}
+                                    </span>
+                                </div>
+                            </div>
+                            ${readyToTrain ? `
+                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--success-color); color: white; border-radius: 4px; text-align: center; font-weight: bold;">
+                                    ✓ Ready to train! Process videos to trigger automatic training.
+                                </div>
+                            ` : (!hasEnoughNegatives && hasEnoughPositives ? `
+                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--danger-color); color: white; border-radius: 4px; text-align: center;">
+                                    ⚠️ Need ${trainingConfig.minNegatives - data.rejected_count} more negative examples
+                                </div>
+                            ` : '')}
+                        </div>
+                    `;
                 })
                 .catch(() => {
                     const el = document.getElementById(`training-${profileId}`);
                     if (el) {
-                        el.textContent = 'Training status unavailable';
+                        el.innerHTML = '<span style="color: var(--danger-color);">Failed to load training status</span>';
                     }
                 });
         }
