@@ -3062,6 +3062,18 @@ async def assign_videos_to_profile(request: dict):
                 
                 dest_path = dest_dir / filename
 
+                # Try to load video metadata for confidence score
+                video_metadata_path = source_path.with_suffix(source_path.suffix + ".json")
+                video_confidence = 0.0
+                if video_metadata_path.exists():
+                    try:
+                        with open(video_metadata_path, 'r') as vmf:
+                            video_meta = json.load(vmf)
+                            # Try CLIP confidence first, fallback to YOLO confidence
+                            video_confidence = video_meta.get('clip_confidence', video_meta.get('yolo_confidence', 0.0))
+                    except Exception as meta_err:
+                        logger.warning(f"Could not load video metadata for confidence: {meta_err}")
+                
                 extracted_for_video = 0
                 if extract_frames:
                     temp_dir = Path(tempfile.mkdtemp(prefix="profile_frames_"))
@@ -3082,6 +3094,7 @@ async def assign_videos_to_profile(request: dict):
                                 "source_video": filename,
                                 "profile_id": profile_id,
                                 "frame_index": idx,
+                                "confidence": video_confidence,
                                 "timestamp": datetime.now().isoformat()
                             }
                             metadata_path = Path(str(dest_frame_path) + ".json")
@@ -3901,6 +3914,17 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                         
                         video_path = review_path / filename
                         if video_path.exists():
+                            # Try to load video metadata for confidence (for negative frames)
+                            video_confidence = 0.0
+                            video_metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if video_metadata_path.exists():
+                                try:
+                                    with open(video_metadata_path, 'r') as vmf:
+                                        video_meta = json.load(vmf)
+                                        video_confidence = video_meta.get('clip_confidence', video_meta.get('yolo_confidence', 0.0))
+                                except Exception as meta_err:
+                                    logger.debug(f"Could not load video metadata: {meta_err}")
+                            
                             extracted_for_video = 0
                             if save_as_negative and extract_frames:
                                 temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
@@ -3926,6 +3950,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                             "category": category,
                                             "frame_index": frame_idx,
                                             "label": "negative",
+                                            "confidence": video_confidence,
                                             "timestamp": datetime.now().isoformat()
                                         }
                                         metadata_path = Path(str(dest_frame_path) + ".json")

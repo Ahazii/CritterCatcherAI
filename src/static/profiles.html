@@ -989,7 +989,7 @@
                     
                     const modelState = data.model_present ? 'trained' : 'not trained';
                     const lastTrained = data.last_training_date
-                        ? new Date(data.last_training_date).toLocaleDateString()
+                        ? new Date(data.last_training_date).toLocaleString()
                         : 'never';
                     const newPositives = data.confirmed_count - data.last_trained_confirmed;
                     const nextBatchTarget = data.last_trained_confirmed + trainingConfig.batchSize;
@@ -1007,6 +1007,12 @@
                                     <strong>Model:</strong> 
                                     <span style="color: ${data.model_present ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: bold;">
                                         ${modelState}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Last trained:</strong> 
+                                    <span style="color: var(--text-secondary); font-weight: bold;">
+                                        ${lastTrained}
                                     </span>
                                 </div>
                                 <div>
