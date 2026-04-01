@@ -3011,6 +3011,7 @@ async def assign_videos_to_profile(request: dict):
         filenames = request.get('filenames', [])
         profile_id = request.get('profile_id')
         extract_frames = bool(request.get('extract_frames', True))
+        as_negative = bool(request.get('as_negative', False))
         
         if not category or not filenames or not profile_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
@@ -3024,6 +3025,7 @@ async def assign_videos_to_profile(request: dict):
         results = {"moved": [], "failed": []}
         total_extracted_frames = 0
         confirmed_increment = 0
+        rejected_increment = 0
 
         max_frames_per_video = 10
         if extract_frames and CONFIG_PATH.exists():
@@ -3045,9 +3047,17 @@ async def assign_videos_to_profile(request: dict):
                     results["failed"].append({"filename": filename, "error": "File not found"})
                     continue
                 
-                # Create destination directory
-                dest_dir = Path("/data/training") / profile_id / "confirmed"
+                # Create destination directory (confirmed or rejected based on as_negative flag)
+                folder_type = "rejected" if as_negative else "confirmed"
+                dest_dir = Path("/data/training") / profile_id / folder_type
                 dest_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions for created folders (per user rule)
+                try:
+                    import stat
+                    dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as perm_err:
+                    logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
                 
                 dest_path = dest_dir / filename
 
@@ -3094,49 +3104,56 @@ async def assign_videos_to_profile(request: dict):
                     metadata_dest = dest_path.with_suffix(dest_path.suffix + ".json")
                     shutil.move(str(metadata_source), str(metadata_dest))
                 
-                # ALSO copy video to sorted folder for user to keep
-                sorted_dir = Path("/data/sorted") / profile_id
-                sorted_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Set permissions for created folders (per user rule)
-                try:
-                    import stat
-                    sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                except Exception as perm_err:
-                    logger.warning(f"Could not set permissions on {sorted_dir}: {perm_err}")
-                
-                sorted_video_path = sorted_dir / filename
-                
-                # Handle duplicates in sorted folder
-                if sorted_video_path.exists():
-                    counter = 1
-                    stem = Path(filename).stem
-                    suffix = Path(filename).suffix
-                    while sorted_video_path.exists():
-                        new_name = f"{stem}_{counter}{suffix}"
-                        sorted_video_path = sorted_dir / new_name
-                        counter += 1
-                
-                try:
-                    # Copy video to sorted folder
-                    shutil.copy2(str(dest_path), str(sorted_video_path))
-                    logger.info(f"Copied video to sorted/{profile_id}: {filename}")
+                # Only copy to sorted folder if POSITIVE example (not negative)
+                if not as_negative:
+                    sorted_dir = Path("/data/sorted") / profile_id
+                    sorted_dir.mkdir(parents=True, exist_ok=True)
                     
-                    # Copy metadata to sorted folder
-                    if metadata_dest.exists():
-                        sorted_metadata_path = sorted_video_path.with_suffix(sorted_video_path.suffix + ".json")
-                        shutil.copy2(str(metadata_dest), str(sorted_metadata_path))
-                except Exception as copy_err:
-                    logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
-                    # Don't fail the whole operation if sorted copy fails
+                    # Set permissions for created folders (per user rule)
+                    try:
+                        import stat
+                        sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    except Exception as perm_err:
+                        logger.warning(f"Could not set permissions on {sorted_dir}: {perm_err}")
+                    
+                    sorted_video_path = sorted_dir / filename
+                    
+                    # Handle duplicates in sorted folder
+                    if sorted_video_path.exists():
+                        counter = 1
+                        stem = Path(filename).stem
+                        suffix = Path(filename).suffix
+                        while sorted_video_path.exists():
+                            new_name = f"{stem}_{counter}{suffix}"
+                            sorted_video_path = sorted_dir / new_name
+                            counter += 1
+                    
+                    try:
+                        # Copy video to sorted folder
+                        shutil.copy2(str(dest_path), str(sorted_video_path))
+                        logger.info(f"Copied video to sorted/{profile_id}: {filename}")
+                        
+                        # Copy metadata to sorted folder
+                        if metadata_dest.exists():
+                            sorted_metadata_path = sorted_video_path.with_suffix(sorted_video_path.suffix + ".json")
+                            shutil.copy2(str(metadata_dest), str(sorted_metadata_path))
+                    except Exception as copy_err:
+                        logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
+                        # Don't fail the whole operation if sorted copy fails
                 
                 results["moved"].append(filename)
                 
-                # Increment confirmed count
-                if extract_frames:
-                    confirmed_increment += extracted_for_video
+                # Increment confirmed or rejected count
+                if as_negative:
+                    if extract_frames:
+                        rejected_increment += extracted_for_video
+                    else:
+                        rejected_increment += 1
                 else:
-                    confirmed_increment += 1
+                    if extract_frames:
+                        confirmed_increment += extracted_for_video
+                    else:
+                        confirmed_increment += 1
                 
             except Exception as e:
                 logger.error(f"Failed to move {filename}: {e}")
@@ -3145,9 +3162,18 @@ async def assign_videos_to_profile(request: dict):
         # Save updated profile
         if confirmed_increment > 0:
             profile.confirmed_count += confirmed_increment
+        if rejected_increment > 0:
+            profile.rejected_count += rejected_increment
         animal_profile_manager._save_profile(profile)
         
-        logger.info(f"Assigned {len(results['moved'])} videos to {profile.name} (training + sorted)")
+        type_str = "negative examples" if as_negative else "positive examples (training + sorted)"
+        logger.info(f"Assigned {len(results['moved'])} videos to {profile.name} as {type_str}")
+        
+        # Build appropriate message
+        if as_negative:
+            message = f"Assigned {len(results['moved'])} videos to '{profile.name}' as NEGATIVE examples (saved to /data/training/{profile_id}/rejected/)"
+        else:
+            message = f"Assigned {len(results['moved'])} videos to '{profile.name}' (saved to /data/sorted/{profile_id}/ + training data)"
         
         return {
             "status": "success",
@@ -3157,8 +3183,10 @@ async def assign_videos_to_profile(request: dict):
             "failed_count": len(results["failed"]),
             "extracted_frames": total_extracted_frames,
             "confirm_increment": confirmed_increment,
+            "rejected_increment": rejected_increment,
+            "as_negative": as_negative,
             "results": results,
-            "message": f"Assigned {len(results['moved'])} videos to '{profile.name}' (saved to /data/sorted/{profile_id}/ + training data)"
+            "message": message
         }
     except HTTPException:
         raise

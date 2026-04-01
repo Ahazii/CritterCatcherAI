@@ -828,6 +828,20 @@
             
             const filenames = Array.from(selectedVideos);
             const extractFrames = document.getElementById('extractFrames').checked;
+            const saveNegatives = document.getElementById('saveNegatives').checked;
+            
+            // Confirm negative assignment
+            if (saveNegatives) {
+                const confirmed = confirm(
+                    `Add ${selectedVideos.size} video(s) as NEGATIVE examples for this profile?\n\n` +
+                    `This will:\n` +
+                    `• Extract frames to /data/training/{profile}/rejected/\n` +
+                    `• Use these as "what NOT to detect"\n` +
+                    `• Help train the AI to distinguish this species\n\n` +
+                    `Use this for videos that are clearly NOT the target animal.`
+                );
+                if (!confirmed) return;
+            }
             
             try {
                 const response = await fetch('/api/review/assign-to-profile', {
@@ -837,7 +851,8 @@
                         category: currentCategory,
                         filenames: filenames,
                         profile_id: profileId,
-                        extract_frames: extractFrames
+                        extract_frames: extractFrames,
+                        as_negative: saveNegatives
                     })
                 });
                 
@@ -847,7 +862,8 @@
                     const extractedInfo = extractFrames
                         ? ` and extracted ${data.extracted_frames || 0} frame(s)`
                         : '';
-                    alert(`✓ Assigned ${data.moved_count} video(s) to ${data.profile_name}${extractedInfo}`);
+                    const typeInfo = saveNegatives ? ' as NEGATIVE examples' : '';
+                    alert(`✓ Assigned ${data.moved_count} video(s) to ${data.profile_name}${typeInfo}${extractedInfo}`);
                     await loadCategories();
                 } else {
                     alert('Failed to assign videos');
