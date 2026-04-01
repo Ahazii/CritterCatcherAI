@@ -18,6 +18,11 @@ ring:
 # Categories manually enabled here will be used for detection even if not part of an Animal Profile
 yolo_manual_categories: []
 
+# Face Recognition settings
+face_recognition:
+  # Enable face recognition for person detection
+  enabled: true
+
 # Detection settings
 detection:
   # YOLO model selection: yolov8n (nano - fastest), yolov8s (small), yolov8m (medium), 
