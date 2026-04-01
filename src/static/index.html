@@ -1165,7 +1165,6 @@
             <button class="tab" onclick="window.location.href='/static/yolo_categories.html'">🎯 YOLO Categories</button>
             <button class="tab" onclick="window.location.href='/static/profiles.html'">🦔 CLIP Profiles</button>
             <button class="tab" onclick="window.location.href='/static/review.html'">🔍 Review</button>
-            <button class="tab" onclick="window.location.href='/static/models.html'">🤖 Model Management</button>
             <button class="tab" onclick="window.location.href='/static/face_training.html'">👤 Face Training</button>
             <button class="tab" onclick="switchTab('ring')">🔔 Ring Setup</button>
             <button class="tab" onclick="switchTab('config')">⚙️ Configuration</button>
@@ -1405,6 +1404,13 @@
                 </div>
                 
                 <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: end;">
+                    <div style="flex: 0 1 200px;">
+                        <label class="form-label" style="font-size: 0.875rem;">Source</label>
+                        <select id="logSource" class="form-select" onchange="refreshLogs()" style="padding: 0.5rem; font-size: 0.875rem;">
+                            <option value="docker" selected>🐳 Docker Logs (Live)</option>
+                            <option value="file">📁 Error Log (File)</option>
+                        </select>
+                    </div>
                     <div style="flex: 1; min-width: 200px;">
                         <label class="form-label" style="font-size: 0.875rem;">Search</label>
                         <input type="text" id="logSearch" class="form-input" placeholder="Filter logs..." oninput="filterLogs()" style="padding: 0.5rem; font-size: 0.875rem;">
@@ -2399,11 +2405,9 @@
                             <option value="CRITICAL" ${(data.config.logging?.level || 'INFO') === 'CRITICAL' ? 'selected' : ''}>CRITICAL - Critical errors only</option>
                         </select>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                            Controls verbosity of application logging. DEBUG shows all messages, CRITICAL shows only severe errors. View logs in the Logs tab.
+                            Controls verbosity of Docker logs. DEBUG shows all messages, CRITICAL shows only severe errors. Errors (ERROR and CRITICAL) are also archived to file.
                         </p>
                     </div>
-                    
-                    <div id="logFileInfo" style="font-size: 0.75rem; color: var(--text-secondary); padding: 0.75rem; background: var(--bg-secondary); border-radius: 6px; margin-top: 0.5rem;"></div>
                     
                     <div style="margin-top: 2rem;">
                         <button class="btn" onclick="saveConfig()" style="width: 100%; padding: 1rem; font-size: 1rem;">💾 Save Configuration</button>
@@ -2412,9 +2416,6 @@
                 `;
                 
                 await loadPathwayCameras(data.config);
-
-                // Load and display log file info
-                loadLogFileInfo();
                 
                 // No longer need multi-select - object labels are managed in Species Training page
             } catch (error) {
@@ -3265,7 +3266,8 @@
         async function refreshLogs() {
             try {
                 const lineCount = document.getElementById('logLineCount').value;
-                const response = await fetch(`/api/logs?lines=${lineCount}`);
+                const source = document.getElementById('logSource').value;
+                const response = await fetch(`/api/logs?lines=${lineCount}&source=${source}`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
@@ -3274,10 +3276,12 @@
                 const data = await response.json();
                 allLogLines = data.logs || [];
                 
-                // Update stats
+                // Update stats with source info
                 const statsDiv = document.getElementById('logStats');
                 if (statsDiv) {
-                    statsDiv.textContent = `Showing ${allLogLines.length} lines`;
+                    const sourceLabel = source === 'file' ? '(Error Log)' : '(Docker)';
+                    const noteText = data.note ? ` - ${data.note}` : '';
+                    statsDiv.textContent = `Showing ${allLogLines.length} lines ${sourceLabel}${noteText}`;
                 }
                 
                 filterLogs();
@@ -3285,7 +3289,7 @@
                 console.error('Failed to load logs:', error);
                 const logViewer = document.getElementById('logViewer');
                 if (logViewer) {
-                    logViewer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff6b6b;">Failed to load logs. Check that the log file exists.</div>';
+                    logViewer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff6b6b;">Failed to load logs.</div>';
                 }
             }
         }
@@ -3440,23 +3444,6 @@
         
         // ===== END LOG VIEWER FUNCTIONS =====
         
-        async function loadLogFileInfo() {
-            try {
-                const response = await fetch('/api/logs?lines=1');
-                if (!response.ok) throw new Error('Failed to fetch');
-                
-                const infoDiv = document.getElementById('logFileInfo');
-                if (infoDiv) {
-                    infoDiv.innerHTML = '📁 Log file: /app/config/crittercatcher.log | Max size: 10MB (rotates automatically) | View and manage logs in the Logs tab';
-                }
-            } catch (error) {
-                const infoDiv = document.getElementById('logFileInfo');
-                if (infoDiv) {
-                    infoDiv.innerHTML = '⚠️ Log file not yet created (will be created on first application start)';
-                }
-            }
-        }
-
         // Drag and drop - initialize after DOM loads
         function initUploadArea() {
             const uploadArea = document.getElementById('uploadArea');

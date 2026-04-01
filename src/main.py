@@ -43,20 +43,13 @@ def setup_logging(config: dict = None):
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
     
-    # Check if file logging is enabled (defaults to stdout + file)
-    log_to_file = True
-    if config:
-        log_to_file = config.get('logging', {}).get('file', {}).get('enabled', False)
-    if os.environ.get('LOG_TO_FILE', '').lower() in ('1', 'true', 'yes'):
-        log_to_file = True
-    
     log_file = Path("/config") / "crittercatcher.log"
     
     # Create formatters
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     formatter = logging.Formatter(log_format)
     
-    # Console handler (stdout)
+    # Console handler (stdout) - all logs for Docker
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     
@@ -67,25 +60,25 @@ def setup_logging(config: dict = None):
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
     
-    # Add handlers
+    # Add console handler (all logs to Docker stdout)
     root_logger.addHandler(console_handler)
     
-    if log_to_file:
-        log_dir = log_file.parent
-        log_dir.mkdir(parents=True, exist_ok=True)
-        # File handler with rotation (10MB max, keep 5 backups)
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10*1024*1024,  # 10 MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    # Always add file handler for ERROR level and above (persistent error archive)
+    log_dir = log_file.parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10*1024*1024,  # 10 MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.ERROR)  # Only ERROR and CRITICAL to file
+    root_logger.addHandler(file_handler)
     
     # Log initialization
     logger = logging.getLogger(__name__)
-    logger.info(f"Logging initialized: level={log_level}, file_logging={log_to_file}")
+    logger.info(f"Logging initialized: level={log_level}, error_file={log_file}")
 
 
 def load_config(config_path: str = "/config/config.yaml") -> dict:

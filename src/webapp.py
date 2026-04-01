@@ -89,22 +89,6 @@ def get_build_date():
     return get_docker_image_id()
 
 
-def is_file_logging_enabled() -> bool:
-    """Check if file logging is enabled via config or env."""
-    if os.environ.get('LOG_TO_FILE', '').lower() in ('1', 'true', 'yes'):
-        return True
-    if os.environ.get('LOG_TO_FILE', '').lower() in ('0', 'false', 'no'):
-        return False
-    
-    try:
-        if CONFIG_PATH.exists():
-            with open(CONFIG_PATH, 'r') as f:
-                config = yaml.safe_load(f) or {}
-            return bool(config.get('logging', {}).get('file', {}).get('enabled', True))
-    except Exception as e:
-        logger.debug(f"Failed to read logging config: {e}")
-    
-    return True
 
 # Version resolved once at startup for consistency
 app_version = get_app_version()
@@ -476,54 +460,131 @@ async def get_gpu_config():
 # ============= Logging API Endpoints =============
 
 @app.get("/api/logs")
-async def get_logs(lines: int = 500, level: Optional[str] = None):
-    """Get recent log lines from application log file.
+async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = "docker"):
+    """Get recent log lines from Docker logs or error file.
     
     Args:
         lines: Number of lines to return (max 2000)
         level: Optional filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        source: Log source - "docker" for all logs, "file" for error log only
     """
     try:
-        if not is_file_logging_enabled():
-            return {
-                "status": "success",
-                "logs": [],
-                "message": "File logging is disabled"
-            }
-        
-        log_file = Path("/config/crittercatcher.log")
-        
-        if not log_file.exists():
-            return {
-                "status": "success",
-                "logs": [],
-                "message": "Log file not yet created"
-            }
-        
         # Limit lines to max 2000
         lines = min(lines, 2000)
         
-        # Read last N lines
-        with open(log_file, 'r', encoding='utf-8') as f:
-            all_lines = f.readlines()
-            recent_lines = all_lines[-lines:]
-        
-        # Filter by level if specified
-        if level:
-            level_upper = level.upper()
-            filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
-            recent_lines = filtered_lines
-        
-        # Get file stats
-        stats = log_file.stat()
-        
-        return {
-            "status": "success",
-            "logs": recent_lines,
-            "total_lines": len(recent_lines),
-            "file_size": stats.st_size,
-            "last_modified": datetime.fromtimestamp(stats.st_mtime).isoformat()
-        }
+        if source == "file":
+            # Read from error log file (ERROR and CRITICAL only)
+            log_file = Path("/config/crittercatcher.log")
+            
+            if not log_file.exists():
+                return {
+                    "status": "success",
+                    "logs": ["No errors logged yet. Error log will be created when first error occurs."],
+                    "total_lines": 1,
+                    "source": "file"
+                }
+            
+            # Read from file
+            with open(log_file, 'r', encoding='utf-8') as f:
+                all_lines = f.readlines()
+                recent_lines = all_lines[-lines:]
+            
+            # Filter by level if specified (file already contains only ERROR and CRITICAL)
+            if level:
+                level_upper = level.upper()
+                filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
+                recent_lines = filtered_lines
+            
+            # Get file stats
+            stats = log_file.stat()
+            
+            return {
+                "status": "success",
+                "logs": recent_lines,
+                "total_lines": len(recent_lines),
+                "file_size": stats.st_size,
+                "last_modified": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                "source": "file",
+                "note": "Error log contains only ERROR and CRITICAL level messages"
+            }
+        else:
+            # Read from Docker logs (all log levels)
+            import subprocess
+            
+            # Get container ID/name from hostname (Docker sets this)
+            container_id = os.environ.get('HOSTNAME', '')
+            
+            if not container_id:
+                return {
+                    "status": "success",
+                    "logs": ["Unable to read Docker logs: Container ID not available"],
+                    "total_lines": 1,
+                    "source": "error"
+                }
+            
+            try:
+                # Try to run docker logs command from within the container
+                # This requires the Docker socket to be mounted
+                result = subprocess.run(
+                    ['docker', 'logs', '--tail', str(lines), container_id],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    # Combine stdout and stderr (Docker logs go to both)
+                    log_output = result.stdout + result.stderr
+                    recent_lines = log_output.strip().split('\n') if log_output else []
+                    
+                    # Filter by level if specified
+                    if level:
+                        level_upper = level.upper()
+                        filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
+                        recent_lines = filtered_lines
+                    
+                    return {
+                        "status": "success",
+                        "logs": recent_lines,
+                        "total_lines": len(recent_lines),
+                        "source": "docker"
+                    }
+                else:
+                    # Docker command failed - suggest mounting socket
+                    return {
+                        "status": "success",
+                        "logs": [
+                            "Unable to read Docker logs from container.",
+                            "",
+                            "To enable Docker log viewing:",
+                            "  Mount Docker socket: Add -v /var/run/docker.sock:/var/run/docker.sock",
+                            "",
+                            "OR view logs externally from host:",
+                            "  docker logs crittercatcher-ai",
+                            "",
+                            "Switch to 'Error Log (File)' to view archived errors."
+                        ],
+                        "total_lines": 9,
+                        "source": "error"
+                    }
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                # Docker command not available
+                return {
+                    "status": "success",
+                    "logs": [
+                        "Unable to read Docker logs from container.",
+                        "",
+                        "To enable Docker log viewing:",
+                        "  Mount Docker socket: Add -v /var/run/docker.sock:/var/run/docker.sock",
+                        "",
+                        "OR view logs externally from host:",
+                        "  docker logs crittercatcher-ai",
+                        "",
+                        "Switch to 'Error Log (File)' to view archived errors."
+                    ],
+                    "total_lines": 9,
+                    "source": "error"
+                }
     except Exception as e:
         logger.error(f"Failed to read logs: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -531,64 +592,54 @@ async def get_logs(lines: int = 500, level: Optional[str] = None):
 
 @app.get("/api/logs/download")
 async def download_logs():
-    """Download full log file."""
+    """Download error log file (ERROR and CRITICAL messages)."""
     try:
-        if not is_file_logging_enabled():
-            raise HTTPException(status_code=400, detail="File logging is disabled")
-        
         log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
-            raise HTTPException(status_code=404, detail="Log file not found")
+            raise HTTPException(status_code=404, detail="Error log file not found (no errors logged yet)")
         
         return FileResponse(
             path=str(log_file),
             media_type='text/plain',
-            filename='crittercatcher.log'
+            filename='crittercatcher_errors.log'
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to download logs: {e}", exc_info=True)
+        logger.error(f"Failed to download error log: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/logs/clear")
 async def clear_logs():
-    """Clear/rotate current log file."""
+    """Clear/rotate error log file."""
     try:
-        if not is_file_logging_enabled():
-            return {
-                "status": "success",
-                "message": "File logging is disabled"
-            }
-        
         log_file = Path("/config/crittercatcher.log")
         
         if not log_file.exists():
             return {
                 "status": "success",
-                "message": "No log file to clear"
+                "message": "No error log to clear (no errors logged yet)"
             }
         
         # Backup current log with timestamp
-        import shutil
-        backup_name = f"crittercatcher.log.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        backup_name = f"crittercatcher_errors.{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         backup_path = log_file.parent / backup_name
         shutil.copy2(log_file, backup_path)
         
         # Clear current log file
         with open(log_file, 'w') as f:
-            f.write(f"# Log cleared at {datetime.now().isoformat()}\n")
+            f.write(f"# Error log cleared at {datetime.now().isoformat()}\n")
         
-        logger.info(f"Log file cleared and backed up to {backup_name}")
+        logger.info(f"Error log cleared and backed up to {backup_name}")
         
         return {
             "status": "success",
-            "message": f"Log cleared and backed up to {backup_name}"
+            "message": f"Error log cleared and backed up to {backup_name}"
         }
     except Exception as e:
-        logger.error(f"Failed to clear logs: {e}", exc_info=True)
+        logger.error(f"Failed to clear error log: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2300,39 +2351,6 @@ async def disable_animal_profile(profile_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/animal-profiles/{profile_id}/model-stats")
-async def get_model_stats(profile_id: str):
-    """Get model accuracy statistics and retraining recommendations."""
-    try:
-        if animal_profile_manager is None:
-            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
-        profile = animal_profile_manager.get_profile(profile_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
-        should_retrain, retrain_message = profile.should_recommend_retraining
-        
-        return {
-            "status": "success",
-            "profile_id": profile.id,
-            "profile_name": profile.name,
-            "accuracy_percentage": profile.accuracy_percentage,
-            "confirmed_count": profile.confirmed_count,
-            "rejected_count": profile.rejected_count,
-            "total_feedback": profile.confirmed_count + profile.rejected_count,
-            "accuracy_threshold": profile.retraining_threshold * 100,
-            "confirmation_count_recommendation": profile.confirmation_count_recommendation,
-            "should_recommend_retraining": should_retrain,
-            "retraining_message": retrain_message
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get model stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/animal-profiles/{profile_id}/update-accuracy")
 async def update_profile_accuracy(profile_id: str, request: dict):
     """Update model accuracy counters."""
@@ -2523,40 +2541,6 @@ async def reject_images(profile_id: str, request: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to reject images: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/animal-profiles/{profile_id}/retrain")
-async def trigger_retrain(profile_id: str, request: dict = None):
-    """Trigger model retraining for a profile (NOT IMPLEMENTED - stub only)."""
-    try:
-        if animal_profile_manager is None:
-            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
-        profile = animal_profile_manager.get_profile(profile_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
-        logger.warning(f"Retrain endpoint called for '{profile.name}' but CLIP fine-tuning not implemented")
-        
-        # TODO: Phase 9 - Implement actual CLIP fine-tuning
-        # This would involve:
-        # 1. Loading training data from /data/training/{profile_id}/
-        # 2. Fine-tuning the CLIP/ViT model
-        # 3. Saving the updated model
-        # 4. Updating model metadata
-        
-        return {
-            "status": "not_implemented",
-            "profile_id": profile_id,
-            "profile_name": profile.name,
-            "message": "CLIP fine-tuning not yet implemented. Use 'Mark Training Complete' to dismiss the recommendation.",
-            "note": "Actual CLIP fine-tuning implementation pending"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to trigger retrain: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
