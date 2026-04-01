@@ -3977,11 +3977,20 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                         results["failed"].append({"filename": filename, "error": str(e)})
                 
                 # Update profile accuracy if profile exists
-                if profile:
-                    new_rejected = profile.rejected_count + rejected_increment
-                    animal_profile_manager.update_accuracy(profile.id, profile.confirmed_count, new_rejected)
+                if profile and rejected_increment > 0:
+                    # Update rejected count directly on profile
+                    profile.rejected_count += rejected_increment
+                    animal_profile_manager._save_profile(profile)
+                    
+                    # Trigger training check via ReviewManager
+                    if review_manager:
+                        try:
+                            review_manager._maybe_train_profile(profile)
+                        except Exception as train_err:
+                            logger.warning(f"Training check failed: {train_err}")
+                    
                     updated_profile = animal_profile_manager.get_profile(profile.id)
-                    acc_msg = f" Accuracy: {updated_profile.accuracy_percentage:.1f}%"
+                    acc_msg = f" Negatives: {updated_profile.rejected_count}"
                 else:
                     acc_msg = ""
                 
