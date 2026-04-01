@@ -7,6 +7,7 @@ import logging
 import asyncio
 import re
 import tempfile
+import shutil
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
