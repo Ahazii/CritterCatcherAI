@@ -402,7 +402,24 @@ def process_videos(config: dict, manual_trigger: bool = False):
             
             # V2: Run standard YOLO detection with bbox coordinates
             logger.debug("Running YOLO object detection (Stage 1)")
-            detected_objects = object_detector.detect_objects_in_video(video_path, return_bboxes=True)
+            
+            # Log GPU operation start
+            try:
+                from webapp import gpu_monitor
+                if gpu_monitor:
+                    gpu_monitor.log_operation("YOLO detection", "start")
+            except:
+                pass
+            
+            detected_objects = object_detector.detect_objects_in_video(video_path)
+            
+            # Log GPU operation end
+            try:
+                from webapp import gpu_monitor
+                if gpu_monitor:
+                    gpu_monitor.log_operation("YOLO detection", "end")
+            except:
+                pass
             
             # HYBRID WORKFLOW: Sort by YOLO category first
             yolo_sorted_path = None
@@ -502,7 +519,24 @@ def process_videos(config: dict, manual_trigger: bool = False):
                     pass
                 
                 logger.debug("Running face recognition")
+                
+                # Log GPU operation start (Face Recognition uses GPU if CNN model)
+                try:
+                    from webapp import gpu_monitor
+                    if gpu_monitor and detection_config.get('face_model') == 'cnn':
+                        gpu_monitor.log_operation("Face recognition (CNN)", "start")
+                except:
+                    pass
+                
                 recognized_people = face_recognizer.recognize_faces_in_video(video_path)
+                
+                # Log GPU operation end
+                try:
+                    from webapp import gpu_monitor
+                    if gpu_monitor and detection_config.get('face_model') == 'cnn':
+                        gpu_monitor.log_operation("Face recognition (CNN)", "end")
+                except:
+                    pass
             
             # CLIP Stage 2: Check for matching Animal Profiles
             clip_stage2_result = None
@@ -562,7 +596,23 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         # Lazy load CLIP classifier
                         if clip_classifier is None:
                             logger.info("Initializing CLIP classifier for Stage 2")
+                            
+                            # Log GPU operation for CLIP initialization
+                            try:
+                                from webapp import gpu_monitor
+                                if gpu_monitor and not force_cpu:
+                                    gpu_monitor.log_operation("CLIP model initialization", "start")
+                            except:
+                                pass
+                            
                             clip_classifier = CLIPVitClassifier(force_cpu=force_cpu)
+                            
+                            try:
+                                from webapp import gpu_monitor
+                                if gpu_monitor and not force_cpu:
+                                    gpu_monitor.log_operation("CLIP model initialization", "end")
+                            except:
+                                pass
                         
                         # Extract frames from video for CLIP analysis
                         temp_dir = None
@@ -598,6 +648,16 @@ def process_videos(config: dict, manual_trigger: bool = False):
                             
                             # Run CLIP or classifier for each matching profile
                             profile_results = []
+                            
+                            # Log GPU operation start for CLIP analysis
+                            try:
+                                from webapp import gpu_monitor
+                                if gpu_monitor and not force_cpu:
+                                    profile_names = ', '.join([p.name for p in matching_profiles])
+                                    gpu_monitor.log_operation(f"CLIP analysis ({profile_names})", "start")
+                            except:
+                                pass
+                            
                             for profile in matching_profiles:
                                 logger.debug(f"Running CLIP for profile: {profile.name} ({profile.text_description})")
                                 classifier_path = None
@@ -627,6 +687,14 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                 })
                                 
                                 logger.info(f"CLIP result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
+                            
+                            # Log GPU operation end for CLIP analysis
+                            try:
+                                from webapp import gpu_monitor
+                                if gpu_monitor and not force_cpu:
+                                    gpu_monitor.log_operation(f"CLIP analysis ({profile_names})", "end")
+                            except:
+                                pass
                             
                             # Select profile with highest confidence
                             if profile_results:

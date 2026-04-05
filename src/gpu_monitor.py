@@ -93,7 +93,10 @@ class GPUMonitor:
             self._thread.join(timeout=self.log_interval + 1)
     
     def _monitor_loop(self):
-        """Background monitoring loop."""
+        """Background monitoring loop with error recovery."""
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        
         while self._monitoring:
             try:
                 utilization = self.pynvml.nvmlDeviceGetUtilizationRates(self.handle)
@@ -103,6 +106,9 @@ class GPUMonitor:
                 mem_used_mb = memory.used // (1024 * 1024)
                 mem_total_mb = memory.total // (1024 * 1024)
                 mem_percent = (memory.used / memory.total) * 100
+                
+                # Reset error counter on successful read
+                consecutive_errors = 0
                 
                 # Skip logging if idle and log_on_idle is False
                 if gpu_usage == 0 and not self.log_on_idle:
@@ -116,9 +122,23 @@ class GPUMonitor:
                 )
                 
             except Exception as e:
-                self.logger.error(f"GPU monitoring error: {e}", exc_info=True)
-                self._monitoring = False
-                break
+                consecutive_errors += 1
+                self.logger.warning(
+                    f"GPU monitoring error (attempt {consecutive_errors}/{max_consecutive_errors}): {e}"
+                )
+                
+                # Only stop after repeated failures
+                if consecutive_errors >= max_consecutive_errors:
+                    self.logger.error(
+                        f"GPU monitoring stopped after {max_consecutive_errors} consecutive errors. "
+                        "GPU may be unavailable or driver issue detected."
+                    )
+                    self._monitoring = False
+                    break
+                
+                # Wait longer before retry on error
+                time.sleep(self.log_interval * 2)
+                continue
             
             time.sleep(self.log_interval)
     
@@ -159,6 +179,28 @@ class GPUMonitor:
                 "memory_percent": 0.0,
                 "error": str(e)
             }
+    
+    def log_operation(self, operation: str, stage: str = "start"):
+        """
+        Log GPU usage for a specific operation.
+        
+        Args:
+            operation: Name of the operation (e.g., "YOLO detection", "CLIP analysis")
+            stage: Either "start" or "end"
+        """
+        if not self.gpu_available:
+            return
+        
+        try:
+            stats = self.get_current_stats()
+            usage = stats.get('usage_percent', 0.0)
+            
+            if stage == "start":
+                self.logger.info(f"GPU: Starting {operation} (current: {usage:.1f}%)")
+            else:
+                self.logger.info(f"GPU: {operation} complete (usage: {usage:.1f}%)")
+        except Exception as e:
+            self.logger.debug(f"Could not log GPU operation: {e}")
     
     def __del__(self):
         """Cleanup NVML on destruction."""
