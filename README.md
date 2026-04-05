@@ -127,14 +127,31 @@ Most settings configurable via **Configuration** tab:
 Advanced users can edit `/config/config.yaml`:
 
 ```yaml
+# Manual YOLO categories (managed via YOLO Categories page)
+yolo_manual_categories:
+  - person                        # Enable person detection
+
+# Face Recognition settings
+face_recognition:
+  enabled: true                   # Enable face recognition for person detection
+
 detection:
   confidence_threshold: 0.25      # YOLO detection sensitivity (0.1-0.9)
   object_frames: 5                # Frames to analyze per video
   force_cpu: false                # Force CPU even if GPU is available
+  face_model: hog                 # Face detection: "hog" (CPU) or "cnn" (GPU)
 
 scheduler:
   auto_run: true                  # Enable automatic processing
   interval_minutes: 60            # Check for new videos every hour
+
+logging:
+  level: INFO                     # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  gpu_monitoring:
+    enabled: true                 # Monitor GPU usage
+    interval_seconds: 5           # Log interval
+    log_on_idle: false            # Skip logging when GPU idle
+    max_scale_percent: 10         # UI color scale maximum
 
 image_review:
   auto_confirm_threshold: 0.85    # Auto-confirm high confidence (≥85%)
@@ -189,6 +206,19 @@ Use Config → Pathways to choose which cameras feed:
 - Verify Ring subscription is active
 - Check that cameras have recorded videos in timeframe (default: 24 hours)
 - Check Docker logs: `docker logs CritterCatcherAI`
+- Duplicate downloads prevented by database tracking (`/data/download_history.db`)
+
+### People Not Being Detected
+- Enable face recognition: Set `face_recognition.enabled: true` in config
+- Add "person" to YOLO categories via YOLO Categories page
+- Unknown people saved to `/data/sorted/security/unknown/`
+- Train faces in Face Training tab for recognition
+
+### GPU Indicator Not Working
+- Monitor recovers automatically from temporary errors (max 5 retries)
+- Check logs for "GPU monitoring" messages
+- Logs show GPU usage for each AI operation (YOLO, CLIP, Face Recognition)
+- Indicator updates every 2 seconds in UI
 
 ### Videos Show Black in Browser
 - Container automatically converts videos to H.264 for browser compatibility

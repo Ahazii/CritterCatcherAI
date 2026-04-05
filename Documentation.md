@@ -46,14 +46,22 @@ Primary configuration is in /config/config.yaml. Environment variables can
 override selected settings.
 
 Key settings:
+- yolo_manual_categories (list of manually enabled YOLO categories)
+- face_recognition.enabled (enable face recognition for person detection)
 - detection.confidence_threshold
 - detection.object_frames
 - detection.yolo_model
 - detection.force_cpu
+- detection.face_model ("hog" for CPU, "cnn" for GPU)
 - ring.download_hours
 - ring.download_limit
 - scheduler.auto_run
 - scheduler.interval_minutes
+- logging.level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- logging.gpu_monitoring.enabled
+- logging.gpu_monitoring.interval_seconds
+- logging.gpu_monitoring.log_on_idle
+- logging.gpu_monitoring.max_scale_percent
 - pathways.media.enabled
 - pathways.media.cameras
 - pathways.media.profiles
@@ -64,8 +72,11 @@ Key settings:
 - animal_training.min_negatives
 
 Logging
-- Default: stdout/stderr and /config/crittercatcher.log
-- Disable file logging: logging.file.enabled: false or LOG_TO_FILE=false
+- All logs: stdout/stderr (for Docker logs)
+- Errors only: /config/crittercatcher.log (automatic, 10MB max, 3 backups)
+- Logs tab: Switch between Docker logs (all) and error log (file)
+- GPU monitoring: Context-aware logging for YOLO, CLIP, Face Recognition operations
+- GPU monitor: Auto-recovery from errors (max 5 consecutive failures)
 
 Animal Profiles (CLIP)
 Profiles are stored in /data/animal_profiles/*.json and are created via the API
@@ -155,8 +166,12 @@ Troubleshooting
 - No CLIP matches: ensure profile exists in /data/animal_profiles and includes
   the detected YOLO category, and lower confidence_threshold if needed.
 - Missing videos: check Ring auth, logs, and download_hours window.
+- Duplicate downloads: prevented automatically via /data/download_history.db.
+- People not detected: enable face_recognition.enabled and add "person" to YOLO categories.
+- CLIP profiles not auto-sorting: disable requires_manual_confirmation in profile settings.
 - Training not happening: ensure confirmed/rejected JPG frames exist in /data/training/{profile}/.
 - Unknown people not saved: enable Security pathway and select cameras.
+- GPU indicator stops: monitor auto-recovers from errors (max 5 retries), check logs.
 
 Operational Notes
 - Camera names are derived from the Ring video filename prefix.
