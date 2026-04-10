@@ -428,8 +428,9 @@ def process_videos(config: dict, manual_trigger: bool = False):
             
             if detected_objects:
                 # Get highest confidence detection
-                best_category = max(detected_objects, key=lambda k: detected_objects[k]['confidence'])
-                best_confidence = detected_objects[best_category]['confidence']
+                # detected_objects format: {label: confidence} (simple float values)
+                best_category = max(detected_objects, key=detected_objects.get)
+                best_confidence = detected_objects[best_category]
                 yolo_category = best_category  # Save for metadata
                 yolo_confidence = best_confidence  # Save for metadata
                 
