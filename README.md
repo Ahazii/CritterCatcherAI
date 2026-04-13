@@ -75,9 +75,28 @@ Videos are automatically sorted to `/data/review/{category}/`:
 - Navigate to **Review** tab
 - View videos by category (car, dog, bird, person, etc.)
 - Tracked videos show animated bounding boxes
-- Confirm or reject videos
-- Assign to profile to extract training frames
-- Reject as negatives to improve profile training
+
+**Quick Actions (Simple Batch Operations):**
+- **✓ Confirm Videos** - Move to sorted folder without extracting training data
+- **✗ Reject Videos** - Delete videos (optionally save as negative training examples)
+- **→ Assign to Profile** - Extract frames as positive OR negative (all videos treated the same)
+
+**🎯 Advanced Review (Per-Video Control):**
+- Click **Advanced Review** button for granular control over each video
+- Configure each video independently:
+  - Choose different profiles for different videos
+  - Extract positive training frames ("Yes, this IS a hedgehog")
+  - Extract negative training frames ("No, this is NOT a hedgehog")
+  - Both positive AND negative from the same video (edge cases)
+  - Move to sorted folder or delete after processing
+- **Perfect for "unknown" category** where you need to manually identify and sort videos
+- Quick action buttons to apply same settings to all videos at once
+
+**Understanding Training Data:**
+- **Positive examples** - Frames containing your target animal → `/data/training/{profile}/confirmed/`
+- **Negative examples** - Frames NOT containing your target → `/data/training/{profile}/rejected/`
+- **CLIP requires both** - At least 10 positive AND 10 negative examples for effective training
+- The more examples you provide, the better CLIP becomes at identifying your target animals
 
 ### 3. Create CLIP Profiles (Optional)
 For fine-grained detection (e.g., specific bird species):
