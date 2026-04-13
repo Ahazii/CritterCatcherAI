@@ -103,9 +103,31 @@ Pathways (Media + Security)
 - Empty camera list = all cameras.
 
 Review Actions (Training)
-- Assign to profile: extracts training frames into /data/training/{profile}/confirmed.
-- Reject as negatives: extracts frames into /data/training/{profile}/rejected.
-- Reject without negatives deletes the video and does not train.
+
+Quick Actions (batch operations - all videos treated the same):
+- Confirm Videos: moves to /data/sorted/{category}/ without extracting training data.
+- Reject Videos: deletes videos, optionally saves as negative examples for a profile.
+- Assign to Profile: extracts frames as positive OR negative (all selected videos get same treatment).
+
+Advanced Review (per-video configuration):
+- Click "Advanced Review" button to configure each video individually.
+- Per-video controls:
+  - Profile selection (auto-suggested based on YOLO category)
+  - Extract Positive Training Frames → /data/training/{profile}/confirmed/
+  - Extract Negative Training Frames → /data/training/{profile}/rejected/
+  - Move to Sorted Folder → /data/sorted/{profile}/
+  - Delete After Processing
+  - Extract Faces (for person videos) → /data/training/faces/unassigned/
+- Quick action buttons apply same settings to all videos at once.
+- Perfect for "unknown" category where manual identification is needed.
+- Can assign different videos to different profiles in one operation.
+- Can extract both positive AND negative from the same video.
+
+Training Data Requirements:
+- Positive examples: frames that CONTAIN the target animal ("Yes, this IS a hedgehog").
+- Negative examples: frames that DO NOT contain the target ("No, this is NOT a hedgehog").
+- CLIP requires BOTH types: at least 10 positive AND 10 negative examples for effective training.
+- More examples = better accuracy.
 
 API Reference (selected)
 GET /api/status
@@ -119,6 +141,7 @@ GET /api/review/categories
 GET /api/review/categories/{category}/videos
 POST /api/review/confirm
 POST /api/review/reject
+POST /api/review/advanced-review (per-video actions with background tasks)
 POST /api/process
 POST /api/stop
 POST /api/ring/authenticate
