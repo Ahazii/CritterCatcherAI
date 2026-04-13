@@ -337,6 +337,268 @@
             pointer-events: none;
             z-index: 5;
         }
+
+        /* Help Section Styles */
+        .help-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .help-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .help-header h2 {
+            font-size: 1.25rem;
+            margin: 0;
+            color: var(--accent-color);
+        }
+
+        .help-toggle {
+            font-size: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .help-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .help-content {
+            margin-top: 1rem;
+            line-height: 1.8;
+        }
+
+        .help-content.hidden {
+            display: none;
+        }
+
+        .help-content h3 {
+            color: var(--accent-color);
+            font-size: 1.1rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .help-content ul {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .help-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        .help-content code {
+            background: var(--bg-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .info-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .info-box.warning {
+            border-left-color: var(--warning-color);
+        }
+
+        .info-box.success {
+            border-left-color: var(--success-color);
+        }
+
+        /* Advanced Review Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 12px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            margin: auto;
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--accent-color);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.5rem;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        .video-review-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .video-review-header {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .video-review-thumbnail {
+            width: 120px;
+            height: 80px;
+            background: #000;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .video-review-thumbnail video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        .video-review-info {
+            flex: 1;
+        }
+
+        .video-review-info h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+
+        .video-review-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .video-review-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .review-control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .review-control-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .review-control-group select {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .review-checkboxes {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .review-checkboxes label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .quick-actions {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .quick-actions h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+        }
+
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem;
+        }
+
+        .btn-advanced {
+            background: var(--accent-color);
+            border: 2px solid var(--accent-color);
+        }
+
+        .btn-advanced:hover:not(:disabled) {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+            box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -353,6 +615,82 @@
     </header>
 
     <div class="container">
+        <!-- Help Section -->
+        <div class="help-section">
+            <div class="help-header" onclick="toggleHelp()">
+                <h2>📚 How Video Review Works</h2>
+                <span class="help-toggle" id="helpToggle">▼</span>
+            </div>
+            <div class="help-content" id="helpContent">
+                <div class="info-box success">
+                    <strong>🎯 Quick Summary:</strong> CritterCatcherAI uses a <strong>two-stage pipeline</strong> (YOLO → CLIP) to detect and identify animals.
+                    Your job is to review videos and provide training data to improve CLIP profile accuracy.
+                </div>
+
+                <h3>Stage 1: YOLO Detection (Automatic)</h3>
+                <p>
+                    YOLO is a fast AI that detects <strong>80 broad categories</strong> (person, dog, bird, car, etc.). Videos are automatically
+                    sorted into folders like <code>/data/review/dog/</code> or <code>/data/review/unknown/</code> based on what YOLO detected.
+                </p>
+                <ul>
+                    <li><strong>Fast but not precise</strong> - YOLO can tell "dog" from "cat" but not "Jack Russell" from "Beagle"</li>
+                    <li><strong>Unknown category</strong> - Videos where YOLO couldn't identify anything, or confidence was too low</li>
+                    <li><strong>Your current category tab</strong> shows which YOLO category you're reviewing</li>
+                </ul>
+
+                <h3>Stage 2: CLIP Profiles (Your Training Data)</h3>
+                <p>
+                    CLIP is a slower, more precise AI that you train with examples. It can identify <strong>specific species or objects</strong>
+                    (e.g., "Hedgehog" vs "dog", or "Finch" vs "sparrow").
+                </p>
+                <ul>
+                    <li><strong>Positive examples</strong> - Videos/frames that CONTAIN the target animal ("Yes, this IS a hedgehog")</li>
+                    <li><strong>Negative examples</strong> - Videos/frames that DO NOT contain the target ("No, this is NOT a hedgehog")</li>
+                    <li><strong>Both are required</strong> - CLIP learns by comparing what something IS vs what it ISN'T</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <strong>⚠️ Important:</strong> Provide at least <strong>10 positive AND 10 negative examples</strong> before CLIP training will work effectively.
+                    The more examples you provide, the better CLIP becomes at identifying your target animals.
+                </div>
+
+                <h3>Review Workflow Options</h3>
+
+                <p><strong>Quick Actions (Simple Batch Operations):</strong></p>
+                <ul>
+                    <li><strong>✓ Confirm Videos</strong> - Move to <code>/data/sorted/{category}/</code>, no training data extracted</li>
+                    <li><strong>✗ Reject Videos</strong> - Delete videos (optionally save as negative examples for a profile)</li>
+                    <li><strong>→ Assign to Profile</strong> - Extract frames as positive OR negative (all videos get same treatment)</li>
+                </ul>
+
+                <p><strong>🎯 Advanced Review (Per-Video Control):</strong></p>
+                <ul>
+                    <li>Configure each video individually (positive, negative, both, or skip)</li>
+                    <li>Assign different videos to different profiles in one operation</li>
+                    <li>Mix actions: some positive, some negative, some delete</li>
+                    <li><strong>Use this for "unknown" videos</strong> where you need to manually identify and sort</li>
+                </ul>
+
+                <h3>What Happens to Videos</h3>
+                <ul>
+                    <li><strong>Positive training</strong> → Frames saved to <code>/data/training/{profile}/confirmed/</code> + video copied to <code>/data/sorted/{profile}/</code></li>
+                    <li><strong>Negative training</strong> → Frames saved to <code>/data/training/{profile}/rejected/</code>, video deleted</li>
+                    <li><strong>Both</strong> → Frames saved to both folders, video copied to sorted</li>
+                    <li><strong>Confirm only</strong> → Video moved to sorted, no training frames extracted</li>
+                    <li><strong>Reject/Delete</strong> → Video removed from review folder</li>
+                </ul>
+
+                <div class="info-box">
+                    <strong>💡 Pro Tip:</strong> When reviewing "unknown" videos:
+                    <ol>
+                        <li>Select all videos that are clearly NOT your target animal → Assign as <strong>negative examples</strong></li>
+                        <li>Select all videos that clearly ARE your target animal → Assign as <strong>positive examples</strong></li>
+                        <li>For mixed/uncertain batches, use <strong>Advanced Review</strong> to configure each video individually</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
         <div id="categoryTabs" class="category-tabs">
             <div class="loading">
                 <div class="spinner"></div>
@@ -367,6 +705,8 @@
                 <button class="btn btn-small" onclick="deselectAll()">Deselect All</button>
             </div>
             <div class="control-group">
+                <button class="btn btn-advanced btn-small" onclick="openAdvancedReview()" id="advancedReviewBtn" disabled>🎯 Advanced Review</button>
+                <span style="margin: 0 0.5rem; color: var(--text-secondary);">or use quick actions:</span>
                 <button class="btn btn-success btn-small" onclick="confirmVideos()" id="confirmBtn" disabled>✓ Confirm Videos</button>
                 <button class="btn btn-warning btn-small" onclick="confirmPerson()" id="confirmPersonBtn" disabled style="display:none;">👤 Confirm as Person</button>
                 <button class="btn btn-danger btn-small" onclick="rejectVideos()" id="rejectBtn" disabled>✗ Reject Videos</button>
@@ -394,6 +734,43 @@
             <div class="empty-state-icon">✅</div>
             <h3>All caught up!</h3>
             <p>No videos pending review in this category</p>
+        </div>
+    </div>
+
+    <!-- Advanced Review Modal -->
+    <div class="modal-overlay" id="advancedReviewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>🎯 Advanced Review - <span id="modalVideoCount">0</span> Videos</h2>
+                <button class="modal-close" onclick="closeAdvancedReview()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-box">
+                    <strong>📊 Per-Video Configuration:</strong> Choose what happens to each video individually. Extract training frames,
+                    assign to different profiles, or delete. Changes are applied when you click "Apply" at the bottom.
+                </div>
+
+                <div class="quick-actions">
+                    <h3>⚡ Quick Actions (Apply to All)</h3>
+                    <div class="quick-actions-grid">
+                        <button class="btn btn-small btn-success" onclick="applyToAll('positive')">✓ All Positive for Profile</button>
+                        <button class="btn btn-small btn-danger" onclick="applyToAll('negative')">✗ All Negative for Profile</button>
+                        <button class="btn btn-small btn-warning" onclick="applyToAll('both')">🔄 All Both (Pos + Neg)</button>
+                        <button class="btn btn-small" onclick="applyToAll('delete')">🗑️ All Delete Only</button>
+                    </div>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                        These buttons set the same action for all videos. You can still customize individual videos after.
+                    </p>
+                </div>
+
+                <div id="videoReviewList">
+                    <!-- Video review items will be inserted here dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeAdvancedReview()">Cancel</button>
+                <button class="btn btn-success" onclick="applyAdvancedReview()" id="applyAdvancedReviewBtn">Apply to <span id="applyCount">0</span> Videos</button>
+            </div>
         </div>
     </div>
 
@@ -805,15 +1182,6 @@
             updateSelectionInfo();
         }
 
-        function updateSelectionInfo() {
-            const count = selectedVideos.size;
-            document.getElementById('selectionInfo').textContent = `${count} of ${videos.length} selected`;
-            document.getElementById('assignBtn').disabled = count === 0;
-            document.getElementById('confirmBtn').disabled = count === 0;
-            document.getElementById('rejectBtn').disabled = count === 0;
-            document.getElementById('confirmPersonBtn').disabled = count === 0;
-        }
-
         async function assignToProfile() {
             const profileId = document.getElementById('profileSelect').value;
             if (!profileId) {
@@ -1055,6 +1423,277 @@
                 console.error('Failed to reject videos:', error);
                 alert('Error rejecting videos');
             }
+        }
+
+        // Help section toggle
+        function toggleHelp() {
+            const content = document.getElementById('helpContent');
+            const toggle = document.getElementById('helpToggle');
+            content.classList.toggle('hidden');
+            toggle.classList.toggle('collapsed');
+        }
+
+        // Advanced Review Modal State
+        let videoReviewStates = new Map(); // filename -> {profile_id, extract_positive, extract_negative, move_to_sorted, delete_after, extract_faces}
+
+        function openAdvancedReview() {
+            if (selectedVideos.size === 0) {
+                alert('No videos selected');
+                return;
+            }
+
+            // Initialize review states for selected videos
+            videoReviewStates.clear();
+            const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
+            
+            selectedVideoObjects.forEach(video => {
+                // Auto-suggest profile based on current category
+                const suggestedProfile = getSuggestedProfile(currentCategory);
+                
+                videoReviewStates.set(video.filename, {
+                    profile_id: suggestedProfile,
+                    extract_positive: false,
+                    extract_negative: false,
+                    move_to_sorted: false,
+                    delete_after: false,
+                    extract_faces: currentCategory === 'person' // Auto-enable for person videos
+                });
+            });
+
+            // Populate modal
+            document.getElementById('modalVideoCount').textContent = selectedVideos.size;
+            document.getElementById('applyCount').textContent = selectedVideos.size;
+            renderVideoReviewList(selectedVideoObjects);
+            
+            // Show modal
+            document.getElementById('advancedReviewModal').classList.add('active');
+        }
+
+        function closeAdvancedReview() {
+            document.getElementById('advancedReviewModal').classList.remove('active');
+            videoReviewStates.clear();
+        }
+
+        function getSuggestedProfile(category) {
+            // Find first enabled profile that matches the current YOLO category
+            const match = profiles.find(p => 
+                p.enabled && p.yolo_categories && 
+                p.yolo_categories.some(cat => cat.toLowerCase() === category?.toLowerCase())
+            );
+            return match ? match.id : (profiles.length > 0 && profiles[0].enabled ? profiles[0].id : '');
+        }
+
+        function renderVideoReviewList(videoObjects) {
+            const container = document.getElementById('videoReviewList');
+            container.innerHTML = '';
+
+            videoObjects.forEach(video => {
+                const state = videoReviewStates.get(video.filename);
+                const videoItem = document.createElement('div');
+                videoItem.className = 'video-review-item';
+                videoItem.dataset.filename = video.filename;
+
+                // Build profile options
+                let profileOptions = profiles.map(p => {
+                    const selected = p.id === state.profile_id ? 'selected' : '';
+                    const disabled = !p.enabled ? 'disabled' : '';
+                    const label = p.enabled ? p.name : `${p.name} (disabled)`;
+                    return `<option value="${p.id}" ${selected} ${disabled}>${label}</option>`;
+                }).join('');
+
+                // Detect objects info
+                const detections = Object.entries(video.detected_objects || {})
+                    .map(([label, data]) => {
+                        const conf = typeof data === 'number' ? data : data.confidence;
+                        return `${label}: ${(conf * 100).toFixed(0)}%`;
+                    })
+                    .join(', ') || 'None';
+
+                videoItem.innerHTML = `
+                    <div class="video-review-header">
+                        <div class="video-review-thumbnail">
+                            <video src="/api/review/video/${currentCategory}/${video.filename}" muted></video>
+                        </div>
+                        <div class="video-review-info">
+                            <h4>${video.filename}</h4>
+                            <div class="video-review-meta">
+                                <div>YOLO: ${video.yolo_category || 'unknown'} (${video.yolo_confidence ? (video.yolo_confidence * 100).toFixed(0) + '%' : 'N/A'})</div>
+                                <div>Detections: ${detections}</div>
+                                <div>Size: ${video.size_mb} MB</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="video-review-controls">
+                        <div class="review-control-group">
+                            <label>Profile</label>
+                            <select onchange="updateVideoState('${video.filename}', 'profile_id', this.value)">
+                                <option value="">-- Select Profile --</option>
+                                ${profileOptions}
+                            </select>
+                        </div>
+                        <div class="review-control-group">
+                            <label>Training Actions</label>
+                            <div class="review-checkboxes">
+                                <label>
+                                    <input type="checkbox" ${state.extract_positive ? 'checked' : ''} 
+                                           onchange="updateVideoState('${video.filename}', 'extract_positive', this.checked)">
+                                    ✅ Extract Positive Training Frames
+                                </label>
+                                <label>
+                                    <input type="checkbox" ${state.extract_negative ? 'checked' : ''} 
+                                           onchange="updateVideoState('${video.filename}', 'extract_negative', this.checked)">
+                                    ❌ Extract Negative Training Frames
+                                </label>
+                                <label>
+                                    <input type="checkbox" ${state.move_to_sorted ? 'checked' : ''} 
+                                           onchange="updateVideoState('${video.filename}', 'move_to_sorted', this.checked)">
+                                    📁 Move to Sorted Folder
+                                </label>
+                                <label>
+                                    <input type="checkbox" ${state.delete_after ? 'checked' : ''} 
+                                           onchange="updateVideoState('${video.filename}', 'delete_after', this.checked)">
+                                    🗑️ Delete After Processing
+                                </label>
+                                ${currentCategory === 'person' ? `
+                                <label>
+                                    <input type="checkbox" ${state.extract_faces ? 'checked' : ''} 
+                                           onchange="updateVideoState('${video.filename}', 'extract_faces', this.checked)">
+                                    👤 Extract Faces for Recognition
+                                </label>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-card); border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary);">
+                        <strong>Will:</strong> 
+                        ${state.extract_positive ? '✓ Save positive frames, ' : ''}
+                        ${state.extract_negative ? '✓ Save negative frames, ' : ''}
+                        ${state.move_to_sorted ? '✓ Copy to sorted, ' : ''}
+                        ${state.delete_after ? '✓ Delete video, ' : ''}
+                        ${state.extract_faces ? '✓ Extract faces, ' : ''}
+                        ${!state.extract_positive && !state.extract_negative && !state.move_to_sorted && !state.delete_after && !state.extract_faces ? 'No action selected' : ''}
+                    </div>
+                `;
+
+                container.appendChild(videoItem);
+            });
+        }
+
+        function updateVideoState(filename, key, value) {
+            const state = videoReviewStates.get(filename);
+            if (state) {
+                state[key] = value;
+                // Re-render to update preview text
+                const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
+                renderVideoReviewList(selectedVideoObjects);
+            }
+        }
+
+        function applyToAll(action) {
+            const profileSelect = document.getElementById('profileSelect');
+            const defaultProfile = profileSelect.value || getSuggestedProfile(currentCategory);
+
+            videoReviewStates.forEach((state, filename) => {
+                // Reset all flags
+                state.extract_positive = false;
+                state.extract_negative = false;
+                state.move_to_sorted = false;
+                state.delete_after = false;
+                state.profile_id = defaultProfile;
+
+                // Apply action
+                switch(action) {
+                    case 'positive':
+                        state.extract_positive = true;
+                        state.move_to_sorted = true;
+                        break;
+                    case 'negative':
+                        state.extract_negative = true;
+                        state.delete_after = true;
+                        break;
+                    case 'both':
+                        state.extract_positive = true;
+                        state.extract_negative = true;
+                        state.move_to_sorted = true;
+                        break;
+                    case 'delete':
+                        state.delete_after = true;
+                        break;
+                }
+            });
+
+            // Re-render
+            const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
+            renderVideoReviewList(selectedVideoObjects);
+        }
+
+        async function applyAdvancedReview() {
+            // Build actions array
+            const actions = [];
+            videoReviewStates.forEach((state, filename) => {
+                actions.push({
+                    filename: filename,
+                    category: currentCategory,
+                    profile_id: state.profile_id || null,
+                    extract_positive: state.extract_positive,
+                    extract_negative: state.extract_negative,
+                    move_to_sorted: state.move_to_sorted,
+                    delete_after: state.delete_after,
+                    extract_faces: state.extract_faces
+                });
+            });
+
+            // Validate
+            const invalidActions = actions.filter(a => 
+                (a.extract_positive || a.extract_negative || a.move_to_sorted) && !a.profile_id
+            );
+            if (invalidActions.length > 0) {
+                alert(`${invalidActions.length} video(s) need a profile selected for their training/sorting actions.`);
+                return;
+            }
+
+            closeAdvancedReview();
+
+            try {
+                const response = await fetch('/api/review/advanced-review', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ actions })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'processing') {
+                    // Start task tracking with status widget (non-blocking)
+                    startTaskTracking(data.task_id, 'Advanced Review Processing');
+                    // Refresh categories after task completes
+                    const checkCompletion = setInterval(async () => {
+                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(checkCompletion);
+                            await loadCategories();
+                        }
+                    }, 2000);
+                } else if (data.status === 'success') {
+                    alert(`✓ Processed ${data.processed_count} videos successfully!`);
+                    await loadCategories();
+                } else {
+                    alert('Failed to process videos');
+                }
+            } catch (error) {
+                console.error('Failed to apply advanced review:', error);
+                alert('Error applying advanced review');
+            }
+        }
+
+        function updateSelectionInfo() {
+            const count = selectedVideos.size;
+            document.getElementById('selectionInfo').textContent = `${count} of ${videos.length} selected`;
+            document.getElementById('assignBtn').disabled = count === 0;
+            document.getElementById('confirmBtn').disabled = count === 0;
+            document.getElementById('rejectBtn').disabled = count === 0;
+            document.getElementById('confirmPersonBtn').disabled = count === 0;
+            document.getElementById('advancedReviewBtn').disabled = count === 0;
         }
 
         init();
