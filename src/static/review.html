@@ -1122,6 +1122,8 @@
                 'assign_positive': '→ Positive Training',
                 'assign_negative': '→ Negative Training',
                 'assign_both': '🔄 Both (Pos + Neg)',
+                'assign_face_positive': '👤 Positive Face Training',
+                'assign_face_negative': '👤 Negative Face Training',
                 'confirm_person': '👤 Confirm Person',
                 'advanced': '🎯 Advanced'
             };
@@ -1196,6 +1198,8 @@
                 assign_positive: [],
                 assign_negative: [],
                 assign_both: [],
+                assign_face_positive: [],
+                assign_face_negative: [],
                 confirm_person: [],
                 advanced: []
             };
@@ -1226,8 +1230,16 @@
                     completed += actionGroups.confirm_person.length;
                 }
                 
-                // Process assignments (positive, negative, both)
+                // Process animal assignments (positive, negative, both)
                 for (const actionType of ['assign_positive', 'assign_negative', 'assign_both']) {
+                    if (actionGroups[actionType].length > 0) {
+                        await processQueuedActions(actionType, actionGroups[actionType]);
+                        completed += actionGroups[actionType].length;
+                    }
+                }
+                
+                // Process face assignments (positive, negative)
+                for (const actionType of ['assign_face_positive', 'assign_face_negative']) {
                     if (actionGroups[actionType].length > 0) {
                         await processQueuedActions(actionType, actionGroups[actionType]);
                         completed += actionGroups[actionType].length;
@@ -1302,6 +1314,17 @@
                             extract_type: extractType
                         };
                         break;
+                    case 'assign_face_positive':
+                    case 'assign_face_negative':
+                        endpoint = `/api/review/categories/person/assign-face-profile`;
+                        const faceExtractType = action === 'assign_face_positive' ? 'positive' : 'negative';
+                        body = {
+                            filenames,
+                            profile_id: config.profile_id,
+                            extract_frames: config.extract_frames !== false,
+                            extract_type: faceExtractType
+                        };
+                        break;
                     default:
                         throw new Error(`Unknown action: ${action}`);
                 }
@@ -1346,9 +1369,18 @@
 
         async function loadProfiles() {
             try {
-                const response = await fetch('/api/animal-profiles');
-                const data = await response.json();
-                profiles = data.profiles || [];
+                // Load both animal and face profiles
+                const animalResponse = await fetch('/api/animal-profiles');
+                const animalData = await animalResponse.json();
+                
+                const faceResponse = await fetch('/api/face-profiles');
+                const faceData = await faceResponse.json();
+                
+                // Store both for use in dropdown
+                profiles = {
+                    animal: animalData.profiles || [],
+                    face: faceData.profiles || []
+                };
                 
                 updateProfileDropdown();
             } catch (error) {
@@ -1358,46 +1390,69 @@
         
         function updateProfileDropdown() {
             const select = document.getElementById('profileSelect');
+            const label = select.previousElementSibling;
+            
+            // Check if current category is "person"
+            const isPerson = currentCategory === 'person';
+            
+            // Update label text
+            if (label && label.tagName === 'LABEL') {
+                label.textContent = isPerson ? 'Or assign to person:' : 'Or assign to:';
+            }
+            
             select.innerHTML = '<option value="">-- Select Profile --</option>';
             
-            if (profiles.length === 0) {
+            // Use face profiles for person category, animal profiles otherwise
+            const profileList = isPerson ? (profiles.face || []) : (profiles.animal || []);
+            
+            if (profileList.length === 0) {
                 return;
             }
             
-            // Separate profiles into matching and non-matching categories
-            const matching = profiles.filter(p => 
-                p.enabled && p.yolo_categories && p.yolo_categories.some(cat => 
-                    cat.toLowerCase() === currentCategory?.toLowerCase()
-                )
-            );
-            const others = profiles.filter(p => !matching.includes(p));
-            
-            // Add matching profiles first (if any)
-            if (matching.length > 0) {
-                const matchGroup = document.createElement('optgroup');
-                matchGroup.label = `✓ Monitors "${currentCategory}"`;
-                matching.forEach(profile => {
+            if (isPerson) {
+                // For person category, just list all face profiles
+                profileList.forEach(profile => {
                     const option = document.createElement('option');
                     option.value = profile.id;
                     option.textContent = profile.name;
-                    matchGroup.appendChild(option);
+                    select.appendChild(option);
                 });
-                select.appendChild(matchGroup);
-            }
-            
-            // Add other profiles (if any)
-            if (others.length > 0) {
-                const otherGroup = document.createElement('optgroup');
-                otherGroup.label = '📂 Other Profiles';
-                others.forEach(profile => {
-                    const option = document.createElement('option');
-                    option.value = profile.id;
-                    // Show which categories this profile monitors
-                    const categories = profile.yolo_categories ? profile.yolo_categories.join(', ') : 'none';
-                    option.textContent = `${profile.name} (monitors: ${categories})`;
-                    otherGroup.appendChild(option);
-                });
-                select.appendChild(otherGroup);
+            } else {
+                // For animal categories, separate into matching and non-matching
+                const matching = profileList.filter(p => 
+                    p.enabled && p.yolo_categories && p.yolo_categories.some(cat => 
+                        cat.toLowerCase() === currentCategory?.toLowerCase()
+                    )
+                );
+                const others = profileList.filter(p => !matching.includes(p));
+                
+                // Add matching profiles first (if any)
+                if (matching.length > 0) {
+                    const matchGroup = document.createElement('optgroup');
+                    matchGroup.label = `✓ Monitors "${currentCategory}"`;
+                    matching.forEach(profile => {
+                        const option = document.createElement('option');
+                        option.value = profile.id;
+                        option.textContent = profile.name;
+                        matchGroup.appendChild(option);
+                    });
+                    select.appendChild(matchGroup);
+                }
+                
+                // Add other profiles (if any)
+                if (others.length > 0) {
+                    const otherGroup = document.createElement('optgroup');
+                    otherGroup.label = '📂 Other Profiles';
+                    others.forEach(profile => {
+                        const option = document.createElement('option');
+                        option.value = profile.id;
+                        // Show which categories this profile monitors
+                        const categories = profile.yolo_categories ? profile.yolo_categories.join(', ') : 'none';
+                        option.textContent = `${profile.name} (monitors: ${categories})`;
+                        otherGroup.appendChild(option);
+                    });
+                    select.appendChild(otherGroup);
+                }
             }
         }
 
@@ -1713,9 +1768,9 @@
             // Determine action type based on checkboxes
             let action;
             if (saveNegatives) {
-                action = 'assign_negative';
+                action = currentCategory === 'person' ? 'assign_face_negative' : 'assign_negative';
             } else {
-                action = 'assign_positive';
+                action = currentCategory === 'person' ? 'assign_face_positive' : 'assign_positive';
             }
             
             // Add to queue instead of executing immediately
@@ -1791,10 +1846,27 @@
             
             const filenames = Array.from(selectedVideos);
             
-            // Add to queue instead of executing immediately
-            filenames.forEach(filename => {
-                addToQueue(filename, currentCategory, 'confirm');
-            });
+            // For person category, require a face profile selection
+            if (currentCategory === 'person') {
+                const profileId = document.getElementById('profileSelect').value;
+                if (!profileId) {
+                    alert('Please select a person profile to extract faces for positive training');
+                    return;
+                }
+                
+                // Add to queue as face positive training
+                filenames.forEach(filename => {
+                    addToQueue(filename, currentCategory, 'assign_face_positive', {
+                        profile_id: profileId,
+                        extract_frames: true
+                    });
+                });
+            } else {
+                // Regular confirm for animal categories
+                filenames.forEach(filename => {
+                    addToQueue(filename, currentCategory, 'confirm');
+                });
+            }
             
             // Clear selection
             deselectAll();
@@ -1818,13 +1890,24 @@
             
             const filenames = Array.from(selectedVideos);
             
-            // Add to queue instead of executing immediately
-            filenames.forEach(filename => {
-                addToQueue(filename, currentCategory, 'reject', {
-                    save_negatives: saveNegatives,
-                    profile_id: profileId
+            // For person category with negative training
+            if (currentCategory === 'person' && saveNegatives && profileId) {
+                // Extract as negative face training
+                filenames.forEach(filename => {
+                    addToQueue(filename, currentCategory, 'assign_face_negative', {
+                        profile_id: profileId,
+                        extract_frames: true
+                    });
                 });
-            });
+            } else {
+                // Regular reject (for animals or person without profile)
+                filenames.forEach(filename => {
+                    addToQueue(filename, currentCategory, 'reject', {
+                        save_negatives: saveNegatives,
+                        profile_id: profileId
+                    });
+                });
+            }
             
             // Clear selection
             deselectAll();

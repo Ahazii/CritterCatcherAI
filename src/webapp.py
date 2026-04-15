@@ -3869,6 +3869,248 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def extract_faces_from_video_sync(video_path: Path, output_dir: Path, profile_name: str, max_faces: int = 10) -> int:
+    """Extract faces from a video file and save to output directory.
+    
+    Args:
+        video_path: Path to source video file
+        output_dir: Directory to save extracted face images
+        profile_name: Name of profile (for filename prefix)
+        max_faces: Maximum number of faces to extract per video
+    
+    Returns:
+        Number of faces extracted
+    """
+    import cv2
+    import face_recognition as fr
+    import PIL.Image as Image
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Set permissions (rule: folders created by AI should have full permissions)
+    try:
+        import stat
+        output_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
+    except Exception as e:
+        logger.warning(f"Could not set permissions on {output_dir}: {e}")
+    
+    cap = cv2.VideoCapture(str(video_path))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
+    
+    face_count = 0
+    frame_count = 0
+    
+    while face_count < max_faces:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if frame_count % frame_interval == 0:
+            # Detect faces
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            face_locations = fr.face_locations(rgb_frame)
+            
+            # Save each detected face
+            for top, right, bottom, left in face_locations:
+                # Crop face with padding
+                padding = 20
+                top = max(0, top - padding)
+                left = max(0, left - padding)
+                bottom = min(frame.shape[0], bottom + padding)
+                right = min(frame.shape[1], right + padding)
+                
+                face_img = rgb_frame[top:bottom, left:right]
+                
+                # Save face image
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                face_filename = f"{profile_name}_{video_path.stem}_{timestamp}_{face_count:03d}.jpg"
+                face_path = output_dir / face_filename
+                
+                face_pil = Image.fromarray(face_img)
+                face_pil.save(str(face_path))
+                
+                # Save metadata
+                metadata = {
+                    "source_video": video_path.name,
+                    "profile": profile_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "face_index": face_count
+                }
+                metadata_path = face_path.with_suffix(".json")
+                with open(metadata_path, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+                
+                face_count += 1
+                if face_count >= max_faces:
+                    break
+        
+        frame_count += 1
+    
+    cap.release()
+    return face_count
+
+
+@app.post("/api/review/categories/person/assign-face-profile")
+async def assign_person_video_to_face_profile(request: dict, background_tasks: BackgroundTasks):
+    """Assign person videos to a face profile with training extraction (unified workflow)."""
+    global face_profile_manager
+    
+    try:
+        filenames = request.get('filenames', [])
+        profile_id = request.get('profile_id')
+        extract_frames = bool(request.get('extract_frames', True))
+        extract_type = request.get('extract_type', 'positive')  # 'positive', 'negative', or 'both'
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="Missing filenames")
+        if not profile_id:
+            raise HTTPException(status_code=400, detail="Missing profile_id")
+        if extract_type not in ['positive', 'negative', 'both']:
+            raise HTTPException(status_code=400, detail="extract_type must be 'positive', 'negative', or 'both'")
+        
+        # Get face profile
+        if not face_profile_manager:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        profile = face_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
+        
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
+        
+        def assign_face_profile_background():
+            """Background task to extract faces and move videos."""
+            try:
+                task_tracker.start_task(task_id, message=f"Extracting faces for '{profile.name}'...")
+                results = {"processed": [], "failed": [], "total_faces": 0}
+                
+                review_path = Path("/data/review/person")
+                sorted_path = Path("/data/sorted") / profile_id
+                sorted_path.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions on sorted folder
+                try:
+                    import stat
+                    sorted_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as e:
+                    logger.warning(f"Could not set permissions: {e}")
+                
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Processing video {idx} of {len(filenames)}...",
+                            details=f"Extracting faces from {filename}"
+                        )
+                        
+                        video_path = review_path / filename
+                        if not video_path.exists():
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                            continue
+                        
+                        faces_extracted = 0
+                        
+                        # Extract positive training frames
+                        if extract_frames and extract_type in ['positive', 'both']:
+                            positive_dir = Path("/data/face_training") / profile_id / "confirmed"
+                            faces = extract_faces_from_video_sync(video_path, positive_dir, profile.name)
+                            faces_extracted += faces
+                            logger.info(f"Extracted {faces} positive faces from {filename} for {profile.name}")
+                        
+                        # Extract negative training frames
+                        if extract_frames and extract_type in ['negative', 'both']:
+                            negative_dir = Path("/data/face_training") / profile_id / "rejected"
+                            faces = extract_faces_from_video_sync(video_path, negative_dir, profile.name)
+                            faces_extracted += faces
+                            logger.info(f"Extracted {faces} negative faces from {filename} for {profile.name}")
+                        
+                        # Move video to sorted if positive or both
+                        if extract_type in ['positive', 'both']:
+                            dest_path = sorted_path / filename
+                            if dest_path.exists():
+                                counter = 1
+                                while dest_path.exists():
+                                    dest_path = sorted_path / f"{video_path.stem}_{counter}{video_path.suffix}"
+                                    counter += 1
+                            
+                            import shutil
+                            shutil.move(str(video_path), str(dest_path))
+                            
+                            # Move metadata
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                                shutil.move(str(metadata_path), str(dest_metadata))
+                        else:
+                            # Delete video (negative only)
+                            video_path.unlink()
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                metadata_path.unlink()
+                        
+                        # Delete tracked video if exists
+                        tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
+                        if tracked_video_path.exists():
+                            tracked_video_path.unlink()
+                        
+                        results["processed"].append({
+                            "filename": filename,
+                            "faces_extracted": faces_extracted
+                        })
+                        results["total_faces"] += faces_extracted
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+                
+                # Update profile counts
+                if extract_type == 'positive':
+                    new_confirmed = profile.confirmed_count + results["total_faces"]
+                    face_profile_manager.update_profile(profile_id, confirmed_count=new_confirmed)
+                elif extract_type == 'negative':
+                    new_rejected = profile.rejected_count + results["total_faces"]
+                    face_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
+                elif extract_type == 'both':
+                    # Distribute roughly evenly
+                    half = results["total_faces"] // 2
+                    new_confirmed = profile.confirmed_count + half
+                    new_rejected = profile.rejected_count + (results["total_faces"] - half)
+                    face_profile_manager.update_profile(
+                        profile_id,
+                        confirmed_count=new_confirmed,
+                        rejected_count=new_rejected
+                    )
+                
+                # Task completed
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_faces']} faces for '{profile.name}'"
+                )
+                
+            except Exception as e:
+                logger.error(f"Assign face profile task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(assign_face_profile_background)
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "profile_name": profile.name,
+            "message": f"Started face extraction for '{profile.name}'",
+            "video_count": len(filenames)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to assign person videos to face profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/progress/{task_id}")
 async def get_task_progress(task_id: str):
     """Get progress of a background task."""
