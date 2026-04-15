@@ -338,6 +338,151 @@
             z-index: 5;
         }
 
+        /* Queue System Styles */
+        .queue-summary {
+            background: var(--bg-card);
+            border: 2px solid var(--accent-color);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+
+        .queue-summary.active {
+            display: block;
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .queue-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .queue-toggle {
+            font-size: 1.25rem;
+            transition: transform 0.3s ease;
+        }
+
+        .queue-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .queue-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .queue-content.hidden {
+            display: none;
+        }
+
+        .queue-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .queue-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .queue-item-info {
+            flex: 1;
+        }
+
+        .queue-item-filename {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .queue-item-action {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .queue-item-remove {
+            background: var(--danger-color);
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+
+        .queue-item-remove:hover {
+            background: #c53030;
+            transform: scale(1.1);
+        }
+
+        .queue-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .btn-run-queue {
+            background: linear-gradient(135deg, var(--success-color), #38a169);
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+        }
+
+        .btn-run-queue:hover:not(:disabled) {
+            background: linear-gradient(135deg, #38a169, #2f855a);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(72, 187, 120, 0.4);
+        }
+
+        /* Queued Video State */
+        .video-card.queued {
+            opacity: 0.5;
+            border-color: var(--warning-color);
+        }
+
+        .video-card.queued .video-info::before {
+            content: '⏳ Queued';
+            display: block;
+            background: var(--warning-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            width: fit-content;
+        }
+
+        .video-card.queued:hover {
+            opacity: 0.7;
+        }
+
         /* Help Section Styles */
         .help-section {
             background: var(--bg-card);
@@ -698,6 +843,27 @@
             </div>
         </div>
 
+        <!-- Queue Summary Bar -->
+        <div class="queue-summary" id="queueSummary">
+            <div class="queue-header" onclick="toggleQueue()">
+                <h3>
+                    📋 Action Queue: <span id="queueCount">0</span> videos
+                    <span class="queue-toggle" id="queueToggle">▼</span>
+                </h3>
+                <button class="btn btn-small btn-danger" onclick="clearQueue()" style="margin-left: auto; margin-right: 1rem;">🗑️ Clear Queue</button>
+            </div>
+            <div class="queue-content" id="queueContent">
+                <div class="queue-items" id="queueItems">
+                    <!-- Queue items will be inserted here dynamically -->
+                </div>
+                <div class="queue-actions">
+                    <button class="btn btn-run-queue" onclick="runQueue()" id="runQueueBtn">
+                        ▶️ Run Queue (<span id="queueCountBtn">0</span> videos)
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div class="controls" id="controls" style="display: none;">
             <div class="control-group">
                 <span class="selection-info" id="selectionInfo">0 selected</span>
@@ -769,7 +935,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn" onclick="closeAdvancedReview()">Cancel</button>
-                <button class="btn btn-success" onclick="applyAdvancedReview()" id="applyAdvancedReviewBtn">Apply to <span id="applyCount">0</span> Videos</button>
+                <button class="btn btn-success" onclick="applyAdvancedReview()" id="applyAdvancedReviewBtn">Add to Queue (<span id="applyCount">0</span> Videos)</button>
             </div>
         </div>
     </div>
@@ -836,6 +1002,342 @@
         let videos = [];
         let selectedVideos = new Set();
         let profiles = [];
+        
+        // Queue state management
+        let queuedActions = new Map(); // Map<filename, {category, action, config}>
+        let queueExpanded = false;
+        
+        // Queue management functions
+        function addToQueue(filename, category, action, config = {}) {
+            queuedActions.set(filename, {category, action, config});
+            updateQueueUI();
+            updateVideoCardQueuedState(filename, true);
+        }
+        
+        function removeFromQueue(filename) {
+            queuedActions.delete(filename);
+            updateQueueUI();
+            updateVideoCardQueuedState(filename, false);
+        }
+        
+        function clearQueue() {
+            if (queuedActions.size === 0) return;
+            
+            if (!confirm(`Clear all ${queuedActions.size} queued actions?`)) return;
+            
+            // Remove visual state from all queued videos
+            queuedActions.forEach((_, filename) => {
+                updateVideoCardQueuedState(filename, false);
+            });
+            
+            queuedActions.clear();
+            updateQueueUI();
+        }
+        
+        function toggleQueue() {
+            queueExpanded = !queueExpanded;
+            const content = document.getElementById('queueContent');
+            const toggle = document.getElementById('queueToggle');
+            
+            if (queueExpanded) {
+                content.style.display = 'block';
+                toggle.textContent = '▲';
+            } else {
+                content.style.display = 'none';
+                toggle.textContent = '▼';
+            }
+        }
+        
+        function updateQueueUI() {
+            const queueCount = queuedActions.size;
+            const summaryDiv = document.getElementById('queueSummary');
+            const queueCountSpan = document.getElementById('queueCount');
+            const queueCountBtnSpan = document.getElementById('queueCountBtn');
+            const queueItemsDiv = document.getElementById('queueItems');
+            const runQueueBtn = document.getElementById('runQueueBtn');
+            
+            queueCountSpan.textContent = queueCount;
+            queueCountBtnSpan.textContent = queueCount;
+            
+            if (queueCount === 0) {
+                summaryDiv.style.display = 'none';
+                runQueueBtn.disabled = true;
+            } else {
+                summaryDiv.style.display = 'block';
+                runQueueBtn.disabled = false;
+            }
+            
+            // Build queue items list
+            queueItemsDiv.innerHTML = '';
+            
+            if (queueCount > 0) {
+                const actionCounts = {};
+                queuedActions.forEach(({action}) => {
+                    actionCounts[action] = (actionCounts[action] || 0) + 1;
+                });
+                
+                // Summary by action type
+                const summaryList = Object.entries(actionCounts)
+                    .map(([action, count]) => `<strong>${getActionLabel(action)}:</strong> ${count}`)
+                    .join(' &nbsp;|&nbsp; ');
+                
+                const summaryP = document.createElement('p');
+                summaryP.style.marginBottom = '1rem';
+                summaryP.style.color = 'var(--text-secondary)';
+                summaryP.innerHTML = summaryList;
+                queueItemsDiv.appendChild(summaryP);
+                
+                // Individual queue items
+                queuedActions.forEach(({category, action, config}, filename) => {
+                    const item = document.createElement('div');
+                    item.className = 'queue-item';
+                    
+                    const label = document.createElement('span');
+                    label.textContent = `${filename} - ${getActionLabel(action)} (${category})`;
+                    if (config.profile_id) {
+                        const profile = profiles.find(p => p.id === config.profile_id);
+                        label.textContent += ` → ${profile?.name || config.profile_id}`;
+                    }
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.textContent = '×';
+                    removeBtn.className = 'btn btn-small btn-danger';
+                    removeBtn.style.marginLeft = 'auto';
+                    removeBtn.onclick = () => removeFromQueue(filename);
+                    
+                    item.appendChild(label);
+                    item.appendChild(removeBtn);
+                    queueItemsDiv.appendChild(item);
+                });
+            }
+            
+            // Update category tab headers
+            updateCategoryTabHeaders();
+        }
+        
+        function getActionLabel(action) {
+            const labels = {
+                'confirm': '✓ Confirm',
+                'reject': '✗ Reject',
+                'assign_positive': '→ Positive Training',
+                'assign_negative': '→ Negative Training',
+                'assign_both': '🔄 Both (Pos + Neg)',
+                'confirm_person': '👤 Confirm Person',
+                'advanced': '🎯 Advanced'
+            };
+            return labels[action] || action;
+        }
+        
+        function updateCategoryTabHeaders() {
+            // Count queued videos per category
+            const queuedByCategory = {};
+            queuedActions.forEach(({category}) => {
+                queuedByCategory[category] = (queuedByCategory[category] || 0) + 1;
+            });
+            
+            // Update tab labels
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                const match = tab.textContent.match(/^(.+?)\s*\((\d+)/);
+                if (match) {
+                    const categoryName = match[1];
+                    const cat = categories.find(c => c.name === categoryName);
+                    if (cat) {
+                        const queued = queuedByCategory[categoryName] || 0;
+                        const toReview = cat.video_count;
+                        
+                        if (queued > 0) {
+                            tab.textContent = `${categoryName} (${toReview} to review, ${queued} queued)`;
+                        } else {
+                            tab.textContent = `${categoryName} (${toReview})`;
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateVideoCardQueuedState(filename, isQueued) {
+            const videoCard = document.querySelector(`[data-filename="${filename}"]`);
+            if (!videoCard) return;
+            
+            if (isQueued) {
+                videoCard.classList.add('queued');
+                
+                // Add queued badge if not present
+                if (!videoCard.querySelector('.queued-badge')) {
+                    const badge = document.createElement('div');
+                    badge.className = 'queued-badge';
+                    badge.textContent = '⏳ Queued';
+                    videoCard.appendChild(badge);
+                }
+            } else {
+                videoCard.classList.remove('queued');
+                const badge = videoCard.querySelector('.queued-badge');
+                if (badge) badge.remove();
+            }
+        }
+        
+        async function runQueue() {
+            if (queuedActions.size === 0) return;
+            
+            const totalActions = queuedActions.size;
+            if (!confirm(`Execute ${totalActions} queued actions?`)) return;
+            
+            const runBtn = document.getElementById('runQueueBtn');
+            runBtn.disabled = true;
+            runBtn.textContent = `⏳ Processing ${totalActions} videos...`;
+            
+            let completed = 0;
+            let failed = 0;
+            
+            // Group actions by type for efficient processing
+            const actionGroups = {
+                confirm: [],
+                reject: [],
+                assign_positive: [],
+                assign_negative: [],
+                assign_both: [],
+                confirm_person: [],
+                advanced: []
+            };
+            
+            queuedActions.forEach(({category, action, config}, filename) => {
+                if (actionGroups[action]) {
+                    actionGroups[action].push({filename, category, config});
+                }
+            });
+            
+            // Execute each action group
+            try {
+                // Process confirms
+                if (actionGroups.confirm.length > 0) {
+                    await processQueuedActions('confirm', actionGroups.confirm);
+                    completed += actionGroups.confirm.length;
+                }
+                
+                // Process rejects
+                if (actionGroups.reject.length > 0) {
+                    await processQueuedActions('reject', actionGroups.reject);
+                    completed += actionGroups.reject.length;
+                }
+                
+                // Process person confirms
+                if (actionGroups.confirm_person.length > 0) {
+                    await processQueuedActions('confirm_person', actionGroups.confirm_person);
+                    completed += actionGroups.confirm_person.length;
+                }
+                
+                // Process assignments (positive, negative, both)
+                for (const actionType of ['assign_positive', 'assign_negative', 'assign_both']) {
+                    if (actionGroups[actionType].length > 0) {
+                        await processQueuedActions(actionType, actionGroups[actionType]);
+                        completed += actionGroups[actionType].length;
+                    }
+                }
+                
+                // Process advanced reviews (each one separately as they have unique configs)
+                for (const item of actionGroups.advanced) {
+                    try {
+                        await processAdvancedReviewAction(item);
+                        completed++;
+                        removeFromQueue(item.filename);
+                    } catch (error) {
+                        console.error(`Failed to process ${item.filename}:`, error);
+                        failed++;
+                    }
+                }
+                
+                alert(`Queue complete!\n✓ ${completed} successful\n✗ ${failed} failed`);
+                
+            } catch (error) {
+                console.error('Queue execution error:', error);
+                alert(`Queue execution failed: ${error.message}`);
+            } finally {
+                // Clear queue and reload
+                queuedActions.clear();
+                updateQueueUI();
+                await loadCategories();
+                
+                runBtn.disabled = false;
+                runBtn.innerHTML = '▶️ Run Queue (<span id="queueCountBtn">0</span> videos)';
+            }
+        }
+        
+        async function processQueuedActions(action, items) {
+            // Group by category for batch processing
+            const byCategory = {};
+            items.forEach(item => {
+                if (!byCategory[item.category]) byCategory[item.category] = [];
+                byCategory[item.category].push(item);
+            });
+            
+            for (const [category, categoryItems] of Object.entries(byCategory)) {
+                const filenames = categoryItems.map(i => i.filename);
+                const config = categoryItems[0].config; // Use first item's config (should be same for grouped actions)
+                
+                let endpoint, body;
+                
+                switch (action) {
+                    case 'confirm':
+                        endpoint = `/api/review/categories/${category}/confirm`;
+                        body = {filenames};
+                        break;
+                    case 'reject':
+                        endpoint = `/api/review/categories/${category}/reject`;
+                        body = {filenames, save_negatives: config.save_negatives || false, profile_id: config.profile_id};
+                        break;
+                    case 'confirm_person':
+                        endpoint = `/api/review/categories/${category}/confirm-person`;
+                        body = {filenames};
+                        break;
+                    case 'assign_positive':
+                    case 'assign_negative':
+                    case 'assign_both':
+                        endpoint = `/api/review/categories/${category}/assign-profile`;
+                        const extractType = action === 'assign_positive' ? 'positive' :
+                                          action === 'assign_negative' ? 'negative' : 'both';
+                        body = {
+                            filenames,
+                            profile_id: config.profile_id,
+                            extract_frames: config.extract_frames !== false,
+                            extract_type: extractType
+                        };
+                        break;
+                    default:
+                        throw new Error(`Unknown action: ${action}`);
+                }
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to ${action}: ${response.statusText}`);
+                }
+                
+                // Remove from queue
+                filenames.forEach(f => removeFromQueue(f));
+            }
+        }
+        
+        async function processAdvancedReviewAction(item) {
+            const response = await fetch('/api/review/advanced-review', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    videos: [{
+                        filename: item.filename,
+                        category: item.category,
+                        ...item.config
+                    }]
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to process advanced review: ${response.statusText}`);
+            }
+        }
 
         async function init() {
             await loadProfiles();
@@ -1077,9 +1579,19 @@
             // Card click handler (exclude video and checkbox)
             card.onclick = (e) => {
                 if (e.target.tagName !== 'VIDEO' && !e.target.classList.contains('select-checkbox')) {
-                    toggleSelection(video.filename);
+                    // If video is queued, remove from queue on click
+                    if (queuedActions.has(video.filename)) {
+                        removeFromQueue(video.filename);
+                    } else {
+                        toggleSelection(video.filename);
+                    }
                 }
             };
+            
+            // Check if this video is already queued and apply state
+            if (queuedActions.has(video.filename)) {
+                updateVideoCardQueuedState(video.filename, true);
+            }
             
             return card;
         }
@@ -1198,48 +1710,24 @@
             const extractFrames = document.getElementById('extractFrames').checked;
             const saveNegatives = document.getElementById('saveNegatives').checked;
             
-            // Confirm negative assignment
+            // Determine action type based on checkboxes
+            let action;
             if (saveNegatives) {
-                const confirmed = confirm(
-                    `Add ${selectedVideos.size} video(s) as NEGATIVE examples for this profile?\n\n` +
-                    `This will:\n` +
-                    `• Extract frames to /data/training/{profile}/rejected/\n` +
-                    `• Use these as "what NOT to detect"\n` +
-                    `• Help train the AI to distinguish this species\n\n` +
-                    `Use this for videos that are clearly NOT the target animal.`
-                );
-                if (!confirmed) return;
+                action = 'assign_negative';
+            } else {
+                action = 'assign_positive';
             }
             
-            try {
-                const response = await fetch('/api/review/assign-to-profile', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        category: currentCategory,
-                        filenames: filenames,
-                        profile_id: profileId,
-                        extract_frames: extractFrames,
-                        as_negative: saveNegatives
-                    })
+            // Add to queue instead of executing immediately
+            filenames.forEach(filename => {
+                addToQueue(filename, currentCategory, action, {
+                    profile_id: profileId,
+                    extract_frames: extractFrames
                 });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    const extractedInfo = extractFrames
-                        ? ` and extracted ${data.extracted_frames || 0} frame(s)`
-                        : '';
-                    const typeInfo = saveNegatives ? ' as NEGATIVE examples' : '';
-                    alert(`✓ Assigned ${data.moved_count} video(s) to ${data.profile_name}${typeInfo}${extractedInfo}`);
-                    await loadCategories();
-                } else {
-                    alert('Failed to assign videos');
-                }
-            } catch (error) {
-                console.error('Failed to assign videos:', error);
-                alert('Error assigning videos');
-            }
+            });
+            
+            // Clear selection
+            deselectAll();
         }
 
         async function deleteVideos() {
@@ -1284,42 +1772,15 @@
                 return;
             }
             
-            if (!confirm(`Confirm ${selectedVideos.size} video(s) contain people and extract faces for training?\n\nThis will:\n• Extract face images from each video\n• Move them to Face Training tab\n• Delete the original videos from review`)) {
-                return;
-            }
-            
             const filenames = Array.from(selectedVideos);
             
-            try {
-                const response = await fetch('/api/review/confirm-person', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        category: currentCategory,
-                        filenames: filenames
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'processing') {
-                    // Start task tracking with status widget (non-blocking)
-                    startTaskTracking(data.task_id, 'Extracting Faces');
-                    // Refresh categories after task completes (poll completion)
-                    const checkCompletion = setInterval(async () => {
-                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
-                        if (progress.status === 'completed' || progress.status === 'failed') {
-                            clearInterval(checkCompletion);
-                            await loadCategories();
-                        }
-                    }, 2000);
-                } else {
-                    alert('Failed to start face extraction');
-                }
-            } catch (error) {
-                console.error('Failed to confirm person videos:', error);
-                alert('Error confirming person videos');
-            }
+            // Add to queue instead of executing immediately
+            filenames.forEach(filename => {
+                addToQueue(filename, currentCategory, 'confirm_person');
+            });
+            
+            // Clear selection
+            deselectAll();
         }
 
         async function confirmVideos() {
@@ -1328,41 +1789,15 @@
                 return;
             }
             
-            if (!confirm(`Confirm ${selectedVideos.size} video(s) are correctly identified?\n\nThis will move them to the sorted folder.`)) {
-                return;
-            }
-            
             const filenames = Array.from(selectedVideos);
             
-            try {
-                const response = await fetch(`/api/review/${currentCategory}/confirm-videos`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        filenames: filenames
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'processing') {
-                    // Start task tracking with status widget (non-blocking)
-                    startTaskTracking(data.task_id, 'Confirming Videos');
-                    // Refresh categories after task completes
-                    const checkCompletion = setInterval(async () => {
-                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
-                        if (progress.status === 'completed' || progress.status === 'failed') {
-                            clearInterval(checkCompletion);
-                            await loadCategories();
-                        }
-                    }, 2000);
-                } else {
-                    alert('Failed to start video confirmation');
-                }
-            } catch (error) {
-                console.error('Failed to confirm videos:', error);
-                alert('Error confirming videos');
-            }
+            // Add to queue instead of executing immediately
+            filenames.forEach(filename => {
+                addToQueue(filename, currentCategory, 'confirm');
+            });
+            
+            // Clear selection
+            deselectAll();
         }
 
         async function rejectVideos() {
@@ -1381,48 +1816,18 @@
                 return;
             }
             
-            const confirmMessage = saveNegatives
-                ? `Reject ${selectedVideos.size} video(s) and save negative training frames for ${profileName}?\n\nThis will:\n• Extract frames into the profile's rejected training set\n• Delete the original videos from review`
-                : `Reject and delete ${selectedVideos.size} video(s)?`;
-
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
             const filenames = Array.from(selectedVideos);
             
-            try {
-                const response = await fetch(`/api/review/${currentCategory}/reject-videos`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        filenames: filenames,
-                        save_as_negative: saveNegatives,
-                        extract_frames: saveNegatives,
-                        profile_id: profileId || null
-                    })
+            // Add to queue instead of executing immediately
+            filenames.forEach(filename => {
+                addToQueue(filename, currentCategory, 'reject', {
+                    save_negatives: saveNegatives,
+                    profile_id: profileId
                 });
-                
-                const data = await response.json();
-                
-                if (data.status === 'processing') {
-                    // Start task tracking with status widget (non-blocking)
-                    startTaskTracking(data.task_id, 'Rejecting Videos');
-                    // Refresh categories after task completes
-                    const checkCompletion = setInterval(async () => {
-                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
-                        if (progress.status === 'completed' || progress.status === 'failed') {
-                            clearInterval(checkCompletion);
-                            await loadCategories();
-                        }
-                    }, 2000);
-                } else {
-                    alert('Failed to start video rejection');
-                }
-            } catch (error) {
-                console.error('Failed to reject videos:', error);
-                alert('Error rejecting videos');
-            }
+            });
+            
+            // Clear selection
+            deselectAll();
         }
 
         // Help section toggle
@@ -1628,12 +2033,22 @@
         }
 
         async function applyAdvancedReview() {
-            // Build actions array
-            const actions = [];
+            // Validate
+            const invalidActions = [];
             videoReviewStates.forEach((state, filename) => {
-                actions.push({
-                    filename: filename,
-                    category: currentCategory,
+                if ((state.extract_positive || state.extract_negative || state.move_to_sorted) && !state.profile_id) {
+                    invalidActions.push(filename);
+                }
+            });
+            
+            if (invalidActions.length > 0) {
+                alert(`${invalidActions.length} video(s) need a profile selected for their training/sorting actions.`);
+                return;
+            }
+
+            // Add each video to queue with its individual configuration
+            videoReviewStates.forEach((state, filename) => {
+                addToQueue(filename, currentCategory, 'advanced', {
                     profile_id: state.profile_id || null,
                     extract_positive: state.extract_positive,
                     extract_negative: state.extract_negative,
@@ -1643,47 +2058,8 @@
                 });
             });
 
-            // Validate
-            const invalidActions = actions.filter(a => 
-                (a.extract_positive || a.extract_negative || a.move_to_sorted) && !a.profile_id
-            );
-            if (invalidActions.length > 0) {
-                alert(`${invalidActions.length} video(s) need a profile selected for their training/sorting actions.`);
-                return;
-            }
-
             closeAdvancedReview();
-
-            try {
-                const response = await fetch('/api/review/advanced-review', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ actions })
-                });
-
-                const data = await response.json();
-
-                if (data.status === 'processing') {
-                    // Start task tracking with status widget (non-blocking)
-                    startTaskTracking(data.task_id, 'Advanced Review Processing');
-                    // Refresh categories after task completes
-                    const checkCompletion = setInterval(async () => {
-                        const progress = await fetch(`/api/progress/${data.task_id}`).then(r => r.json());
-                        if (progress.status === 'completed' || progress.status === 'failed') {
-                            clearInterval(checkCompletion);
-                            await loadCategories();
-                        }
-                    }, 2000);
-                } else if (data.status === 'success') {
-                    alert(`✓ Processed ${data.processed_count} videos successfully!`);
-                    await loadCategories();
-                } else {
-                    alert('Failed to process videos');
-                }
-            } catch (error) {
-                console.error('Failed to apply advanced review:', error);
-                alert('Error applying advanced review');
-            }
+            deselectAll();
         }
 
         function updateSelectionInfo() {
