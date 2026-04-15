@@ -618,7 +618,7 @@ class ObjectDetector:
             # Track detections
             all_detections = {}
             frame_count = 0
-            use_tracking = True
+            use_tracking = False  # Disabled: tracking causes OpenCV errors and processes every frame (slow)
             
             logger.info("Processing frames with object tracking...")
             
