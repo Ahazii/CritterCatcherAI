@@ -2175,6 +2175,7 @@ async def create_animal_profile(request: dict):
         text_description = request.get('text_description', '')
         confidence_threshold = request.get('confidence_threshold', 0.80)
         auto_approval_enabled = request.get('auto_approval_enabled', True)
+        requires_manual_confirmation = request.get('requires_manual_confirmation', True)
         retraining_threshold = request.get('retraining_threshold', 0.85)
         confirmation_count_recommendation = request.get('confirmation_count_recommendation', 50)
         
@@ -2195,6 +2196,7 @@ async def create_animal_profile(request: dict):
             profile.id,
             confidence_threshold=confidence_threshold,
             auto_approval_enabled=auto_approval_enabled,
+            requires_manual_confirmation=requires_manual_confirmation,
             retraining_threshold=retraining_threshold,
             confirmation_count_recommendation=confirmation_count_recommendation
         )
@@ -2230,6 +2232,7 @@ async def create_animal_profile(request: dict):
                 "text_description": profile.text_description,
                 "confidence_threshold": profile.confidence_threshold,
                 "auto_approval_enabled": profile.auto_approval_enabled,
+                "requires_manual_confirmation": profile.requires_manual_confirmation,
                 "enabled": profile.enabled,
                 "accuracy_percentage": profile.accuracy_percentage,
                 "retraining_threshold": profile.retraining_threshold,
@@ -2265,6 +2268,7 @@ async def list_animal_profiles():
                     "text_description": p.text_description,
                     "confidence_threshold": p.confidence_threshold,
                     "auto_approval_enabled": p.auto_approval_enabled,
+                    "requires_manual_confirmation": p.requires_manual_confirmation,
                     "enabled": p.enabled,
                     "confirmed_count": p.confirmed_count,
                     "rejected_count": p.rejected_count,
@@ -2303,6 +2307,7 @@ async def get_animal_profile(profile_id: str):
                 "text_description": profile.text_description,
                 "confidence_threshold": profile.confidence_threshold,
                 "auto_approval_enabled": profile.auto_approval_enabled,
+                "requires_manual_confirmation": profile.requires_manual_confirmation,
                 "enabled": profile.enabled,
                 "confirmed_count": profile.confirmed_count,
                 "rejected_count": profile.rejected_count,
@@ -2375,6 +2380,8 @@ async def update_animal_profile(profile_id: str, request: dict):
             update_data['confidence_threshold'] = float(request['confidence_threshold'])
         if 'auto_approval_enabled' in request:
             update_data['auto_approval_enabled'] = bool(request['auto_approval_enabled'])
+        if 'requires_manual_confirmation' in request:
+            update_data['requires_manual_confirmation'] = bool(request['requires_manual_confirmation'])
         if 'retraining_threshold' in request:
             update_data['retraining_threshold'] = float(request['retraining_threshold'])
         if 'confirmation_count_recommendation' in request:
@@ -2393,6 +2400,7 @@ async def update_animal_profile(profile_id: str, request: dict):
                 "text_description": profile.text_description,
                 "confidence_threshold": profile.confidence_threshold,
                 "auto_approval_enabled": profile.auto_approval_enabled,
+                "requires_manual_confirmation": profile.requires_manual_confirmation,
                 "enabled": profile.enabled,
                 "accuracy_percentage": profile.accuracy_percentage,
                 "retraining_threshold": profile.retraining_threshold,
