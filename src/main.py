@@ -463,17 +463,22 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 except:
                     pass
                 
-                logger.info(f"Generating tracked video with bounding boxes for detected objects: {list(detected_objects.keys())}")
                 tracking_config = config.get('tracking', {})
-                save_original = tracking_config.get('save_original_videos', False)
+                generate_tracked_videos = tracking_config.get('generate_tracked_videos', True)  # Default: enabled
                 
-                # Create annotated video with object tracking
-                tracked_detections = object_detector.track_and_annotate_video(
-                    video_path,
-                    output_path=None,  # Auto-generate path
-                    save_original=save_original
-                )
-                logger.info(f"Tracked video created with detections: {tracked_detections}")
+                if generate_tracked_videos:
+                    logger.info(f"Generating tracked video with bounding boxes for detected objects: {list(detected_objects.keys())}")
+                    save_original = tracking_config.get('save_original_videos', False)
+                    
+                    # Create annotated video with object tracking
+                    tracked_detections = object_detector.track_and_annotate_video(
+                        video_path,
+                        output_path=None,  # Auto-generate path
+                        save_original=save_original
+                    )
+                    logger.info(f"Tracked video created with detections: {tracked_detections}")
+                else:
+                    logger.info("Tracked video generation disabled in config - skipping")
             else:
                 # No objects detected - move to "unknown" category in review
                 logger.info("No objects detected - sorting to 'unknown' category")

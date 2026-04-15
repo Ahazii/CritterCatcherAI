@@ -807,16 +807,49 @@ class ObjectDetector:
                 
                 try:
                     import subprocess
-                    # Use ffmpeg to convert: copy video stream but re-encode with libx264
-                    result = subprocess.run([
-                        'ffmpeg', '-y',  # Overwrite output
-                        '-i', str(output_path),  # Input file
-                        '-c:v', 'libx264',  # H.264 codec
-                        '-preset', 'fast',  # Encoding speed
-                        '-crf', '23',  # Quality (lower = better, 18-28 is good range)
-                        '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
-                        str(temp_output)
-                    ], capture_output=True, text=True, timeout=300)
+                    import torch
+                    
+                    # Try GPU encoding first if CUDA is available, fall back to CPU
+                    if torch.cuda.is_available():
+                        logger.info("Attempting GPU-accelerated encoding with NVENC...")
+                        # Use NVIDIA NVENC hardware encoder (much faster)
+                        result = subprocess.run([
+                            'ffmpeg', '-y',
+                            '-hwaccel', 'cuda',  # Hardware acceleration
+                            '-i', str(output_path),
+                            '-c:v', 'h264_nvenc',  # NVIDIA GPU encoder
+                            '-preset', 'fast',  # NVENC preset (fast, medium, slow)
+                            '-b:v', '5M',  # Bitrate
+                            '-pix_fmt', 'yuv420p',
+                            str(temp_output)
+                        ], capture_output=True, text=True, timeout=300)
+                        
+                        # If NVENC fails, fall back to CPU
+                        if result.returncode != 0:
+                            logger.warning(f"GPU encoding failed: {result.stderr}")
+                            logger.info("Falling back to CPU encoding with libx264...")
+                            if temp_output.exists():
+                                temp_output.unlink()
+                            result = subprocess.run([
+                                'ffmpeg', '-y',
+                                '-i', str(output_path),
+                                '-c:v', 'libx264',
+                                '-preset', 'fast',
+                                '-crf', '23',
+                                '-pix_fmt', 'yuv420p',
+                                str(temp_output)
+                            ], capture_output=True, text=True, timeout=300)
+                    else:
+                        # CPU-only encoding
+                        result = subprocess.run([
+                            'ffmpeg', '-y',
+                            '-i', str(output_path),
+                            '-c:v', 'libx264',
+                            '-preset', 'fast',
+                            '-crf', '23',
+                            '-pix_fmt', 'yuv420p',
+                            str(temp_output)
+                        ], capture_output=True, text=True, timeout=300)
                     
                     if result.returncode == 0 and temp_output.exists():
                         # Replace original with converted version
