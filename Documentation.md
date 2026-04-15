@@ -137,6 +137,8 @@ POST /api/config/save
 GET /api/cameras
 GET /api/yolo-categories
 POST /api/yolo-categories/manual/toggle
+GET /api/dashboard/sorted-stats (time-based sorted video stats with auto/manual breakdown)
+GET /api/dashboard/review-stats (review queue stats by time in queue)
 GET /api/review/categories
 GET /api/review/categories/{category}/videos
 POST /api/review/confirm

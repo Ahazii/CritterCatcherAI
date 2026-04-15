@@ -301,6 +301,151 @@ async def get_stats():
     return stats
 
 
+@app.get("/api/dashboard/sorted-stats")
+async def get_sorted_stats():
+    """Get time-based sorted video statistics with auto/manual breakdown."""
+    try:
+        from datetime import timedelta
+        
+        now = datetime.now()
+        time_periods = {
+            "12h": now - timedelta(hours=12),
+            "24h": now - timedelta(hours=24),
+            "1w": now - timedelta(weeks=1),
+            "1m": now - timedelta(days=30)
+        }
+        
+        stats = {}
+        
+        if SORTED_PATH.exists():
+            for category_dir in SORTED_PATH.iterdir():
+                if not category_dir.is_dir():
+                    continue
+                
+                profile_name = category_dir.name
+                if profile_name == "people":
+                    # Handle people subdirectories
+                    for person_dir in category_dir.iterdir():
+                        if person_dir.is_dir():
+                            person_name = f"people/{person_dir.name}"
+                            stats[person_name] = _count_videos_by_time(person_dir, time_periods)
+                else:
+                    stats[profile_name] = _count_videos_by_time(category_dir, time_periods)
+        
+        return {"status": "success", "stats": stats}
+    except Exception as e:
+        logger.error(f"Failed to get sorted stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/dashboard/review-stats")
+async def get_review_stats():
+    """Get review queue statistics by time in queue."""
+    try:
+        from datetime import timedelta
+        
+        now = datetime.now()
+        time_buckets = {
+            "<12h": timedelta(hours=12),
+            "<24h": timedelta(hours=24),
+            "<1w": timedelta(weeks=1),
+            ">1w": None  # Everything older than 1 week
+        }
+        
+        stats = {}
+        review_base = Path("/data/review")
+        
+        if review_base.exists():
+            for category_dir in review_base.iterdir():
+                if not category_dir.is_dir():
+                    continue
+                
+                category_name = category_dir.name
+                counts = {"<12h": 0, "<24h": 0, "<1w": 0, ">1w": 0}
+                
+                for video_file in category_dir.glob("*.mp4"):
+                    # Try to get timestamp from metadata first
+                    metadata_file = video_file.with_suffix(video_file.suffix + ".json")
+                    video_time = None
+                    
+                    if metadata_file.exists():
+                        try:
+                            with open(metadata_file, 'r') as f:
+                                metadata = json.load(f)
+                                timestamp_str = metadata.get('timestamp')
+                                if timestamp_str:
+                                    video_time = datetime.fromisoformat(timestamp_str)
+                        except Exception as e:
+                            logger.debug(f"Could not parse metadata timestamp: {e}")
+                    
+                    # Fallback to file modification time
+                    if not video_time:
+                        video_time = datetime.fromtimestamp(video_file.stat().st_mtime)
+                    
+                    # Calculate time in queue
+                    time_in_queue = now - video_time
+                    
+                    # Categorize into time buckets
+                    if time_in_queue < time_buckets["<12h"]:
+                        counts["<12h"] += 1
+                    elif time_in_queue < time_buckets["<24h"]:
+                        counts["<24h"] += 1
+                    elif time_in_queue < time_buckets["<1w"]:
+                        counts["<1w"] += 1
+                    else:
+                        counts[">1w"] += 1
+                
+                stats[category_name] = counts
+        
+        return {"status": "success", "stats": stats}
+    except Exception as e:
+        logger.error(f"Failed to get review stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _count_videos_by_time(directory: Path, time_periods: dict) -> dict:
+    """Count videos in directory by time period with auto/manual breakdown."""
+    counts = {
+        "12h": {"auto": 0, "manual": 0},
+        "24h": {"auto": 0, "manual": 0},
+        "1w": {"auto": 0, "manual": 0},
+        "1m": {"auto": 0, "manual": 0}
+    }
+    
+    for video_file in directory.glob("*.mp4"):
+        # Get file modification time (when moved to sorted)
+        file_time = datetime.fromtimestamp(video_file.stat().st_mtime)
+        
+        # Determine if auto or manual
+        is_auto = False
+        metadata_file = video_file.with_suffix(video_file.suffix + ".json")
+        
+        if metadata_file.exists():
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    
+                # Check multiple indicators for auto-sorting
+                if metadata.get('status') == 'clip_sorted':
+                    is_auto = True
+                elif 'clip_results' in metadata:
+                    clip_results = metadata['clip_results']
+                    if isinstance(clip_results, dict) and clip_results.get('auto_approved'):
+                        is_auto = True
+            except Exception as e:
+                logger.debug(f"Could not parse metadata for {video_file.name}: {e}")
+        
+        # Count in appropriate time periods
+        for period, cutoff_time in time_periods.items():
+            if file_time >= cutoff_time:
+                if is_auto:
+                    counts[period]["auto"] += 1
+                else:
+                    counts[period]["manual"] += 1
+    
+    return counts
+
+
 @app.get("/api/config")
 async def get_config():
     """Get current configuration."""

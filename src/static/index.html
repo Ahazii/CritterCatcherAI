@@ -494,6 +494,91 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Dashboard Stats Tables */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .stats-table th {
+            text-align: left;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--border-color);
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .stats-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .stats-table tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        .count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin: 0 0.25rem;
+        }
+
+        .count-badge.auto {
+            background: rgba(72, 187, 120, 0.15);
+            color: var(--success-color);
+        }
+
+        .count-badge.manual {
+            background: rgba(66, 153, 225, 0.15);
+            color: var(--accent-color);
+        }
+
+        .count-badge.zero {
+            opacity: 0.4;
+        }
+
+        .stats-legend {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.875rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 4px;
+        }
+
+        .legend-color.auto {
+            background: rgba(72, 187, 120, 0.4);
+        }
+
+        .legend-color.manual {
+            background: rgba(66, 153, 225, 0.4);
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .container {
@@ -1176,19 +1261,29 @@
             <div id="dashboardProgress"></div>
             
             <div class="card">
-                <div class="card-title">🔍 YOLO Review Queue</div>
+                <div class="card-title">🔍 YOLO Review Queue (Time in Queue)</div>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                    Videos detected by YOLO Stage 1, pending CLIP refinement or manual review
+                    Videos detected by YOLO Stage 1, pending CLIP refinement or manual review. Time shown is how long videos have been waiting.
                 </p>
-                <div id="reviewStatsChart"></div>
+                <div id="reviewStatsTable"></div>
             </div>
             
             <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-title">✅ Sorted Videos</div>
+                <div class="card-title">✅ Sorted Videos (By Time Period)</div>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                    Videos confirmed and sorted by CLIP profiles or manual review
+                    Videos confirmed and sorted by CLIP profiles or manual review. Shows auto-sorted vs manually sorted breakdown.
                 </p>
-                <div id="statsChart"></div>
+                <div id="sortedStatsTable"></div>
+                <div class="stats-legend">
+                    <div class="legend-item">
+                        <div class="legend-color auto"></div>
+                        <span>Auto-sorted (CLIP confidence ≥ threshold)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color manual"></div>
+                        <span>Manually sorted (Review tab confirmation)</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1828,68 +1923,114 @@
 
         async function fetchStats() {
             try {
-                const response = await fetch('/api/stats');
-                const stats = await response.json();
+                const response = await fetch('/api/dashboard/sorted-stats');
+                const data = await response.json();
                 
-                let total = 0;
-                let html = '<div class="face-list">';
-                
-                for (const [category, count] of Object.entries(stats)) {
-                    total += count;
-                    html += `
-                        <div class="face-item">
-                            <div>
-                                <div class="face-name">${category}</div>
-                            </div>
-                            <div class="stat-value" style="font-size: 1.5rem; margin: 0;">${count}</div>
-                        </div>
-                    `;
+                if (!data.stats || Object.keys(data.stats).length === 0) {
+                    document.getElementById('sortedStatsTable').innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No sorted videos yet</p>';
+                    document.getElementById('totalVideos').textContent = '0';
+                    document.getElementById('totalCategories').textContent = '0';
+                    return;
                 }
                 
-                html += '</div>';
+                // Build table
+                let html = '<table class="stats-table"><thead><tr>';
+                html += '<th>Profile / Category</th>';
+                html += '<th style="text-align: center;">Last 12h</th>';
+                html += '<th style="text-align: center;">Last 24h</th>';
+                html += '<th style="text-align: center;">Last Week</th>';
+                html += '<th style="text-align: center;">Last Month</th>';
+                html += '</tr></thead><tbody>';
                 
-                document.getElementById('totalVideos').textContent = total;
-                document.getElementById('totalCategories').textContent = Object.keys(stats).length;
-                document.getElementById('statsChart').innerHTML = html;
+                let totalAuto = 0;
+                let totalManual = 0;
+                
+                for (const [profile, periods] of Object.entries(data.stats)) {
+                    html += `<tr><td><strong>${profile}</strong></td>`;
+                    
+                    for (const period of ['12h', '24h', '1w', '1m']) {
+                        const auto = periods[period].auto || 0;
+                        const manual = periods[period].manual || 0;
+                        totalAuto += auto;
+                        totalManual += manual;
+                        
+                        html += '<td style="text-align: center;">';
+                        if (auto > 0) {
+                            html += `<span class="count-badge auto" title="Auto-sorted by CLIP">${auto}</span>`;
+                        }
+                        if (manual > 0) {
+                            html += `<span class="count-badge manual" title="Manually sorted">${manual}</span>`;
+                        }
+                        if (auto === 0 && manual === 0) {
+                            html += '<span class="count-badge zero">0</span>';
+                        }
+                        html += '</td>';
+                    }
+                    
+                    html += '</tr>';
+                }
+                
+                html += '</tbody></table>';
+                
+                document.getElementById('sortedStatsTable').innerHTML = html;
+                document.getElementById('totalVideos').textContent = totalAuto + totalManual;
+                document.getElementById('totalCategories').textContent = Object.keys(data.stats).length;
             } catch (error) {
-                console.error('Failed to fetch stats:', error);
+                console.error('Failed to fetch sorted stats:', error);
+                document.getElementById('sortedStatsTable').innerHTML = '<p style="color: var(--danger-color); text-align: center; padding: 2rem;">Failed to load statistics</p>';
             }
         }
         
         async function fetchReviewStats() {
             try {
-                const response = await fetch('/api/review/categories');
+                const response = await fetch('/api/dashboard/review-stats');
                 const data = await response.json();
                 
-                const reviewChart = document.getElementById('reviewStatsChart');
+                const reviewTable = document.getElementById('reviewStatsTable');
                 
-                if (!data.categories || data.categories.length === 0) {
-                    reviewChart.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No videos in review queue</p>';
+                if (!data.stats || Object.keys(data.stats).length === 0) {
+                    reviewTable.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No videos in review queue</p>';
                     return;
                 }
                 
-                let html = '<div class="face-list">';
+                // Build table
+                let html = '<table class="stats-table"><thead><tr>';
+                html += '<th>Category</th>';
+                html += '<th style="text-align: center;">&lt; 12 hours</th>';
+                html += '<th style="text-align: center;">&lt; 24 hours</th>';
+                html += '<th style="text-align: center;">&lt; 1 week</th>';
+                html += '<th style="text-align: center;">&gt; 1 week</th>';
+                html += '<th style="text-align: center;">Total</th>';
+                html += '</tr></thead><tbody>';
                 
-                for (const cat of data.categories) {
-                    html += `
-                        <div class="face-item" style="cursor: pointer;" onclick="window.location.href='/static/review.html'">
-                            <div>
-                                <div class="face-name">${cat.name}</div>
-                            </div>
-                            <div class="stat-value" style="font-size: 1.5rem; margin: 0;">${cat.video_count}</div>
-                        </div>
-                    `;
+                let totalCount = 0;
+                
+                for (const [category, buckets] of Object.entries(data.stats)) {
+                    const total = buckets['<12h'] + buckets['<24h'] + buckets['<1w'] + buckets['>1w'];
+                    totalCount += total;
+                    
+                    html += `<tr onclick="window.location.href='/static/review.html'" style="cursor: pointer;"><td><strong>${category}</strong></td>`;
+                    
+                    for (const bucket of ['<12h', '<24h', '<1w', '>1w']) {
+                        const count = buckets[bucket] || 0;
+                        const zeroClass = count === 0 ? ' zero' : '';
+                        html += `<td style="text-align: center;"><span class="count-badge manual${zeroClass}">${count}</span></td>`;
+                    }
+                    
+                    html += `<td style="text-align: center;"><span class="count-badge" style="background: var(--bg-secondary); color: var(--text-primary);">${total}</span></td>`;
+                    html += '</tr>';
                 }
                 
-                html += '</div>';
+                html += '</tbody></table>';
                 html += `<p style="text-align: center; margin-top: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
-                    <strong>${data.total_videos}</strong> videos pending review • 
+                    <strong>${totalCount}</strong> videos pending review • 
                     <a href="/static/review.html" style="color: var(--accent-color); text-decoration: none;">Go to Review →</a>
                 </p>`;
                 
-                reviewChart.innerHTML = html;
+                reviewTable.innerHTML = html;
             } catch (error) {
                 console.error('Failed to fetch review stats:', error);
+                document.getElementById('reviewStatsTable').innerHTML = '<p style="color: var(--danger-color); text-align: center; padding: 2rem;">Failed to load statistics</p>';
             }
         }
 
