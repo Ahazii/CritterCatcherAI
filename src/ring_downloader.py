@@ -466,7 +466,7 @@ class RingDownloader:
                     
                     # Check if already downloaded in database
                     if skip_existing and self.download_tracker.is_downloaded(event_id_str):
-                        logger.debug(f"Event {video_id} already in database - skipping")
+                        logger.info(f"Skipping event {video_id} - already in database (prevents duplicate download)")
                         already_downloaded_count += 1
                         continue
                     

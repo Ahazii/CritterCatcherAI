@@ -169,6 +169,25 @@ def process_videos(config: dict, manual_trigger: bool = False):
     if os.environ.get('DETECTION_PRIORITY'):
         detection_config['priority'] = os.environ.get('DETECTION_PRIORITY')
     
+    # Validate configuration for common issues
+    download_hours = ring_config.get('download_hours')
+    interval_minutes = config.get('scheduler', {}).get('interval_minutes') or config.get('interval_minutes')
+    
+    if download_hours and interval_minutes:
+        download_hours_as_minutes = download_hours * 60
+        if download_hours_as_minutes > interval_minutes * 1.5:  # Allow 50% buffer
+            logger.warning("="*80)
+            logger.warning("CONFIGURATION WARNING: download_hours vs interval_minutes mismatch")
+            logger.warning(f"  download_hours: {download_hours}h ({download_hours_as_minutes} minutes)")
+            logger.warning(f"  interval_minutes: {interval_minutes} minutes")
+            logger.warning("")
+            logger.warning("This configuration will cause the system to repeatedly check the same")
+            logger.warning("videos on every run, potentially hitting Ring's API rate limits.")
+            logger.warning("")
+            logger.warning("RECOMMENDATION: Set download_hours to match or be slightly larger than")
+            logger.warning(f"interval_minutes. For example: download_hours: {int(interval_minutes / 60) + 1}")
+            logger.warning("="*80)
+    
     # Initialize components
     logger.info("Initializing CritterCatcherAI components")
     
