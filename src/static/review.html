@@ -874,7 +874,6 @@
                 <button class="btn btn-advanced btn-small" onclick="openAdvancedReview()" id="advancedReviewBtn" disabled>🎯 Advanced Review</button>
                 <span style="margin: 0 0.5rem; color: var(--text-secondary);">or use quick actions:</span>
                 <button class="btn btn-success btn-small" onclick="confirmVideos()" id="confirmBtn" disabled>✓ Confirm Videos</button>
-                <button class="btn btn-warning btn-small" onclick="confirmPerson()" id="confirmPersonBtn" disabled style="display:none;">👤 Confirm as Person</button>
                 <button class="btn btn-danger btn-small" onclick="rejectVideos()" id="rejectBtn" disabled>✗ Reject Videos</button>
                 <div style="margin-left: 20px; display: inline-block;">
                     <label for="profileSelect">Or assign to:</label>
@@ -1310,15 +1309,19 @@
                     case 'assign_positive':
                     case 'assign_negative':
                     case 'assign_both':
-                        endpoint = `/api/review/${category}/assign-profile`;
-                        const extractType = action === 'assign_positive' ? 'positive' :
-                                          action === 'assign_negative' ? 'negative' : 'both';
-                        body = {
-                            filenames,
+                        // Use advanced review endpoint for animal assignments
+                        endpoint = '/api/review/advanced-review';
+                        const videos = filenames.map(filename => ({
+                            filename,
+                            category,
                             profile_id: config.profile_id,
-                            extract_frames: config.extract_frames !== false,
-                            extract_type: extractType
-                        };
+                            extract_positive: action === 'assign_positive' || action === 'assign_both',
+                            extract_negative: action === 'assign_negative' || action === 'assign_both',
+                            move_to_sorted: action === 'assign_positive' || action === 'assign_both',
+                            delete_after: action === 'assign_negative',
+                            extract_faces: false
+                        }));
+                        body = {actions: videos};  // Backend expects 'actions' not 'videos'
                         break;
                     case 'assign_face_positive':
                     case 'assign_face_negative':
@@ -1355,7 +1358,7 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    videos: [{
+                    actions: [{  // Backend expects 'actions' not 'videos'
                         filename: item.filename,
                         category: item.category,
                         ...item.config
@@ -1825,23 +1828,6 @@
                 console.error('Failed to delete videos:', error);
                 alert('Error deleting videos');
             }
-        }
-
-        async function confirmPerson() {
-            if (selectedVideos.size === 0) {
-                alert('No videos selected');
-                return;
-            }
-            
-            const filenames = Array.from(selectedVideos);
-            
-            // Add to queue instead of executing immediately
-            filenames.forEach(filename => {
-                addToQueue(filename, currentCategory, 'confirm_person');
-            });
-            
-            // Clear selection
-            deselectAll();
         }
 
         async function confirmVideos() {
