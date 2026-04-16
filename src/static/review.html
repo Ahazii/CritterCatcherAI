@@ -1268,9 +1268,12 @@
             } finally {
                 // Clear queue and reload
                 queuedActions.clear();
-                runBtn.disabled = false;
                 runBtn.textContent = '⏳ Refreshing...';
                 await loadCategories();
+                
+                // Restore button HTML structure with span
+                runBtn.disabled = false;
+                runBtn.innerHTML = '▶️ Run Queue (<span id="queueCountBtn">0</span> videos)';
                 updateQueueUI();  // Update after reload to ensure DOM is ready
             }
         }
