@@ -527,6 +527,12 @@ async def update_config(config_data: dict):
                 if key in existing_config.get("specialized_detection", {}):
                     new_config["specialized_detection"][key] = existing_config["specialized_detection"][key]
         
+        # CRITICAL: Preserve yolo_manual_categories if not included in UI update
+        # This prevents categories from being erased when other config sections are updated
+        if "yolo_manual_categories" not in new_config and "yolo_manual_categories" in existing_config:
+            new_config["yolo_manual_categories"] = existing_config["yolo_manual_categories"]
+            logger.info(f"Preserved {len(existing_config['yolo_manual_categories'])} yolo_manual_categories during config update")
+        
         # Write merged config to file
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(new_config, f, default_flow_style=False)
