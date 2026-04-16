@@ -1095,7 +1095,9 @@
                     const label = document.createElement('span');
                     label.textContent = `${filename} - ${getActionLabel(action)} (${category})`;
                     if (config.profile_id) {
-                        const profile = profiles.find(p => p.id === config.profile_id);
+                        // Search in both animal and face profiles
+                        const allProfiles = [...(profiles.animal || []), ...(profiles.face || [])];
+                        const profile = allProfiles.find(p => p.id === config.profile_id);
                         label.textContent += ` → ${profile?.name || config.profile_id}`;
                     }
                     
