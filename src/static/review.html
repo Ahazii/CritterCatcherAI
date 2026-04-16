@@ -1508,14 +1508,6 @@
             // Update profile dropdown to reflect current category
             updateProfileDropdown();
             
-            // Show/hide "Confirm Person" button based on category
-            const confirmPersonBtn = document.getElementById('confirmPersonBtn');
-            if (categoryName === 'person') {
-                confirmPersonBtn.style.display = 'inline-block';
-            } else {
-                confirmPersonBtn.style.display = 'none';
-            }
-            
             await loadVideos(categoryName);
         }
 
@@ -2143,7 +2135,6 @@
             document.getElementById('assignBtn').disabled = count === 0;
             document.getElementById('confirmBtn').disabled = count === 0;
             document.getElementById('rejectBtn').disabled = count === 0;
-            document.getElementById('confirmPersonBtn').disabled = count === 0;
             document.getElementById('advancedReviewBtn').disabled = count === 0;
         }
 
