@@ -1055,8 +1055,9 @@
             const queueItemsDiv = document.getElementById('queueItems');
             const runQueueBtn = document.getElementById('runQueueBtn');
             
-            queueCountSpan.textContent = queueCount;
-            queueCountBtnSpan.textContent = queueCount;
+            // Update counts (check for null in case button text was changed during processing)
+            if (queueCountSpan) queueCountSpan.textContent = queueCount;
+            if (queueCountBtnSpan) queueCountBtnSpan.textContent = queueCount;
             
             if (queueCount === 0) {
                 summaryDiv.style.display = 'none';
