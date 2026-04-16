@@ -1290,21 +1290,27 @@
                 
                 switch (action) {
                     case 'confirm':
-                        endpoint = `/api/review/categories/${category}/confirm`;
+                        endpoint = `/api/review/${category}/confirm-videos`;
                         body = {filenames};
                         break;
                     case 'reject':
-                        endpoint = `/api/review/categories/${category}/reject`;
-                        body = {filenames, save_negatives: config.save_negatives || false, profile_id: config.profile_id};
+                        endpoint = `/api/review/${category}/reject-videos`;
+                        body = {
+                            filenames,
+                            save_as_negative: config.save_negatives || false,
+                            profile_id: config.profile_id,
+                            extract_frames: true
+                        };
                         break;
                     case 'confirm_person':
-                        endpoint = `/api/review/categories/${category}/confirm-person`;
+                        // For person, just use regular confirm
+                        endpoint = `/api/review/${category}/confirm-videos`;
                         body = {filenames};
                         break;
                     case 'assign_positive':
                     case 'assign_negative':
                     case 'assign_both':
-                        endpoint = `/api/review/categories/${category}/assign-profile`;
+                        endpoint = `/api/review/${category}/assign-profile`;
                         const extractType = action === 'assign_positive' ? 'positive' :
                                           action === 'assign_negative' ? 'negative' : 'both';
                         body = {
