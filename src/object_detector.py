@@ -886,9 +886,10 @@ class ObjectDetector:
                 except Exception as e:
                     logger.warning(f"Failed to save original video: {e}")
             
-            return all_detections
+            # Return both detections and tracked video path
+            return (all_detections, output_path)
             
         except Exception as e:
             logger.error(f"Failed to track video: {e}", exc_info=True)
-            return {}
+            return ({}, None)
     

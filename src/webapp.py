@@ -3043,14 +3043,19 @@ async def list_category_videos(category: str):
                     logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
             
             # Check if tracked video exists
-            tracked_filename = f"tracked_{video_file.name}"
+            # First try metadata, fall back to naming convention
+            tracked_filename = metadata.get("tracked_video_filename")
+            if not tracked_filename:
+                # Fall back to old naming convention for backward compatibility
+                tracked_filename = f"tracked_{video_file.name}"
+            
             tracked_video_path = tracked_videos_dir / tracked_filename
             has_tracked_video = tracked_video_path.exists()
             
             videos.append({
                 "filename": video_file.name,
                 "category": category,
-                "detected_objects": metadata.get("detected_objects", {}),
+                "detected_objects": metadata.get("all_detections", metadata.get("detected_objects", {})),
                 "yolo_category": metadata.get("yolo_category", category),
                 "yolo_confidence": metadata.get("yolo_confidence", 0.0),
                 "clip_results": metadata.get("clip_results"),

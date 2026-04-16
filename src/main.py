@@ -467,17 +467,36 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 tracking_config = config.get('tracking', {})
                 generate_tracked_videos = tracking_config.get('generate_tracked_videos', True)  # Default: enabled
                 
+                tracked_video_filename = None
                 if generate_tracked_videos:
                     logger.info(f"Generating tracked video with bounding boxes for detected objects: {list(detected_objects.keys())}")
                     save_original = tracking_config.get('save_original_videos', False)
                     
                     # Create annotated video with object tracking
-                    tracked_detections = object_detector.track_and_annotate_video(
+                    tracked_detections, tracked_video_path = object_detector.track_and_annotate_video(
                         video_path,
                         output_path=None,  # Auto-generate path
                         save_original=save_original
                     )
                     logger.info(f"Tracked video created with detections: {tracked_detections}")
+                    
+                    # Save just the filename for metadata
+                    if tracked_video_path:
+                        tracked_video_filename = tracked_video_path.name
+                        logger.info(f"Tracked video filename: {tracked_video_filename}")
+                        
+                        # Update metadata JSON with tracked video filename
+                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                        if metadata_path.exists():
+                            try:
+                                with open(metadata_path, 'r') as f:
+                                    metadata = json.load(f)
+                                metadata['tracked_video_filename'] = tracked_video_filename
+                                with open(metadata_path, 'w') as f:
+                                    json.dump(metadata, f, indent=2)
+                                logger.debug(f"Updated metadata with tracked video filename")
+                            except Exception as meta_err:
+                                logger.warning(f"Failed to update metadata with tracked video: {meta_err}")
                 else:
                     logger.info("Tracked video generation disabled in config - skipping")
             else:
