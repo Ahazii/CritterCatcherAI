@@ -76,10 +76,19 @@ Videos are automatically sorted to `/data/review/{category}/`:
 - View videos by category (car, dog, bird, person, etc.)
 - Tracked videos show animated bounding boxes
 
+**📋 Queue System (Batch Processing):**
+- Select videos and queue multiple actions before executing
+- Queue summary shows total actions and breakdown by type
+- Click "Run Queue" to batch process all queued actions at once
+- Videos show "⏳ Queued" badge with opacity indicator
+- Click queued video to remove from queue
+
 **Quick Actions (Simple Batch Operations):**
-- **✓ Confirm Videos** - Move to sorted folder without extracting training data
+- **✓ Confirm Videos** - Move to sorted folder (for person videos with profile selected, extracts face training)
 - **✗ Reject Videos** - Delete videos (optionally save as negative training examples)
 - **→ Assign to Profile** - Extract frames as positive OR negative (all videos treated the same)
+  - For person videos: automatically uses face profiles
+  - For animal videos: uses animal profiles and supports positive/negative/both
 
 **🎯 Advanced Review (Per-Video Control):**
 - Click **Advanced Review** button for granular control over each video
@@ -156,9 +165,15 @@ face_recognition:
 
 detection:
   confidence_threshold: 0.25      # YOLO detection sensitivity (0.1-0.9)
-  object_frames: 5                # Frames to analyze per video
+  object_frames: 5                # Frames to analyze per video (YOLO)
+  face_frames: 5                  # Frames to analyze per video (face recognition)
+  face_tolerance: 0.7             # Face matching tolerance (lower = stricter)
   force_cpu: false                # Force CPU even if GPU is available
-  face_model: hog                 # Face detection: "hog" (CPU) or "cnn" (GPU)
+  face_model: hog                 # Face detection: "hog" (fast CPU) or "cnn" (slow GPU)
+  yolo_model: yolov8n             # YOLO model: yolov8n (nano, fastest) to yolov8x (extra large, most accurate)
+
+tracking:
+  generate_tracked_videos: true   # Generate videos with bounding boxes (disable for 5-10x speedup)
 
 scheduler:
   auto_run: true                  # Enable automatic processing
@@ -211,6 +226,28 @@ Click **Process Now** button on Dashboard to trigger immediate video download an
 Use Config → Pathways to choose which cameras feed:
 - Media pathway (CLIP profile auto-saves)
 - Security pathway (unknown people)
+
+### Performance Optimization
+
+**For Maximum Speed (5-10x faster):**
+```yaml
+detection:
+  face_model: hog              # Use CPU-based face detection (vs cnn)
+  face_frames: 5               # Reduce frames analyzed
+  object_frames: 5             # Reduce YOLO frames
+tracking:
+  generate_tracked_videos: false  # Skip video re-encoding (no bounding box videos)
+```
+
+**GPU Acceleration:**
+- YOLO detection: Automatically uses GPU if available (3-5x faster)
+- Video encoding: Falls back to CPU if NVENC not available
+- Face detection with CNN: Requires proper CUDA/cuDNN setup (otherwise very slow)
+
+**Recommended Settings:**
+- Use `face_model: hog` (CPU) - Fast and accurate enough for most use cases
+- Keep `face_frames: 5` - Good balance of speed and accuracy  
+- Enable `generate_tracked_videos: true` - Bounding box videos are useful for review
 
 ---
 
