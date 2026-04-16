@@ -3444,22 +3444,19 @@ async def get_face_profile_stats(profile_id: str):
         if training_path.exists():
             training_images = list(training_path.glob("*.jpg"))
         
-        # Count face encodings from face_recognizer
+        # Count face encodings from encodings file
         encoding_count = 0
-        if face_recognizer:
-            # Access face_recognizer's known_faces dictionary
-            from face_recognizer import FaceRecognizer
-            encoding_path = Path("/data/faces/encodings.pkl")
-            if encoding_path.exists():
-                import pickle
-                try:
-                    with open(encoding_path, 'rb') as f:
-                        encodings_data = pickle.load(f)
-                        # encodings_data is dict: {person_name: [encoding1, encoding2, ...]}
-                        if profile.name in encodings_data:
-                            encoding_count = len(encodings_data[profile.name])
-                except Exception as e:
-                    logger.warning(f"Failed to load encodings for count: {e}")
+        encoding_path = Path("/data/faces/encodings.pkl")
+        if encoding_path.exists():
+            import pickle
+            try:
+                with open(encoding_path, 'rb') as f:
+                    encodings_data = pickle.load(f)
+                    # encodings_data is dict: {person_name: [encoding1, encoding2, ...]}
+                    if profile.name in encodings_data:
+                        encoding_count = len(encodings_data[profile.name])
+            except Exception as e:
+                logger.warning(f"Failed to load encodings for count: {e}")
         
         # Get sample images (up to 6 recent ones)
         sample_images = []
