@@ -228,7 +228,8 @@ def process_videos(config: dict, manual_trigger: bool = False):
         encodings_path=config.get('paths', {}).get('face_encodings', '/data/faces/encodings.pkl'),
         tolerance=detection_config.get('face_tolerance', 0.6),
         num_frames=detection_config.get('face_frames', 10),
-        model=detection_config.get('face_model', 'hog')
+        model=detection_config.get('face_model', 'hog'),
+        unknown_faces_path='/data/training/faces/unassigned'  # Match Face Training UI expectations
     )
     
     # Check if Ring token exists, skip auth if not (force web GUI setup)
