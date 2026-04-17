@@ -1175,7 +1175,7 @@
                     <option value="10000">Refresh: 10s</option>
                 </select>
                 <div class="download-controls">
-                    <select id="timeRange" class="form-select">
+                    <select id="timeRange" class="form-select" title="Time range for manual downloads only. Scheduled downloads use the download_hours setting in Configuration.">
                         <option value="1hour">Last Hour</option>
                         <option value="6hours">Last 6 Hours</option>
                         <option value="24hours" selected>Last 24 Hours</option>
@@ -1183,7 +1183,7 @@
                         <option value="30days">Last 30 Days</option>
                         <option value="all">All Available</option>
                     </select>
-                    <button class="btn btn-warning" onclick="downloadAllVideos()" title="Download videos from Ring cameras only (does not process them)">⬇ Download All</button>
+                    <button class="btn btn-warning" onclick="downloadAllVideos()" title="Download videos from Ring cameras only (does not process them). Uses time range dropdown above.">⬇ Download All</button>
                 </div>
                 <button class="btn btn-success" onclick="triggerProcessing()" id="processNowBtn" title="Download (if needed) and process all videos with YOLO detection, CLIP refinement, and face recognition">▶ Process Now</button>
                 <button class="btn btn-danger" onclick="stopProcessing()" id="stopProcessingBtn" style="display: none;">⏹ Stop</button>
@@ -2409,7 +2409,7 @@
                             Enable Auto Run
                         </label>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                            Automatically download and process videos on a schedule. If disabled, processing only runs when manually triggered.
+                            Automatically download and process videos on a schedule. If disabled, processing only runs when manually triggered (⬇ Download All or ▶ Process Now).
                         </p>
                     </div>
                     
@@ -2426,7 +2426,22 @@
                             <option value="1440" ${data.config.scheduler?.interval_minutes === 1440 ? 'selected' : ''}>Every 24 hours</option>
                         </select>
                         <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                            How often to download and process videos when Auto Run is enabled.
+                            How often to download and process videos when Auto Run is enabled. Should match Download Hours below to prevent re-checking the same time window.
+                        </p>
+                    </div>
+                    
+                    <div class="form-group" id="downloadHoursGroup">
+                        <label class="form-label">Download Hours (Scheduled Runs)</label>
+                        <select id="downloadHours" class="form-select" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
+                            <option value="1" ${(data.config.ring?.download_hours || 24) === 1 ? 'selected' : ''}>Last 1 hour</option>
+                            <option value="6" ${(data.config.ring?.download_hours || 24) === 6 ? 'selected' : ''}>Last 6 hours</option>
+                            <option value="12" ${(data.config.ring?.download_hours || 24) === 12 ? 'selected' : ''}>Last 12 hours</option>
+                            <option value="24" ${(data.config.ring?.download_hours || 24) === 24 ? 'selected' : ''}>Last 24 hours</option>
+                            <option value="48" ${(data.config.ring?.download_hours || 24) === 48 ? 'selected' : ''}>Last 48 hours</option>
+                            <option value="168" ${(data.config.ring?.download_hours || 24) === 168 ? 'selected' : ''}>Last 7 days</option>
+                        </select>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            How many hours back to check for videos during scheduled runs and ▶ Process Now. Does NOT apply to manual ⬇ Download All (which uses the dropdown at top). Best practice: set this equal to Run Interval to avoid redundant Ring API calls.
                         </p>
                     </div>
                     
@@ -2662,7 +2677,7 @@
                             face_encodings: '/data/faces/encodings.pkl'
                         },
                         ring: {
-                            download_hours: 24,
+                            download_hours: parseInt(document.getElementById('downloadHours').value),
                             download_limit: null
                         },
                         scheduler: {
