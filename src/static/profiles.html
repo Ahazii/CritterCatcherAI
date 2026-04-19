@@ -599,6 +599,22 @@
                     </div>
                 </div>
 
+                <!-- Use Text Fallback Toggle -->
+                <div class="form-group">
+                    <label class="toggle-switch">
+                        <span>Use Text-Based CLIP Fallback</span>
+                        <label class="switch">
+                            <input type="checkbox" id="useTextFallback" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                    <small>
+                        <strong style="color: var(--accent-color);">Recommended: Disabled (unchecked)</strong><br>
+                        • <strong>Enabled:</strong> If no trained classifier exists, use text description above for matching (less accurate, may cause false positives)<br>
+                        • <strong>Disabled:</strong> Only use trained classifier - profile will be skipped until classifier is trained (more accurate, prevents mistakes)
+                    </small>
+                </div>
+
                 <!-- Confidence Threshold -->
                 <div class="form-group">
                     <label for="confidenceThreshold">
@@ -768,6 +784,8 @@
                         profile.requires_manual_confirmation !== undefined ? profile.requires_manual_confirmation : true;
                     document.getElementById('autoApprovalEnabled').checked = 
                         profile.auto_approval_enabled !== undefined ? profile.auto_approval_enabled : true;
+                    document.getElementById('useTextFallback').checked = 
+                        profile.use_text_fallback !== undefined ? profile.use_text_fallback : true;
 
                     // Set YOLO categories
                     document.querySelectorAll('input[name="yoloCategories"]').forEach(cb => {
@@ -851,6 +869,7 @@
                 confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
                 requires_manual_confirmation: document.getElementById('requiresManualConfirmation').checked,
                 auto_approval_enabled: document.getElementById('autoApprovalEnabled').checked,
+                use_text_fallback: document.getElementById('useTextFallback').checked,
                 retraining_threshold: parseFloat(document.getElementById('retrainingThreshold').value),
                 confirmation_count_recommendation: parseInt(document.getElementById('confirmationCountRecommendation').value)
             };
