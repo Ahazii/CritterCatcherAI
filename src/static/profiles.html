@@ -981,6 +981,7 @@
                             </div>
                             <div class="profile-actions">
                                 <button class="btn btn-small" onclick="openEditModal('${profile.id}')">Edit</button>
+                                <button class="btn btn-small btn-success" onclick="trainClassifier('${profile.id}')" title="Manually train CLIP classifier using confirmed/rejected images">🎓 Train Classifier</button>
                                 <button class="btn btn-small" onclick="toggleViz('${profile.id}')" title="Show/hide top frames">🖼 Viz</button>
                                 <button class="btn btn-small" onclick="toggleProfile('${profile.id}', ${!profile.enabled})">
                                     ${profile.enabled ? 'Disable' : 'Enable'}
@@ -1122,6 +1123,29 @@
                     }
                 })
                 .catch(err => showAlert('Error: ' + err, 'error'));
+        }
+        
+        function trainClassifier(profileId) {
+            if (!confirm('Train CLIP classifier now? This will use all confirmed and rejected images in the training folder. Training may take a few minutes.')) {
+                return;
+            }
+            
+            showAlert('Starting classifier training... This may take a few minutes.', 'info');
+            
+            fetch(`/api/animal-profiles/${profileId}/train-classifier`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        // Reload profiles after a delay to show updated training status
+                        setTimeout(() => loadProfiles(), 3000);
+                    } else {
+                        showAlert('Error: ' + (data.detail || 'Training failed'), 'error');
+                    }
+                })
+                .catch(err => {
+                    showAlert('Error starting training: ' + err, 'error');
+                });
         }
         
         function toggleViz(profileId) {

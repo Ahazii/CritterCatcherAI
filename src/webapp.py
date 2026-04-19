@@ -2739,6 +2739,104 @@ async def mark_training_complete(profile_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/animal-profiles/{profile_id}/train-classifier")
+async def train_classifier(profile_id: str, background_tasks: BackgroundTasks):
+    """Manually trigger CLIP classifier training for a profile."""
+    try:
+        if animal_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Check for training data
+        confirmed_dir = Path("/data/training") / profile_id / "confirmed"
+        rejected_dir = Path("/data/training") / profile_id / "rejected"
+        
+        if not confirmed_dir.exists() or not rejected_dir.exists():
+            raise HTTPException(
+                status_code=400,
+                detail="Training folders not found. Confirm/reject some videos first."
+            )
+        
+        # Count JPG files (only JPGs are used for training)
+        confirmed_images = list(confirmed_dir.glob("*.jpg"))
+        rejected_images = list(rejected_dir.glob("*.jpg"))
+        
+        if len(confirmed_images) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="No confirmed training images found. Confirm some videos first."
+            )
+        
+        if len(rejected_images) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="No rejected training images found. Need negative examples to train."
+            )
+        
+        logger.info(f"Starting classifier training for '{profile.name}': {len(confirmed_images)} confirmed, {len(rejected_images)} rejected")
+        
+        def train_task():
+            """Background task to train the classifier."""
+            try:
+                from clip_vit_classifier import CLIPVitClassifier
+                from datetime import datetime
+                
+                # Initialize CLIP classifier
+                clip = CLIPVitClassifier()
+                
+                # Prepare paths
+                model_path = Path("/data/models") / profile_id / "classifier.json"
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Train classifier
+                logger.info(f"Training classifier for {profile.name}...")
+                model_data = clip.train_classifier(
+                    positive_paths=[str(p) for p in confirmed_images],
+                    negative_paths=[str(p) for p in rejected_images],
+                    model_path=model_path,
+                    epochs=200,
+                    learning_rate=0.1,
+                    l2=0.001,
+                    batch_size=8
+                )
+                
+                # Update profile with training metadata
+                animal_profile_manager.update_profile(
+                    profile_id,
+                    last_training_date=datetime.now().isoformat(),
+                    last_trained_confirmed=len(confirmed_images),
+                    last_trained_rejected=len(rejected_images),
+                    classifier_model_path=str(model_path),
+                    training_manually_completed=False  # Reset so retraining can be recommended again
+                )
+                
+                logger.info(f"✓ Classifier training complete for '{profile.name}': {model_path}")
+                logger.info(f"  Trained on {model_data['positive_count']} positive and {model_data['negative_count']} negative examples")
+            
+            except Exception as e:
+                logger.error(f"Classifier training failed for '{profile.name}': {e}", exc_info=True)
+        
+        # Start training in background
+        background_tasks.add_task(train_task)
+        
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "profile_name": profile.name,
+            "message": f"Classifier training started for '{profile.name}' with {len(confirmed_images)} positive and {len(rejected_images)} negative examples. This may take a few minutes.",
+            "confirmed_count": len(confirmed_images),
+            "rejected_count": len(rejected_images)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start classifier training: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/animal-profiles/{profile_id}/top-frames")
 async def get_top_frames(profile_id: str, limit: int = 10):
     """Get top N highest-confidence frames for a profile."""
