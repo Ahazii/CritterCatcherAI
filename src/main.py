@@ -711,15 +711,26 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                 else:
                                     classifier_path = Path("/data/models") / profile.id / "classifier.json"
                                 
+                                # Try to load trained classifier first
                                 classifier_data = CLIPVitClassifier.load_classifier(classifier_path)
+                                
                                 if classifier_data:
+                                    # Use trained classifier (preferred method)
                                     scores = clip_classifier.score_with_classifier(frame_paths, classifier_data)
                                     avg_confidence = sum(scores) / len(scores) if scores else 0.0
                                     method = "classifier"
-                                else:
+                                    logger.info(f"CLIP classifier result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
+                                elif profile.use_text_fallback:
+                                    # No classifier available, fall back to text-based CLIP if enabled
+                                    logger.info(f"No classifier found for {profile.name}, using text-based CLIP fallback")
                                     scores = clip_classifier.score_batch(frame_paths, profile.text_description)
                                     avg_confidence = sum(scores) / len(scores) if scores else 0.0
                                     method = "text"
+                                    logger.info(f"CLIP text-based result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
+                                else:
+                                    # No classifier and text fallback disabled - skip this profile
+                                    logger.warning(f"No classifier found for {profile.name} and text fallback is disabled - skipping profile")
+                                    continue  # Skip adding to profile_results
                                 
                                 profile_results.append({
                                     "profile_id": profile.id,
@@ -730,8 +741,6 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                     "auto_approval_enabled": profile.auto_approval_enabled,
                                     "requires_manual_confirmation": profile.requires_manual_confirmation
                                 })
-                                
-                                logger.info(f"CLIP result for {profile.name}: {avg_confidence:.3f} (threshold: {profile.confidence_threshold})")
                             
                             # Log GPU operation end for CLIP analysis
                             try:

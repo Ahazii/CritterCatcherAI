@@ -28,6 +28,7 @@ class AnimalProfile:
     last_trained_rejected: int = 0
     classifier_model_path: Optional[str] = None
     training_manually_completed: bool = False  # User marked training as done
+    use_text_fallback: bool = True  # Use text-based CLIP if classifier unavailable (default: True for backward compatibility)
     
     @property
     def accuracy_percentage(self) -> float:
