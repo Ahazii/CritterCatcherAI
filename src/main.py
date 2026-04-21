@@ -441,10 +441,11 @@ def process_videos(config: dict, manual_trigger: bool = False):
             except:
                 pass
             
-            # HYBRID WORKFLOW: Sort by YOLO category first
+            # HYBRID WORKFLOW: Determine if CLIP Stage 2 is needed
             yolo_sorted_path = None
             yolo_category = None
             yolo_confidence = 0.0
+            needs_clip_processing = False
             
             if detected_objects:
                 # Get highest confidence detection
@@ -456,21 +457,46 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 
                 logger.info(f"HYBRID WORKFLOW - YOLO detected '{best_category}' with confidence {best_confidence:.2f}")
                 
-                # Sort to YOLO category folder in review
+                # Check if any enabled Animal Profile requires CLIP processing for this category
+                try:
+                    all_profiles = profile_manager.list_profiles()
+                    enabled_profiles = [p for p in all_profiles if p.enabled]
+                    
+                    for profile in enabled_profiles:
+                        if best_category in profile.yolo_categories:
+                            needs_clip_processing = True
+                            logger.info(f"CLIP Stage 2 needed: profile '{profile.name}' matches YOLO category '{best_category}'")
+                            break
+                except Exception as profile_check_err:
+                    logger.warning(f"Failed to check Animal Profiles: {profile_check_err}")
+                
+                # Sort to appropriate destination
                 try:
                     from webapp import app_state
-                    app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name} to YOLO category '{best_category}'..."
+                    if needs_clip_processing:
+                        app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name} to review for CLIP processing..."
+                    else:
+                        app_state["processing_progress"]["current_step"] = f"Sorting {video_path.name} to sorted/{best_category}/..."
                     app_state["processing_progress"]["phase"] = "yolo_sorting"
                 except:
                     pass
                 
-                yolo_sorted_path = video_sorter.sort_by_yolo_category(
-                    video_path,
-                    yolo_category=best_category,
-                    confidence=best_confidence,
-                    metadata={"all_detections": detected_objects}
-                )
-                logger.info(f"Video sorted to /data/review/{best_category}/")
+                if needs_clip_processing:
+                    # Send to review for CLIP Stage 2 processing
+                    yolo_sorted_path = video_sorter.sort_by_yolo_category(
+                        video_path,
+                        yolo_category=best_category,
+                        confidence=best_confidence,
+                        metadata={"all_detections": detected_objects}
+                    )
+                    logger.info(f"Video sorted to /data/review/{best_category}/ (CLIP processing required)")
+                else:
+                    # No CLIP needed - send directly to sorted
+                    yolo_sorted_path = video_sorter.move_video(
+                        video_path,
+                        class_name=best_category
+                    )
+                    logger.info(f"Video sorted to /data/sorted/{best_category}/ (YOLO-only, no CLIP needed)")
                 
                 # Update video_path to the new location for subsequent processing
                 video_path = yolo_sorted_path
@@ -544,11 +570,11 @@ def process_videos(config: dict, manual_trigger: bool = False):
             # Check if Face Recognition routing should be triggered
             # Conditions:
             # 1. YOLO detected "person"
-            # 2. An Animal Profile with "person" in yolo_categories is enabled
-            # 3. Face Recognition is enabled in config
+            # 2. Face Recognition is enabled in config
             face_recognition_enabled = config.get('face_recognition', {}).get('enabled', False)
             should_run_face_recognition = False
             recognized_people = set()
+            face_sorted = False  # Track if video was sorted by face recognition
             
             if face_recognition_enabled and detected_objects and 'person' in detected_objects:
                 should_run_face_recognition = True
@@ -582,10 +608,44 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         gpu_monitor.log_operation("Face recognition (CNN)", "end")
                 except:
                     pass
+                
+                # Auto-sort recognized people to sorted folder (unless security pathway handles it)
+                if recognized_people:
+                    primary_person = sorted(recognized_people)[0]  # Use first person alphabetically
+                    logger.info(f"Face recognized: {primary_person}")
+                    
+                    try:
+                        # Move from review to sorted/person/{name}
+                        sorted_person_path = video_sorter.move_video(
+                            video_path,
+                            class_name=f"person/{primary_person}"
+                        )
+                        logger.info(f"Video auto-sorted to /data/sorted/person/{primary_person}/")
+                        video_path = sorted_person_path
+                        final_destination = sorted_person_path
+                        face_sorted = True
+                    except Exception as face_sort_err:
+                        logger.error(f"Failed to auto-sort recognized person: {face_sort_err}", exc_info=True)
+                else:
+                    # No faces recognized - move to review/person/unknown
+                    logger.info("No faces recognized in video")
+                    try:
+                        unknown_person_path = video_sorter.sort_by_yolo_category(
+                            video_path,
+                            yolo_category="person/unknown",
+                            confidence=yolo_confidence,
+                            metadata={"all_detections": detected_objects, "face_recognition_attempted": True}
+                        )
+                        logger.info("Video moved to /data/review/person/unknown/ (unrecognized face)")
+                        video_path = unknown_person_path
+                        # Don't set final_destination - allow CLIP to process if applicable
+                    except Exception as unknown_sort_err:
+                        logger.error(f"Failed to sort unknown person: {unknown_sort_err}", exc_info=True)
             
             # CLIP Stage 2: Check for matching Animal Profiles
             clip_stage2_result = None
-            final_destination = None
+            if final_destination is None:
+                final_destination = None  # Initialize if not set by face recognition
             should_move_to_sorted = False  # Track if CLIP approved moving to sorted
 
             # Security pathway: save unknown people from selected cameras
@@ -610,7 +670,18 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 else:
                     logger.info(f"SECURITY PATHWAY: Camera '{camera_name}' not enabled, leaving in review")
 
-            if detected_objects and not security_routed:
+            # Only run CLIP Stage 2 if video is still in review (not already sorted)
+            if detected_objects and not security_routed and not face_sorted and needs_clip_processing:
+                logger.info("Running CLIP Stage 2 processing...")
+            elif detected_objects:
+                if face_sorted:
+                    logger.info("Skipping CLIP Stage 2: video already sorted by face recognition")
+                elif security_routed:
+                    logger.info("Skipping CLIP Stage 2: video routed to security pathway")
+                elif not needs_clip_processing:
+                    logger.info("Skipping CLIP Stage 2: YOLO-only detection, video already sorted")
+            
+            if detected_objects and not security_routed and not face_sorted and needs_clip_processing:
                 # Get YOLO categories that were detected
                 detected_categories = list(detected_objects.keys())
                 logger.debug(f"YOLO detected categories: {detected_categories}")
