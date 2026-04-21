@@ -149,12 +149,13 @@ class ReviewManager:
                 l2=float(config.get("l2", 0.001)),
                 batch_size=int(config.get("batch_size_embeddings", 8))
             )
-            profile.last_trained_confirmed = profile.confirmed_count
-            profile.last_trained_rejected = profile.rejected_count
+            # Update with actual file counts used for training, not accumulated totals
+            profile.last_trained_confirmed = len(positive_paths)
+            profile.last_trained_rejected = len(negative_paths)
             profile.classifier_model_path = str(model_path)
             profile.last_training_date = datetime.now().isoformat()
             self.profile_manager._save_profile(profile)
-            logger.info(f"Trained classifier for {profile.id}")
+            logger.info(f"Trained classifier for {profile.id}: {len(positive_paths)} positive, {len(negative_paths)} negative examples")
         except Exception as e:
             logger.error(f"Failed training for {profile.id}: {e}")
     

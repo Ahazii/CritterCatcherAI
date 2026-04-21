@@ -2345,6 +2345,13 @@ async def get_animal_profile_training_status(profile_id: str):
         model_path = Path(profile.classifier_model_path) if profile.classifier_model_path else Path("/data/models") / profile.id / "classifier.json"
         model_present = model_path.exists()
         
+        # Get actual file counts from training folders
+        confirmed_dir = Path("/data/training") / profile.id / "confirmed"
+        rejected_dir = Path("/data/training") / profile.id / "rejected"
+        
+        confirmed_count = len(list(confirmed_dir.glob("*.jpg"))) if confirmed_dir.exists() else 0
+        rejected_count = len(list(rejected_dir.glob("*.jpg"))) if rejected_dir.exists() else 0
+        
         return {
             "status": "success",
             "profile_id": profile.id,
@@ -2353,8 +2360,8 @@ async def get_animal_profile_training_status(profile_id: str):
             "last_training_date": profile.last_training_date,
             "last_trained_confirmed": profile.last_trained_confirmed,
             "last_trained_rejected": profile.last_trained_rejected,
-            "confirmed_count": profile.confirmed_count,
-            "rejected_count": profile.rejected_count
+            "confirmed_count": confirmed_count,  # Actual file count, not accumulated total
+            "rejected_count": rejected_count  # Actual file count, not accumulated total
         }
     except HTTPException:
         raise
