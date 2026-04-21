@@ -567,6 +567,10 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 yolo_category = "unknown"
                 yolo_confidence = 0.0
             
+            # Initialize variables for routing logic
+            final_destination = None
+            face_sorted = False  # Track if video was sorted by face recognition
+            
             # Check if Face Recognition routing should be triggered
             # Conditions:
             # 1. YOLO detected "person"
@@ -574,7 +578,6 @@ def process_videos(config: dict, manual_trigger: bool = False):
             face_recognition_enabled = config.get('face_recognition', {}).get('enabled', False)
             should_run_face_recognition = False
             recognized_people = set()
-            face_sorted = False  # Track if video was sorted by face recognition
             
             if face_recognition_enabled and detected_objects and 'person' in detected_objects:
                 should_run_face_recognition = True
@@ -644,8 +647,6 @@ def process_videos(config: dict, manual_trigger: bool = False):
             
             # CLIP Stage 2: Check for matching Animal Profiles
             clip_stage2_result = None
-            if final_destination is None:
-                final_destination = None  # Initialize if not set by face recognition
             should_move_to_sorted = False  # Track if CLIP approved moving to sorted
 
             # Security pathway: save unknown people from selected cameras
