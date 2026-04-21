@@ -133,7 +133,10 @@ pathways:
     cameras: []            # Empty = all cameras
     profiles: []           # Empty = all profiles
   security:
-    enabled: true
+    # DISABLED: Unknown faces should go to review/person/unknown for training,
+    # not to sorted/security/unknown. Enable only if you need a separate
+    # security archive independent of face training.
+    enabled: false
     cameras: []            # Empty = all cameras
     unknown_only: true     # Save only unknown people
 
