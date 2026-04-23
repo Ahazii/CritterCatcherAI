@@ -2710,6 +2710,144 @@ async def reject_images(profile_id: str, request: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/animal-profiles/reject-videos")
+async def reject_animal_profile_videos(request: dict, background_tasks: BackgroundTasks):
+    """Reject videos from an animal profile as misclassifications (for negative training)."""
+    global animal_profile_manager
+    
+    try:
+        profile_id = request.get('profile_id')
+        profile_name = request.get('profile_name')
+        filenames = request.get('filenames', [])
+        
+        if not profile_id or not profile_name or not filenames:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        if not animal_profile_manager:
+            raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
+        
+        profile = animal_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
+        
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Processing video rejections...")
+        
+        def reject_videos_background():
+            """Background task to extract negative frames and move videos."""
+            try:
+                import cv2
+                
+                task_tracker.start_task(task_id, message=f"Extracting negative examples for '{profile_name}'...")
+                results = {"processed": [], "failed": [], "total_frames": 0}
+                
+                sorted_path = Path("/data/sorted") / profile_name
+                rejected_dir = Path("/data/training") / profile_id / "rejected"
+                rejected_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions
+                try:
+                    import stat
+                    rejected_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as e:
+                    logger.warning(f"Could not set permissions: {e}")
+                
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Processing video {idx} of {len(filenames)}...",
+                            details=f"Extracting negative frames from {filename}"
+                        )
+                        
+                        video_path = sorted_path / filename
+                        if not video_path.exists():
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                            continue
+                        
+                        # Extract frames from video as negative examples
+                        cap = cv2.VideoCapture(str(video_path))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        frame_interval = int(fps) if fps > 0 else 30
+                        
+                        frame_count = 0
+                        extracted_count = 0
+                        max_frames = 10
+                        
+                        while extracted_count < max_frames:
+                            ret, frame = cap.read()
+                            if not ret:
+                                break
+                            
+                            if frame_count % frame_interval == 0:
+                                # Save frame as negative example
+                                frame_filename = f"{video_path.stem}_negative_{extracted_count:03d}.jpg"
+                                frame_path = rejected_dir / frame_filename
+                                cv2.imwrite(str(frame_path), frame)
+                                
+                                extracted_count += 1
+                            
+                            frame_count += 1
+                        
+                        cap.release()
+                        
+                        # Move video back to review for reprocessing
+                        review_path = Path("/data/review") / profile_name
+                        review_path.mkdir(parents=True, exist_ok=True)
+                        
+                        dest_path = review_path / filename
+                        import shutil
+                        shutil.move(str(video_path), str(dest_path))
+                        
+                        # Move metadata if exists
+                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                        if metadata_path.exists():
+                            dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                            shutil.move(str(metadata_path), str(dest_metadata))
+                        
+                        results["processed"].append({
+                            "filename": filename,
+                            "frames_extracted": extracted_count
+                        })
+                        results["total_frames"] += extracted_count
+                        
+                        logger.info(f"Extracted {extracted_count} negative frames from {filename} for {profile_name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+                
+                # Update profile rejected count
+                if results["total_frames"] > 0:
+                    new_rejected = profile.rejected_count + results["total_frames"]
+                    animal_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
+                
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_frames']} negative frames"
+                )
+                
+            except Exception as e:
+                logger.error(f"Reject videos task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(reject_videos_background)
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": f"Processing {len(filenames)} video(s) for negative training",
+            "video_count": len(filenames)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/animal-profiles/{profile_id}/mark-trained")
 async def mark_training_complete(profile_id: str):
     """Mark training as manually completed to clear retraining recommendation."""
@@ -3374,11 +3512,16 @@ async def get_sorted_videos(category: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/sorted/video/{person_name}/{filename}")
-async def serve_sorted_person_video(person_name: str, filename: str):
-    """Serve a video file from sorted/person/{name} folder."""
+@app.get("/api/sorted/video/{category_name}/{filename}")
+async def serve_sorted_video(category_name: str, filename: str):
+    """Serve a video file from sorted folder (supports both person/{name} and animal profiles)."""
     try:
-        video_path = Path("/data/sorted/person") / person_name / filename
+        # Try person subfolder first (e.g., person/Claire Banner)
+        video_path = Path("/data/sorted/person") / category_name / filename
+        
+        # If not found, try direct category folder (e.g., hedgehog, jack_russell)
+        if not video_path.exists():
+            video_path = Path("/data/sorted") / category_name / filename
         
         if not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")

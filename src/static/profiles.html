@@ -371,6 +371,92 @@
             padding-top: 1rem;
             border-top: 1px solid var(--border-color);
         }
+        
+        .review-modal .modal-content {
+            max-width: 1200px;
+            width: 95%;
+        }
+        
+        .video-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .video-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .video-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .video-card.selected {
+            border-color: var(--danger-color);
+            box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.3);
+        }
+        
+        .video-card video {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: #000;
+        }
+        
+        .video-info {
+            padding: 0.75rem;
+        }
+        
+        .video-filename {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            word-break: break-word;
+        }
+        
+        .select-checkbox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 28px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid var(--danger-color);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s ease;
+        }
+        
+        .select-checkbox:hover {
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .video-card.selected .select-checkbox {
+            background: var(--danger-color);
+        }
+        
+        .select-checkbox::after {
+            content: '✗';
+            color: white;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .video-card.selected .select-checkbox::after {
+            display: block;
+        }
 
         /* Grid */
         .profiles-grid {
@@ -983,6 +1069,7 @@
                                 <button class="btn btn-small" onclick="openEditModal('${profile.id}')">Edit</button>
                                 <button class="btn btn-small btn-success" onclick="trainClassifier('${profile.id}')" title="Manually train CLIP classifier using confirmed/rejected images">🎓 Train Classifier</button>
                                 <button class="btn btn-small" onclick="toggleViz('${profile.id}')" title="Show/hide top frames">🖼 Viz</button>
+                                <button class="btn btn-small" onclick="reviewProfileVideos('${profile.id}', '${profile.name}')" title="Review sorted videos for misclassifications">📹 Review Videos</button>
                                 <button class="btn btn-small" onclick="toggleProfile('${profile.id}', ${!profile.enabled})">
                                     ${profile.enabled ? 'Disable' : 'Enable'}
                                 </button>
@@ -1243,6 +1330,201 @@
         document.getElementById('profileModal')?.addEventListener('click', (e) => {
             if (e.target.id === 'profileModal') closeModal();
         });
+        
+        // Review Modal Functions
+        let currentReviewProfile = null;
+        let reviewVideos = [];
+        let selectedReviewVideos = new Set();
+        
+        async function reviewProfileVideos(profileId, profileName) {
+            currentReviewProfile = { id: profileId, name: profileName };
+            
+            document.getElementById('reviewModalTitle').textContent = `Review Videos: ${profileName}`;
+            document.getElementById('reviewModal').classList.add('active');
+            
+            await loadProfileVideos(profileId, profileName);
+        }
+        
+        function closeReviewModal() {
+            document.getElementById('reviewModal').classList.remove('active');
+            selectedReviewVideos.clear();
+            reviewVideos = [];
+        }
+        
+        async function loadProfileVideos(profileId, profileName) {
+            const grid = document.getElementById('reviewVideosGrid');
+            const noVideosMsg = document.getElementById('noVideosMessage');
+            
+            grid.innerHTML = '<div class="empty-state"><p>Loading videos...</p></div>';
+            noVideosMsg.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/sorted/videos?category=${encodeURIComponent(profileName)}`);
+                const data = await response.json();
+                reviewVideos = data.videos || [];
+                
+                grid.innerHTML = '';
+                
+                if (reviewVideos.length === 0) {
+                    noVideosMsg.style.display = 'block';
+                    return;
+                }
+                
+                reviewVideos.forEach(video => {
+                    const card = createReviewVideoCard(video);
+                    grid.appendChild(card);
+                });
+                
+                updateReviewSelectionInfo();
+            } catch (error) {
+                console.error('Failed to load profile videos:', error);
+                grid.innerHTML = '<div class="empty-state"><p>Failed to load videos</p></div>';
+            }
+        }
+        
+        function createReviewVideoCard(video) {
+            const card = document.createElement('div');
+            card.className = 'video-card';
+            card.dataset.filename = video.filename;
+            
+            const checkbox = document.createElement('div');
+            checkbox.className = 'select-checkbox';
+            checkbox.onclick = (e) => {
+                e.stopPropagation();
+                toggleReviewVideoSelection(video.filename);
+            };
+            
+            const videoEl = document.createElement('video');
+            videoEl.src = `/api/sorted/video/${encodeURIComponent(currentReviewProfile.name)}/${video.filename}`;
+            videoEl.controls = false;
+            videoEl.muted = true;
+            videoEl.onmouseover = () => videoEl.play();
+            videoEl.onmouseout = () => { videoEl.pause(); videoEl.currentTime = 0; };
+            
+            const info = document.createElement('div');
+            info.className = 'video-info';
+            
+            const filename = document.createElement('div');
+            filename.className = 'video-filename';
+            filename.textContent = video.filename;
+            
+            info.appendChild(filename);
+            card.appendChild(checkbox);
+            card.appendChild(videoEl);
+            card.appendChild(info);
+            
+            card.onclick = (e) => {
+                if (e.target.tagName !== 'VIDEO' && !e.target.classList.contains('select-checkbox')) {
+                    toggleReviewVideoSelection(video.filename);
+                }
+            };
+            
+            return card;
+        }
+        
+        function toggleReviewVideoSelection(filename) {
+            if (selectedReviewVideos.has(filename)) {
+                selectedReviewVideos.delete(filename);
+            } else {
+                selectedReviewVideos.add(filename);
+            }
+            
+            const card = document.querySelector(`#reviewVideosGrid [data-filename="${filename}"]`);
+            if (card) {
+                card.classList.toggle('selected', selectedReviewVideos.has(filename));
+            }
+            
+            updateReviewSelectionInfo();
+        }
+        
+        function selectAllVideos() {
+            reviewVideos.forEach(video => selectedReviewVideos.add(video.filename));
+            document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.add('selected'));
+            updateReviewSelectionInfo();
+        }
+        
+        function deselectAllVideos() {
+            selectedReviewVideos.clear();
+            document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.remove('selected'));
+            updateReviewSelectionInfo();
+        }
+        
+        function updateReviewSelectionInfo() {
+            const count = selectedReviewVideos.size;
+            document.getElementById('reviewSelectionInfo').textContent = `${count} of ${reviewVideos.length} selected`;
+            document.getElementById('markNotAnimalBtn').disabled = count === 0;
+        }
+        
+        async function markAsNotAnimal() {
+            if (selectedReviewVideos.size === 0) return;
+            
+            if (!confirm(`Mark ${selectedReviewVideos.size} video(s) as NOT ${currentReviewProfile.name}?\n\nThese will be used as negative training examples.`)) {
+                return;
+            }
+            
+            const filenames = Array.from(selectedReviewVideos);
+            
+            try {
+                const response = await fetch('/api/animal-profiles/reject-videos', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        profile_id: currentReviewProfile.id,
+                        profile_name: currentReviewProfile.name,
+                        filenames: filenames
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success' || data.status === 'processing') {
+                    showAlert(data.message, 'success');
+                    selectedReviewVideos.clear();
+                    await loadProfileVideos(currentReviewProfile.id, currentReviewProfile.name);
+                    await loadProfiles();
+                } else {
+                    showAlert('Failed to mark videos: ' + (data.detail || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Failed to mark videos as not animal:', error);
+                showAlert('Error marking videos: ' + error.message, 'error');
+            }
+        }
+        
+        document.getElementById('reviewModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'reviewModal') closeReviewModal();
+        });
     </script>
+    
+    <!-- Review Modal -->
+    <div id="reviewModal" class="modal review-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="reviewModalTitle">Review Videos</h2>
+                <button class="close-btn" onclick="closeReviewModal()">&times;</button>
+            </div>
+            
+            <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem;">
+                <p style="margin: 0;">Select videos that are <strong>NOT</strong> this animal. They will be used as negative training examples to improve classification accuracy.</p>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span id="reviewSelectionInfo" style="color: var(--text-secondary); font-size: 0.875rem;">0 selected</span>
+                    <button class="btn btn-small" onclick="selectAllVideos()">Select All</button>
+                    <button class="btn btn-small" onclick="deselectAllVideos()">Deselect All</button>
+                </div>
+                <button class="btn btn-danger btn-small" onclick="markAsNotAnimal()" id="markNotAnimalBtn" disabled>✗ Mark as NOT This Animal</button>
+            </div>
+            
+            <div id="reviewVideosGrid" class="video-gallery"></div>
+            
+            <div id="noVideosMessage" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📹</div>
+                <h3>No videos found</h3>
+                <p>This animal has no sorted videos yet.</p>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
