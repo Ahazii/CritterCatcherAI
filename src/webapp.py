@@ -3336,6 +3336,228 @@ async def get_review_videos(category: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/sorted/videos")
+async def get_sorted_videos(category: str = None):
+    """Get videos from sorted folders, optionally filtered by category (supports nested like person/Claire Banner)."""
+    try:
+        sorted_base = Path("/data/sorted")
+        
+        if category:
+            # Support nested categories like person/Claire Banner
+            category_path = sorted_base / category
+            if not category_path.exists():
+                return {"status": "success", "videos": [], "count": 0}
+            
+            videos = []
+            for video_file in category_path.glob("*.mp4"):
+                videos.append({
+                    "filename": video_file.name,
+                    "category": category,
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                })
+            
+            return {"status": "success", "videos": videos, "count": len(videos)}
+        else:
+            # Return all videos from all categories
+            videos = []
+            for video_file in sorted_base.rglob("*.mp4"):
+                rel_path = video_file.parent.relative_to(sorted_base)
+                videos.append({
+                    "filename": video_file.name,
+                    "category": str(rel_path),
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                })
+            
+            return {"status": "success", "videos": videos, "count": len(videos)}
+    except Exception as e:
+        logger.error(f"Failed to get sorted videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sorted/video/{person_name}/{filename}")
+async def serve_sorted_person_video(person_name: str, filename: str):
+    """Serve a video file from sorted/person/{name} folder."""
+    try:
+        video_path = Path("/data/sorted/person") / person_name / filename
+        
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
+        
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve sorted video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/face-profiles/reject-videos")
+async def reject_face_profile_videos(request: dict, background_tasks: BackgroundTasks):
+    """Reject videos from a face profile as misclassifications (for negative training)."""
+    global face_profile_manager
+    
+    try:
+        profile_id = request.get('profile_id')
+        person_name = request.get('person_name')
+        filenames = request.get('filenames', [])
+        
+        if not profile_id or not person_name or not filenames:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        # Get face profile
+        if not face_profile_manager:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+        
+        profile = face_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
+        
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Processing video rejections...")
+        
+        def reject_videos_background():
+            """Background task to extract negative faces and move videos."""
+            try:
+                import cv2
+                import face_recognition as fr
+                
+                task_tracker.start_task(task_id, message=f"Extracting negative examples for '{person_name}'...")
+                results = {"processed": [], "failed": [], "total_faces": 0}
+                
+                sorted_path = Path("/data/sorted/person") / person_name
+                rejected_dir = Path("/data/training/faces") / person_name / "rejected"
+                rejected_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Set permissions
+                try:
+                    import stat
+                    rejected_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as e:
+                    logger.warning(f"Could not set permissions: {e}")
+                
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Processing video {idx} of {len(filenames)}...",
+                            details=f"Extracting negative faces from {filename}"
+                        )
+                        
+                        video_path = sorted_path / filename
+                        if not video_path.exists():
+                            results["failed"].append({"filename": filename, "error": "File not found"})
+                            continue
+                        
+                        # Extract faces from video as negative examples
+                        cap = cv2.VideoCapture(str(video_path))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        frame_interval = int(fps) if fps > 0 else 30
+                        
+                        face_count = 0
+                        frame_count = 0
+                        max_faces = 10
+                        
+                        while face_count < max_faces:
+                            ret, frame = cap.read()
+                            if not ret:
+                                break
+                            
+                            if frame_count % frame_interval == 0:
+                                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                                face_locations = fr.face_locations(rgb_frame)
+                                
+                                for top, right, bottom, left in face_locations:
+                                    padding = 20
+                                    top = max(0, top - padding)
+                                    left = max(0, left - padding)
+                                    bottom = min(frame.shape[0], bottom + padding)
+                                    right = min(frame.shape[1], right + padding)
+                                    
+                                    face_img = rgb_frame[top:bottom, left:right]
+                                    
+                                    face_filename = f"{video_path.stem}_negative_{face_count:03d}.jpg"
+                                    face_path = rejected_dir / face_filename
+                                    
+                                    import PIL.Image as Image
+                                    face_pil = Image.fromarray(face_img)
+                                    face_pil.save(str(face_path))
+                                    
+                                    face_count += 1
+                                    if face_count >= max_faces:
+                                        break
+                            
+                            frame_count += 1
+                        
+                        cap.release()
+                        
+                        # Move video to review/person/unknown for reprocessing
+                        review_unknown = Path("/data/review/person/unknown")
+                        review_unknown.mkdir(parents=True, exist_ok=True)
+                        
+                        dest_path = review_unknown / filename
+                        import shutil
+                        shutil.move(str(video_path), str(dest_path))
+                        
+                        # Move metadata if exists
+                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                        if metadata_path.exists():
+                            dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                            shutil.move(str(metadata_path), str(dest_metadata))
+                        
+                        results["processed"].append({
+                            "filename": filename,
+                            "faces_extracted": face_count
+                        })
+                        results["total_faces"] += face_count
+                        
+                        logger.info(f"Extracted {face_count} negative faces from {filename} for {person_name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+                
+                # Update profile rejected count
+                if results["total_faces"] > 0:
+                    new_rejected = profile.rejected_count + results["total_faces"]
+                    face_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
+                
+                # Retrain face profile with new negative examples
+                try:
+                    import asyncio
+                    asyncio.run(retrain_face_profile(person_name))
+                except Exception as retrain_err:
+                    logger.error(f"Failed to retrain profile: {retrain_err}", exc_info=True)
+                
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_faces']} negative faces"
+                )
+                
+            except Exception as e:
+                logger.error(f"Reject videos task failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+        
+        # Queue background task
+        background_tasks.add_task(reject_videos_background)
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": f"Processing {len(filenames)} video(s) for negative training",
+            "video_count": len(filenames)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/review/assign-to-profile")
 async def assign_videos_to_profile(request: dict):
     """Assign videos from review to an animal profile."""
