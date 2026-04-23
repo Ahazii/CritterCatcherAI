@@ -3254,6 +3254,88 @@ async def serve_face_image(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/review/thumbnail/{filename}")
+async def serve_video_thumbnail(filename: str):
+    """Generate and serve a thumbnail for a video file."""
+    try:
+        import cv2
+        import tempfile
+        
+        # Try to find video in review folders
+        review_base = Path("/data/review")
+        video_path = None
+        
+        for category_dir in review_base.rglob(filename):
+            if category_dir.is_file() and category_dir.suffix == '.mp4':
+                video_path = category_dir
+                break
+        
+        if not video_path or not video_path.exists():
+            raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
+        
+        # Extract first frame as thumbnail
+        cap = cv2.VideoCapture(str(video_path))
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret:
+            raise HTTPException(status_code=500, detail="Failed to read video frame")
+        
+        # Save frame as temporary JPEG
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            cv2.imwrite(tmp.name, frame)
+            tmp_path = tmp.name
+        
+        return FileResponse(
+            path=tmp_path,
+            media_type="image/jpeg",
+            filename=f"thumb_{filename}.jpg"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate thumbnail: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/review/videos")
+async def get_review_videos(category: str = None):
+    """Get videos from review folders, optionally filtered by category (supports nested like person/unknown)."""
+    try:
+        review_base = Path("/data/review")
+        
+        if category:
+            # Support nested categories like person/unknown
+            category_path = review_base / category
+            if not category_path.exists():
+                return {"status": "success", "videos": [], "count": 0}
+            
+            videos = []
+            for video_file in category_path.glob("*.mp4"):
+                videos.append({
+                    "filename": video_file.name,
+                    "category": category,
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                })
+            
+            return {"status": "success", "videos": videos, "count": len(videos)}
+        else:
+            # Return all videos from all categories
+            videos = []
+            for video_file in review_base.rglob("*.mp4"):
+                rel_path = video_file.parent.relative_to(review_base)
+                videos.append({
+                    "filename": video_file.name,
+                    "category": str(rel_path),
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                })
+            
+            return {"status": "success", "videos": videos, "count": len(videos)}
+    except Exception as e:
+        logger.error(f"Failed to get review videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/review/assign-to-profile")
 async def assign_videos_to_profile(request: dict):
     """Assign videos from review to an animal profile."""

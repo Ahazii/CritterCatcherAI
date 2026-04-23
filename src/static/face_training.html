@@ -425,6 +425,16 @@
 
         <div class="section-divider"></div>
 
+        <div class="profile-section" id="unknownVideosSection" style="display: none;">
+            <div class="section-title">Unknown Person Videos</div>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                These videos contain people who were not recognized. Extract faces from them to train new or existing profiles.
+            </p>
+            <div id="unknownVideosGrid" class="face-gallery"></div>
+        </div>
+
+        <div class="section-divider" id="unknownVideosDivider" style="display: none;"></div>
+
         <div class="controls" id="controls" style="display: none;">
             <div class="control-group">
                 <span class="selection-info" id="selectionInfo">0 selected</span>
@@ -456,6 +466,7 @@
 
         async function init() {
             await loadFaceProfiles();
+            await loadUnknownPersonVideos();
             await loadUnassignedFaces();
         }
 
@@ -533,6 +544,131 @@
                     console.error(`Failed to load stats for ${profile.name}:`, error);
                 }
             }
+        }
+
+        async function loadUnknownPersonVideos() {
+            const section = document.getElementById('unknownVideosSection');
+            const divider = document.getElementById('unknownVideosDivider');
+            const grid = document.getElementById('unknownVideosGrid');
+            
+            try {
+                const response = await fetch('/api/review/videos?category=person/unknown');
+                const data = await response.json();
+                const videos = data.videos || [];
+                
+                if (videos.length === 0) {
+                    section.style.display = 'none';
+                    divider.style.display = 'none';
+                    return;
+                }
+                
+                section.style.display = 'block';
+                divider.style.display = 'block';
+                grid.innerHTML = '';
+                
+                videos.forEach(video => {
+                    const card = createVideoCard(video);
+                    grid.appendChild(card);
+                });
+                
+            } catch (error) {
+                console.error('Failed to load unknown person videos:', error);
+                section.style.display = 'none';
+                divider.style.display = 'none';
+            }
+        }
+        
+        function createVideoCard(video) {
+            const card = document.createElement('div');
+            card.className = 'face-card';
+            card.style.cursor = 'default';
+            
+            const thumbnail = document.createElement('img');
+            thumbnail.src = `/api/review/thumbnail/${video.filename}`;
+            thumbnail.alt = video.filename;
+            thumbnail.onerror = () => {
+                thumbnail.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23555" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3EVideo%3C/text%3E%3C/svg%3E';
+            };
+            
+            const info = document.createElement('div');
+            info.className = 'face-info';
+            info.style.display = 'flex';
+            info.style.flexDirection = 'column';
+            info.style.gap = '0.5rem';
+            
+            const filename = document.createElement('div');
+            filename.className = 'face-source';
+            filename.textContent = video.filename;
+            filename.style.fontSize = '0.7rem';
+            
+            const extractBtn = document.createElement('button');
+            extractBtn.className = 'btn btn-small btn-success';
+            extractBtn.textContent = '👤 Extract Faces';
+            extractBtn.style.width = '100%';
+            extractBtn.onclick = () => extractFacesFromVideo(video.filename);
+            
+            info.appendChild(filename);
+            info.appendChild(extractBtn);
+            
+            card.appendChild(thumbnail);
+            card.appendChild(info);
+            
+            return card;
+        }
+        
+        async function extractFacesFromVideo(filename) {
+            try {
+                const response = await fetch('/api/review/confirm-person', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category: 'person/unknown',
+                        filenames: [filename]
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'processing') {
+                    alert(`✓ Extracting faces from "${filename}"...\n\nFaces will appear below once extraction completes.`);
+                    
+                    // Poll for completion
+                    const taskId = data.task_id;
+                    pollTaskProgress(taskId, async () => {
+                        await loadUnknownPersonVideos();
+                        await loadUnassignedFaces();
+                    });
+                } else {
+                    alert('Failed to extract faces: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Failed to extract faces:', error);
+                alert('Error extracting faces: ' + error.message);
+            }
+        }
+        
+        async function pollTaskProgress(taskId, onComplete) {
+            const checkProgress = async () => {
+                try {
+                    const response = await fetch(`/api/progress/${taskId}`);
+                    const task = await response.json();
+                    
+                    if (task.status === 'completed') {
+                        if (onComplete) await onComplete();
+                        return;
+                    } else if (task.status === 'failed') {
+                        alert('Face extraction failed: ' + (task.error || 'Unknown error'));
+                        return;
+                    }
+                    
+                    // Still processing, check again in 2 seconds
+                    setTimeout(checkProgress, 2000);
+                } catch (error) {
+                    console.error('Failed to check task progress:', error);
+                }
+            };
+            
+            checkProgress();
         }
 
         async function loadUnassignedFaces() {
