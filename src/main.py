@@ -490,8 +490,12 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         metadata={"all_detections": detected_objects}
                     )
                     logger.info(f"Video sorted to /data/review/{best_category}/ (CLIP processing required)")
+                elif best_category == "person":
+                    # Person detected - defer sorting until after face recognition runs
+                    logger.info(f"Person detected - deferring sorting until face recognition completes")
+                    yolo_sorted_path = video_path  # Keep in place for now
                 else:
-                    # No CLIP needed - send directly to sorted
+                    # No CLIP needed and not a person - send directly to sorted
                     yolo_sorted_path = video_sorter.move_video(
                         video_path,
                         class_name=best_category
@@ -644,6 +648,20 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         # Don't set final_destination - allow CLIP to process if applicable
                     except Exception as unknown_sort_err:
                         logger.error(f"Failed to sort unknown person: {unknown_sort_err}", exc_info=True)
+            elif detected_objects and 'person' in detected_objects and not face_recognition_enabled:
+                # Face recognition disabled but person detected - sort to review/person/unknown
+                logger.info("Face recognition disabled - sorting person video to review/person/unknown")
+                try:
+                    unknown_person_path = video_sorter.sort_by_yolo_category(
+                        video_path,
+                        yolo_category="person/unknown",
+                        confidence=yolo_confidence,
+                        metadata={"all_detections": detected_objects, "face_recognition_disabled": True}
+                    )
+                    logger.info("Video moved to /data/review/person/unknown/ (face recognition disabled)")
+                    video_path = unknown_person_path
+                except Exception as unknown_sort_err:
+                    logger.error(f"Failed to sort person (FR disabled): {unknown_sort_err}", exc_info=True)
             
             # CLIP Stage 2: Check for matching Animal Profiles
             clip_stage2_result = None
