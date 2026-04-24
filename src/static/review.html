@@ -1216,26 +1216,26 @@
             try {
                 // Process confirms
                 if (actionGroups.confirm.length > 0) {
-                    await processQueuedActions('confirm', actionGroups.confirm);
+                    await processQueuedActionsAndWait('confirm', actionGroups.confirm);
                     completed += actionGroups.confirm.length;
                 }
                 
                 // Process rejects
                 if (actionGroups.reject.length > 0) {
-                    await processQueuedActions('reject', actionGroups.reject);
+                    await processQueuedActionsAndWait('reject', actionGroups.reject);
                     completed += actionGroups.reject.length;
                 }
                 
                 // Process person confirms
                 if (actionGroups.confirm_person.length > 0) {
-                    await processQueuedActions('confirm_person', actionGroups.confirm_person);
+                    await processQueuedActionsAndWait('confirm_person', actionGroups.confirm_person);
                     completed += actionGroups.confirm_person.length;
                 }
                 
                 // Process animal assignments (positive, negative, both)
                 for (const actionType of ['assign_positive', 'assign_negative', 'assign_both']) {
                     if (actionGroups[actionType].length > 0) {
-                        await processQueuedActions(actionType, actionGroups[actionType]);
+                        await processQueuedActionsAndWait(actionType, actionGroups[actionType]);
                         completed += actionGroups[actionType].length;
                     }
                 }
@@ -1243,7 +1243,7 @@
                 // Process face assignments (positive, negative)
                 for (const actionType of ['assign_face_positive', 'assign_face_negative']) {
                     if (actionGroups[actionType].length > 0) {
-                        await processQueuedActions(actionType, actionGroups[actionType]);
+                        await processQueuedActionsAndWait(actionType, actionGroups[actionType]);
                         completed += actionGroups[actionType].length;
                     }
                 }
@@ -1251,7 +1251,7 @@
                 // Process advanced reviews (each one separately as they have unique configs)
                 for (const item of actionGroups.advanced) {
                     try {
-                        await processAdvancedReviewAction(item);
+                        await processAdvancedReviewActionAndWait(item);
                         completed++;
                         removeFromQueue(item.filename);
                     } catch (error) {
@@ -1278,7 +1278,39 @@
             }
         }
         
-        async function processQueuedActions(action, items) {
+        // Helper function to poll task status until completion
+        async function waitForTaskCompletion(taskId, timeoutMs = 120000) {
+            const startTime = Date.now();
+            
+            while (Date.now() - startTime < timeoutMs) {
+                try {
+                    const response = await fetch(`/api/progress/${taskId}`);
+                    
+                    if (response.status === 404) {
+                        // Task no longer exists - assume completed
+                        return {status: 'completed'};
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'completed') {
+                        return data;
+                    } else if (data.status === 'failed') {
+                        throw new Error(data.error || 'Task failed');
+                    }
+                    
+                    // Wait 500ms before polling again
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (error) {
+                    console.error('Error polling task:', error);
+                    throw error;
+                }
+            }
+            
+            throw new Error(`Task ${taskId} timed out after ${timeoutMs}ms`);
+        }
+        
+        async function processQueuedActionsAndWait(action, items) {
             // Group by category for batch processing
             const byCategory = {};
             items.forEach(item => {
@@ -1353,12 +1385,19 @@
                     throw new Error(`Failed to ${action}: ${response.statusText}`);
                 }
                 
-                // Remove from queue
+                // Get task_id from response and wait for completion
+                const result = await response.json();
+                if (result.task_id) {
+                    console.log(`Waiting for task ${result.task_id} to complete...`);
+                    await waitForTaskCompletion(result.task_id);
+                }
+                
+                // Remove from queue after completion
                 filenames.forEach(f => removeFromQueue(f));
             }
         }
         
-        async function processAdvancedReviewAction(item) {
+        async function processAdvancedReviewActionAndWait(item) {
             const response = await fetch('/api/review/advanced-review', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -1373,6 +1412,13 @@
             
             if (!response.ok) {
                 throw new Error(`Failed to process advanced review: ${response.statusText}`);
+            }
+            
+            // Get task_id from response and wait for completion
+            const result = await response.json();
+            if (result.task_id) {
+                console.log(`Waiting for task ${result.task_id} to complete...`);
+                await waitForTaskCompletion(result.task_id);
             }
         }
 
