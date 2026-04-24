@@ -457,15 +457,19 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 
                 logger.info(f"HYBRID WORKFLOW - YOLO detected '{best_category}' with confidence {best_confidence:.2f}")
                 
-                # Check if any enabled Animal Profile requires CLIP processing for this category
+                # Check if ANY detected category (not just best) matches an Animal Profile
                 try:
                     all_profiles = profile_manager.list_profiles()
                     enabled_profiles = [p for p in all_profiles if p.enabled]
                     
-                    for profile in enabled_profiles:
-                        if best_category in profile.yolo_categories:
-                            needs_clip_processing = True
-                            logger.info(f"CLIP Stage 2 needed: profile '{profile.name}' matches YOLO category '{best_category}'")
+                    # Check ALL detected categories against ALL profiles
+                    for detected_category in detected_objects.keys():
+                        for profile in enabled_profiles:
+                            if detected_category in profile.yolo_categories:
+                                needs_clip_processing = True
+                                logger.info(f"CLIP Stage 2 needed: profile '{profile.name}' matches detected category '{detected_category}' (confidence: {detected_objects[detected_category]:.2f})")
+                                break
+                        if needs_clip_processing:
                             break
                 except Exception as profile_check_err:
                     logger.warning(f"Failed to check Animal Profiles: {profile_check_err}")
