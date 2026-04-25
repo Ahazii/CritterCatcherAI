@@ -44,7 +44,7 @@ def get_app_version():
                     return version
     except Exception as e:
         logger.debug(f"Could not read version file: {e}")
-    
+
     # Fallback version
     return "v0.1.0-dev"
 
@@ -68,7 +68,7 @@ def get_docker_image_id():
                 return container_id[:12]  # Short format (first 12 chars)
     except Exception as e:
         logger.debug(f"Could not get Docker container ID: {e}")
-    
+
     # Fallback to build date file
     build_date_file = Path('/app/build_date.txt')
     try:
@@ -79,7 +79,7 @@ def get_docker_image_id():
                     return f"Built: {build_date}"
     except Exception as e:
         logger.debug(f"Could not read build_date file: {e}")
-    
+
     # Final fallback
     return "Unknown"
 
@@ -165,11 +165,11 @@ gpu_monitor = None
 async def startup_event():
     """Initialize Animal Profile Manager, Face Profile Manager, Review Manager, and Download Tracker on startup."""
     global animal_profile_manager, face_profile_manager, review_manager, download_tracker
-    
+
     # Ensure config directory exists (copy from defaults if needed)
     try:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Copy config.yaml if it doesn't exist
         if not CONFIG_PATH.exists():
             default_config = Path("/app/config/config.yaml")  # Template in image
@@ -181,21 +181,21 @@ async def startup_event():
                 logger.warning(f"Default config not found at {default_config}")
     except Exception as e:
         logger.error(f"Failed to initialize config: {e}")
-    
+
     # Initialize animal profile manager
     try:
         animal_profile_manager = AnimalProfileManager(Path("/data"))
         logger.info("Animal profile manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize animal profile manager: {e}")
-    
+
     # Initialize face profile manager
     try:
         face_profile_manager = FaceProfileManager(Path("/data"))
         logger.info("Face profile manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize face profile manager: {e}")
-    
+
     # Initialize review manager
     try:
         if animal_profile_manager:
@@ -203,7 +203,7 @@ async def startup_event():
             logger.info("Review manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize review manager: {e}")
-    
+
     # Initialize download tracker
     try:
         download_tracker = DownloadTracker()
@@ -218,7 +218,7 @@ async def root():
     index_file = static_path / "index.html"
     if not index_file.exists():
         return HTMLResponse("<h1>CritterCatcherAI</h1><p>Web interface loading...</p>")
-    
+
     # Inject version and Docker image ID into HTML
     html_content = index_file.read_text()
     html_content = html_content.replace('{{version}}', get_app_version())
@@ -232,20 +232,20 @@ async def root():
 async def get_status():
     """Get current application status."""
     progress = app_state["processing_progress"]
-    
+
     # Calculate time elapsed if processing
     time_elapsed = None
     time_remaining = None
     if app_state["is_processing"] and progress["start_time"]:
         elapsed_seconds = (datetime.now() - progress["start_time"]).total_seconds()
         time_elapsed = int(elapsed_seconds)
-        
+
         # Estimate remaining time
         if progress["videos_processed"] > 0 and progress["videos_total"] > 0:
             avg_time_per_video = elapsed_seconds / progress["videos_processed"]
             remaining_videos = progress["videos_total"] - progress["videos_processed"]
             time_remaining = int(avg_time_per_video * remaining_videos)
-    
+
     return {
         "status": "success",
         "is_processing": app_state["is_processing"],
@@ -283,7 +283,7 @@ async def stream_status():
 async def get_stats():
     """Get video sorting statistics."""
     stats = {}
-    
+
     if SORTED_PATH.exists():
         # Count videos in each category
         for category_dir in SORTED_PATH.iterdir():
@@ -297,7 +297,7 @@ async def get_stats():
                 else:
                     video_count = len(list(category_dir.glob("*.mp4")))
                     stats[category_dir.name] = video_count
-    
+
     return stats
 
 
@@ -306,7 +306,7 @@ async def get_sorted_stats():
     """Get time-based sorted video statistics with auto/manual breakdown."""
     try:
         from datetime import timedelta
-        
+
         now = datetime.now()
         time_periods = {
             "12h": now - timedelta(hours=12),
@@ -314,14 +314,14 @@ async def get_sorted_stats():
             "1w": now - timedelta(weeks=1),
             "1m": now - timedelta(days=30)
         }
-        
+
         stats = {}
-        
+
         if SORTED_PATH.exists():
             for category_dir in SORTED_PATH.iterdir():
                 if not category_dir.is_dir():
                     continue
-                
+
                 profile_name = category_dir.name
                 if profile_name == "people":
                     # Handle people subdirectories
@@ -331,7 +331,7 @@ async def get_sorted_stats():
                             stats[person_name] = _count_videos_by_time(person_dir, time_periods)
                 else:
                     stats[profile_name] = _count_videos_by_time(category_dir, time_periods)
-        
+
         return {"status": "success", "stats": stats}
     except Exception as e:
         logger.error(f"Failed to get sorted stats: {e}", exc_info=True)
@@ -343,7 +343,7 @@ async def get_review_stats():
     """Get review queue statistics by time in queue."""
     try:
         from datetime import timedelta
-        
+
         now = datetime.now()
         time_buckets = {
             "<12h": timedelta(hours=12),
@@ -351,23 +351,23 @@ async def get_review_stats():
             "<1w": timedelta(weeks=1),
             ">1w": None  # Everything older than 1 week
         }
-        
+
         stats = {}
         review_base = Path("/data/review")
-        
+
         if review_base.exists():
             for category_dir in review_base.iterdir():
                 if not category_dir.is_dir():
                     continue
-                
+
                 category_name = category_dir.name
                 counts = {"<12h": 0, "<24h": 0, "<1w": 0, ">1w": 0}
-                
+
                 for video_file in category_dir.glob("*.mp4"):
                     # Try to get timestamp from metadata first
                     metadata_file = video_file.with_suffix(video_file.suffix + ".json")
                     video_time = None
-                    
+
                     if metadata_file.exists():
                         try:
                             with open(metadata_file, 'r') as f:
@@ -377,14 +377,14 @@ async def get_review_stats():
                                     video_time = datetime.fromisoformat(timestamp_str)
                         except Exception as e:
                             logger.debug(f"Could not parse metadata timestamp: {e}")
-                    
+
                     # Fallback to file modification time
                     if not video_time:
                         video_time = datetime.fromtimestamp(video_file.stat().st_mtime)
-                    
+
                     # Calculate time in queue
                     time_in_queue = now - video_time
-                    
+
                     # Categorize into time buckets
                     if time_in_queue < time_buckets["<12h"]:
                         counts["<12h"] += 1
@@ -394,9 +394,9 @@ async def get_review_stats():
                         counts["<1w"] += 1
                     else:
                         counts[">1w"] += 1
-                
+
                 stats[category_name] = counts
-        
+
         return {"status": "success", "stats": stats}
     except Exception as e:
         logger.error(f"Failed to get review stats: {e}", exc_info=True)
@@ -411,20 +411,20 @@ def _count_videos_by_time(directory: Path, time_periods: dict) -> dict:
         "1w": {"auto": 0, "manual": 0},
         "1m": {"auto": 0, "manual": 0}
     }
-    
+
     for video_file in directory.glob("*.mp4"):
         # Get file modification time (when moved to sorted)
         file_time = datetime.fromtimestamp(video_file.stat().st_mtime)
-        
+
         # Determine if auto or manual
         is_auto = False
         metadata_file = video_file.with_suffix(video_file.suffix + ".json")
-        
+
         if metadata_file.exists():
             try:
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
-                    
+
                 # Check multiple indicators for auto-sorting
                 if metadata.get('status') == 'clip_sorted':
                     is_auto = True
@@ -434,7 +434,7 @@ def _count_videos_by_time(directory: Path, time_periods: dict) -> dict:
                         is_auto = True
             except Exception as e:
                 logger.debug(f"Could not parse metadata for {video_file.name}: {e}")
-        
+
         # Count in appropriate time periods
         for period, cutoff_time in time_periods.items():
             if file_time >= cutoff_time:
@@ -442,7 +442,7 @@ def _count_videos_by_time(directory: Path, time_periods: dict) -> dict:
                     counts[period]["auto"] += 1
                 else:
                     counts[period]["manual"] += 1
-    
+
     return counts
 
 
@@ -453,7 +453,7 @@ async def get_config():
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH, 'r') as f:
                 config = yaml.safe_load(f)
-            
+
             # Add environment variables
             env_vars = {
                 "RING_USERNAME": os.environ.get("RING_USERNAME", ""),
@@ -461,7 +461,7 @@ async def get_config():
                 "RUN_ONCE": os.environ.get("RUN_ONCE", "false"),
                 "TZ": os.environ.get("TZ", "UTC")
             }
-            
+
             return {
                 "status": "success",
                 "config": config,
@@ -507,36 +507,36 @@ async def update_config(config_data: dict):
         # Validate config structure
         if "config" not in config_data:
             raise HTTPException(status_code=400, detail="Invalid config format")
-        
+
         # Load existing config to preserve sections not managed by UI
         existing_config = {}
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH, 'r') as f:
                 existing_config = yaml.safe_load(f) or {}
-        
+
         new_config = config_data["config"]
-        
+
         # Preserve specialized_detection subsections (species, clip_extraction, training)
         # Only update the 'enabled' flag from UI
         if "specialized_detection" in new_config:
             if "specialized_detection" not in existing_config:
                 existing_config["specialized_detection"] = {}
-            
+
             # Preserve existing subsections
             for key in ['species', 'clip_extraction', 'training']:
                 if key in existing_config.get("specialized_detection", {}):
                     new_config["specialized_detection"][key] = existing_config["specialized_detection"][key]
-        
+
         # CRITICAL: Preserve yolo_manual_categories if not included in UI update
         # This prevents categories from being erased when other config sections are updated
         if "yolo_manual_categories" not in new_config and "yolo_manual_categories" in existing_config:
             new_config["yolo_manual_categories"] = existing_config["yolo_manual_categories"]
             logger.info(f"Preserved {len(existing_config['yolo_manual_categories'])} yolo_manual_categories during config update")
-        
+
         # Write merged config to file
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(new_config, f, default_flow_style=False)
-        
+
         # Update scheduler state if changed
         scheduler_config = new_config.get('scheduler', {})
         if scheduler_config:
@@ -549,7 +549,7 @@ async def update_config(config_data: dict):
                 if app_state["is_processing"]:
                     logger.info("Scheduler disabled during processing - stopping current run")
                     app_state["stop_requested"] = True
-        
+
         logger.info("Configuration updated successfully")
         return {"status": "success", "message": "Configuration updated"}
     except Exception as e:
@@ -588,7 +588,7 @@ async def get_gpu_config():
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH, 'r') as f:
                 config = yaml.safe_load(f)
-            
+
             gpu_config = config.get('logging', {}).get('gpu_monitoring', {})
             return {
                 "max_scale_percent": gpu_config.get('max_scale_percent', 10),
@@ -613,7 +613,7 @@ async def get_gpu_config():
 @app.get("/api/logs")
 async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = "docker"):
     """Get recent log lines from Docker logs or error file.
-    
+
     Args:
         lines: Number of lines to return (max 2000)
         level: Optional filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -622,11 +622,11 @@ async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = 
     try:
         # Limit lines to max 2000
         lines = min(lines, 2000)
-        
+
         if source == "file":
             # Read from error log file (ERROR and CRITICAL only)
             log_file = Path("/config/crittercatcher.log")
-            
+
             if not log_file.exists():
                 return {
                     "status": "success",
@@ -634,21 +634,21 @@ async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = 
                     "total_lines": 1,
                     "source": "file"
                 }
-            
+
             # Read from file
             with open(log_file, 'r', encoding='utf-8') as f:
                 all_lines = f.readlines()
                 recent_lines = all_lines[-lines:]
-            
+
             # Filter by level if specified (file already contains only ERROR and CRITICAL)
             if level:
                 level_upper = level.upper()
                 filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
                 recent_lines = filtered_lines
-            
+
             # Get file stats
             stats = log_file.stat()
-            
+
             return {
                 "status": "success",
                 "logs": recent_lines,
@@ -661,10 +661,10 @@ async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = 
         else:
             # Read from Docker logs (all log levels)
             import subprocess
-            
+
             # Get container ID/name from hostname (Docker sets this)
             container_id = os.environ.get('HOSTNAME', '')
-            
+
             if not container_id:
                 return {
                     "status": "success",
@@ -672,7 +672,7 @@ async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = 
                     "total_lines": 1,
                     "source": "error"
                 }
-            
+
             try:
                 # Try to run docker logs command from within the container
                 # This requires the Docker socket to be mounted
@@ -682,18 +682,18 @@ async def get_logs(lines: int = 500, level: Optional[str] = None, source: str = 
                     text=True,
                     timeout=10
                 )
-                
+
                 if result.returncode == 0:
                     # Combine stdout and stderr (Docker logs go to both)
                     log_output = result.stdout + result.stderr
                     recent_lines = log_output.strip().split('\n') if log_output else []
-                    
+
                     # Filter by level if specified
                     if level:
                         level_upper = level.upper()
                         filtered_lines = [line for line in recent_lines if f" - {level_upper} - " in line]
                         recent_lines = filtered_lines
-                    
+
                     return {
                         "status": "success",
                         "logs": recent_lines,
@@ -746,10 +746,10 @@ async def download_logs():
     """Download error log file (ERROR and CRITICAL messages)."""
     try:
         log_file = Path("/config/crittercatcher.log")
-        
+
         if not log_file.exists():
             raise HTTPException(status_code=404, detail="Error log file not found (no errors logged yet)")
-        
+
         return FileResponse(
             path=str(log_file),
             media_type='text/plain',
@@ -767,24 +767,24 @@ async def clear_logs():
     """Clear/rotate error log file."""
     try:
         log_file = Path("/config/crittercatcher.log")
-        
+
         if not log_file.exists():
             return {
                 "status": "success",
                 "message": "No error log to clear (no errors logged yet)"
             }
-        
+
         # Backup current log with timestamp
         backup_name = f"crittercatcher_errors.{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         backup_path = log_file.parent / backup_name
         shutil.copy2(log_file, backup_path)
-        
+
         # Clear current log file
         with open(log_file, 'w') as f:
             f.write(f"# Error log cleared at {datetime.now().isoformat()}\n")
-        
+
         logger.info(f"Error log cleared and backed up to {backup_name}")
-        
+
         return {
             "status": "success",
             "message": f"Error log cleared and backed up to {backup_name}"
@@ -798,14 +798,14 @@ async def clear_logs():
 async def get_videos(category: Optional[str] = None, limit: int = 50):
     """Get list of sorted videos."""
     videos = []
-    
+
     try:
         if category:
             # Get videos from specific category
             category_path = SORTED_PATH / category
             if category_path.exists():
-                for video_file in sorted(category_path.glob("*.mp4"), 
-                                        key=lambda x: x.stat().st_mtime, 
+                for video_file in sorted(category_path.glob("*.mp4"),
+                                        key=lambda x: x.stat().st_mtime,
                                         reverse=True)[:limit]:
                     videos.append({
                         "filename": video_file.name,
@@ -838,15 +838,15 @@ async def get_videos(category: Optional[str] = None, limit: int = 50):
                                 "size": video_file.stat().st_size,
                                 "modified": datetime.fromtimestamp(video_file.stat().st_mtime).isoformat()
                             })
-            
+
             # Sort by modification time and limit
             videos.sort(key=lambda x: x["modified"], reverse=True)
             videos = videos[:limit]
-    
+
     except Exception as e:
         logger.error(f"Failed to get videos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
     return videos
 
 
@@ -854,7 +854,7 @@ async def get_videos(category: Optional[str] = None, limit: int = 50):
 async def get_trained_faces():
     """Get list of trained faces."""
     faces = []
-    
+
     try:
         if FACE_TRAINING_PATH.exists():
             for person_dir in FACE_TRAINING_PATH.iterdir():
@@ -867,7 +867,7 @@ async def get_trained_faces():
     except Exception as e:
         logger.error(f"Failed to get trained faces: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
     return faces
 
 
@@ -881,19 +881,19 @@ async def upload_face_training_image(
         # Validate file type
         if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
             raise HTTPException(status_code=400, detail="Only JPG and PNG images are supported")
-        
+
         # Create person directory
         person_dir = FACE_TRAINING_PATH / person_name
         person_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Save file
         file_path = person_dir / file.filename
         content = await file.read()
         file_path.write_bytes(content)
-        
+
         logger.info(f"Uploaded training image for {person_name}: {file.filename}")
         return {"status": "success", "message": f"Image uploaded for {person_name}"}
-    
+
     except Exception as e:
         logger.error(f"Failed to upload face image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -906,20 +906,20 @@ async def train_face(person_name: str, background_tasks: BackgroundTasks):
         person_dir = FACE_TRAINING_PATH / person_name
         if not person_dir.exists():
             raise HTTPException(status_code=404, detail=f"No training images found for {person_name}")
-        
+
         # Import here to avoid circular dependencies
         from face_recognizer import FaceRecognizer
-        
+
         def train_task():
             fr = FaceRecognizer()
             images = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
             fr.add_person(person_name, images)
             logger.info(f"Completed face training for {person_name}")
-        
+
         background_tasks.add_task(train_task)
-        
+
         return {"status": "success", "message": f"Training started for {person_name}"}
-    
+
     except Exception as e:
         logger.error(f"Failed to train face: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -944,24 +944,24 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
         username = credentials.get('username')
         password = credentials.get('password')
         code_2fa = credentials.get('code_2fa')  # Optional 2FA code
-        
+
         # Use environment variables if not provided
         if not username:
             username = os.environ.get('RING_USERNAME')
         if not password:
             password = os.environ.get('RING_PASSWORD')
-        
+
         if not username or not password:
             raise HTTPException(status_code=400, detail="Username and password required (via form or environment)")
-        
+
         from ring_downloader import RingDownloader
         from ring_doorbell.exceptions import Requires2FAError
-        
+
         rd = RingDownloader(
             download_path="/data/downloads",
             token_file="/data/tokens/ring_token.json"
         )
-        
+
         # Try to authenticate
         if code_2fa:
             logger.info(f"Attempting 2FA authentication for {username}")
@@ -1015,7 +1015,7 @@ async def ring_authenticate(credentials: dict, background_tasks: BackgroundTasks
                     )
                 # Otherwise re-raise
                 raise
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1048,14 +1048,14 @@ async def trigger_processing(background_tasks: BackgroundTasks):
     logger.info("=" * 80)
     logger.info("MANUAL PROCESSING TRIGGERED VIA WEB UI")
     logger.info("=" * 80)
-    
+
     if app_state["is_processing"]:
         logger.warning("Processing already running, rejecting request")
         return {"status": "already_running", "message": "Processing is already in progress"}
-    
+
     # Create task tracker entry
     task_id = task_tracker.create_task(total=100, message="Initializing video processing...")
-    
+
     # Reset stop flag and progress
     app_state["stop_requested"] = False
     app_state["processing_progress"] = {
@@ -1065,7 +1065,7 @@ async def trigger_processing(background_tasks: BackgroundTasks):
         "videos_total": 0,
         "start_time": datetime.now()
     }
-    
+
     def process_task():
         app_state["is_processing"] = True
         try:
@@ -1091,7 +1091,7 @@ async def trigger_processing(background_tasks: BackgroundTasks):
                 "videos_total": 0,
                 "start_time": None
             }
-    
+
     background_tasks.add_task(process_task)
     logger.info("Processing task added to background queue")
     return {"status": "started", "message": "Processing started", "task_id": task_id}
@@ -1102,10 +1102,10 @@ async def stop_processing():
     """Request to stop current processing gracefully."""
     if not app_state["is_processing"]:
         return {"status": "not_processing", "message": "No processing task is currently running"}
-    
+
     app_state["stop_requested"] = True
     logger.info("Stop requested - will finish current video and stop")
-    
+
     return {
         "status": "stopping",
         "message": "Stop requested. Will finish current video and stop gracefully."
@@ -1118,11 +1118,11 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
     logger.info("=" * 80)
     logger.info("DOWNLOAD ALL TRIGGERED VIA WEB UI")
     logger.info("=" * 80)
-    
+
     if app_state["is_processing"]:
         logger.warning("Processing already running, rejecting download request")
         return {"status": "already_running", "message": "A task is already in progress"}
-    
+
     # Parse time range
     time_range = request.get('time_range', 'all')
     hours_map = {
@@ -1133,11 +1133,11 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
         '30days': 24 * 30,
         'all': None
     }
-    
+
     hours = hours_map.get(time_range)
     if time_range not in hours_map:
         raise HTTPException(status_code=400, detail=f"Invalid time_range: {time_range}")
-    
+
     logger.info(f"Download All: time_range={time_range}, hours={hours}")
 
     # Read optional download limit from config
@@ -1149,31 +1149,31 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
             download_limit = config.get('ring', {}).get('download_limit')
     except Exception as e:
         logger.warning(f"Failed to read download_limit from config: {e}")
-    
+
     # Create task tracker entry
     time_desc = f"last {time_range}" if time_range != 'all' else "all available videos"
     task_id = task_tracker.create_task(total=100, message=f"Downloading {time_desc}...")
-    
+
     def download_task():
         app_state["is_processing"] = True
         try:
             task_tracker.start_task(task_id, message="Authenticating with Ring...")
             logger.info(f"Starting download all task (time_range: {time_range})...")
             from ring_downloader import RingDownloader
-            
+
             rd = RingDownloader(
                 download_path="/data/downloads",
                 token_file="/data/tokens/ring_token.json"
             )
-            
+
             # Authenticate
             if not rd.authenticate():
                 logger.error("Failed to authenticate with Ring")
                 task_tracker.fail_task(task_id, "Failed to authenticate with Ring")
                 return
-            
+
             task_tracker.update_task(task_id, current=30, message="Downloading videos...")
-            
+
             # Download all videos
             stats = rd.download_all_videos(
                 hours=hours,
@@ -1186,12 +1186,12 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
                 f"{stats['unavailable']} unavailable (404), "
                 f"{stats['failed']} failed"
             )
-            
+
             task_tracker.complete_task(
                 task_id,
                 message=f"Downloaded {stats['new_downloads']} new videos! ({stats['already_downloaded']} already on system)"
             )
-            
+
         except Exception as e:
             logger.error(f"Download all failed: {e}", exc_info=True)
             task_tracker.fail_task(task_id, str(e))
@@ -1204,10 +1204,10 @@ async def download_all_videos(request: dict, background_tasks: BackgroundTasks):
                 "videos_total": 0,
                 "start_time": None
             }
-    
+
     background_tasks.add_task(download_task)
     logger.info("Download all task added to background queue")
-    
+
     return {"status": "started", "message": f"Downloading {time_desc}...", "task_id": task_id}
 
 
@@ -1217,11 +1217,11 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
     logger.info("=" * 80)
     logger.info("CLEANUP DOWNLOADS TRIGGERED VIA WEB UI")
     logger.info("=" * 80)
-    
+
     if app_state["is_processing"]:
         logger.warning("Processing already running, rejecting cleanup request")
         return {"status": "already_running", "message": "A task is already in progress"}
-    
+
     def cleanup_task():
         app_state["is_processing"] = True
         app_state["stop_requested"] = False
@@ -1232,7 +1232,7 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
             "videos_total": 0,
             "start_time": datetime.now()
         }
-        
+
         try:
             logger.info("Starting cleanup task - processing ALL videos in downloads folder...")
             from main import load_config
@@ -1240,10 +1240,10 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
             from face_recognizer import FaceRecognizer
             from video_sorter import VideoSorter
             from taxonomy_tree import TaxonomyTree
-            
+
             config = load_config()
             detection_config = config.get('detection', {})
-            
+
             # Load taxonomy tree for specialized detection
             taxonomy_file = Path("/app/config/taxonomy.json")
             taxonomy_tree = None
@@ -1253,32 +1253,32 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
             except Exception as e:
                 logger.warning(f"Failed to load taxonomy tree: {e}")
                 taxonomy_tree = TaxonomyTree(YOLO_COCO_CLASSES)
-            
+
             # Get all video files in downloads
             downloads_path = Path("/data/downloads")
             video_files = list(downloads_path.glob("*.mp4"))
-            
+
             logger.info(f"Found {len(video_files)} videos in downloads folder")
-            
+
             if not video_files:
                 logger.info("No videos to process")
                 return
-            
+
             # Update progress total
             app_state["processing_progress"]["videos_total"] = len(video_files)
-            
+
             # Initialize components
             video_sorter = VideoSorter("/data/sorted")
-            
+
             object_labels = detection_config.get('object_labels', [])
             discovery_mode = detection_config.get('discovery_mode', False)
             discovery_threshold = detection_config.get('discovery_threshold', 0.30)
             ignored_labels = detection_config.get('ignored_labels', [])
             yolo_model = detection_config.get('yolo_model', 'yolov8n')
-            
+
             if not yolo_model.endswith('.pt'):
                 yolo_model = f"{yolo_model}.pt"
-            
+
             object_detector = ObjectDetector(
                 labels=object_labels,
                 confidence_threshold=detection_config.get('confidence_threshold', 0.25),
@@ -1288,43 +1288,43 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
                 ignored_labels=ignored_labels,
                 model_name=yolo_model
             )
-            
+
             face_recognizer = FaceRecognizer(
                 encodings_path=config.get('paths', {}).get('face_encodings', '/data/faces/encodings.pkl'),
                 tolerance=detection_config.get('face_tolerance', 0.6),
                 num_frames=detection_config.get('face_frames', 10),
                 model=detection_config.get('face_model', 'hog')
             )
-            
+
             # Process each video
             for idx, video_path in enumerate(video_files, 1):
                 # Check stop flag
                 if app_state.get("stop_requested", False):
                     logger.info("Stop requested - ending cleanup gracefully")
                     break
-                
+
                 try:
                     # Check if video still exists
                     if not video_path.exists():
                         logger.debug(f"Skipping {video_path.name}: already processed")
                         continue
-                    
+
                     # Update progress
                     app_state["processing_progress"]["current_video"] = video_path.name
                     app_state["processing_progress"]["videos_processed"] = idx
                     app_state["processing_progress"]["current_step"] = "Running YOLO detection..."
-                    
+
                     logger.info(f"Processing video: {video_path.name}")
-                    
+
                     # Run object detection - use specialized detection if enabled
                     specialized_enabled = config.get('specialized_detection', {}).get('enabled', False)
-                    
+
                     if specialized_enabled and taxonomy_tree:
                         logger.debug("Using specialized detection (Stage 1 + Stage 2)")
                         detected_objects, species_results = object_detector.detect_objects_with_specialization(
                             video_path, config, taxonomy_tree
                         )
-                        
+
                         # Keep species results separate for specialized sorting
                         if species_results:
                             logger.info(f"Specialized detections: {list(species_results.keys())}")
@@ -1332,20 +1332,20 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
                         logger.debug("Using standard YOLO detection only (Stage 1)")
                         detected_objects = object_detector.detect_objects_in_video(video_path)
                         species_results = {}
-                    
+
                     # Run face recognition ONLY if enabled and conditions are met
                     priority = detection_config.get('priority', 'objects')
                     face_recognition_enabled = config.get('face_recognition', {}).get('enabled', False)
                     recognized_people = set()
-                    
+
                     if face_recognition_enabled and (priority == "people" or not detected_objects):
                         # Update progress
                         app_state["processing_progress"]["current_step"] = "Recognizing faces..."
                         recognized_people = face_recognizer.recognize_faces_in_video(video_path)
-                    
+
                     # Update progress
                     app_state["processing_progress"]["current_step"] = "Sorting video..."
-                    
+
                     # Sort video using specialized detection-aware sorting
                     if specialized_enabled and species_results:
                         # Use new specialized sorting with species-specific folders
@@ -1367,23 +1367,23 @@ async def cleanup_downloads(background_tasks: BackgroundTasks):
                             recognized_people=recognized_people,
                             priority=priority
                         )
-                    
+
                     logger.info(f"Video processed and sorted to: {sorted_path}")
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to process video {video_path.name}: {e}", exc_info=True)
-            
+
             # Log statistics
             stats = video_sorter.get_stats()
             logger.info(f"Cleanup complete. Sorting statistics: {stats}")
             app_state["last_run"] = datetime.now().isoformat()
-            
+
         except Exception as e:
             logger.error(f"Cleanup task failed: {e}", exc_info=True)
         finally:
             app_state["is_processing"] = False
             app_state["processing_progress"]["current_step"] = "Complete" if not app_state["stop_requested"] else "Stopped"
-    
+
     background_tasks.add_task(cleanup_task)
     logger.info("Cleanup task added to background queue")
     return {"status": "started", "message": f"Processing all videos in downloads folder..."}
@@ -1403,7 +1403,7 @@ async def stream_logs():
         yield {"data": "  3. Unraid Terminal: docker logs --tail 100 crittercatcher-ai"}
         yield {"data": ""}
         yield {"data": "Recent activity can be seen in the Dashboard stats above."}
-    
+
     return EventSourceResponse(event_generator())
 
 
@@ -1428,7 +1428,7 @@ async def get_unknown_faces():
     try:
         if not UNKNOWN_FACES_PATH.exists():
             return {"groups": []}
-        
+
         # Load all unknown faces with metadata
         faces_data = []
         for img_file in UNKNOWN_FACES_PATH.glob("*.jpg"):
@@ -1437,41 +1437,41 @@ async def get_unknown_faces():
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
                     faces_data.append(metadata)
-        
+
         # Group similar faces by comparing encodings
         groups = []
         used_indices = set()
-        
+
         for i, face1 in enumerate(faces_data):
             if i in used_indices:
                 continue
-            
+
             group = [face1]
             used_indices.add(i)
             encoding1 = np.array(face1.get('encoding', []))
-            
+
             # Find similar faces
             for j, face2 in enumerate(faces_data):
                 if j <= i or j in used_indices:
                     continue
-                
+
                 encoding2 = np.array(face2.get('encoding', []))
-                
+
                 # Calculate face distance
                 if len(encoding1) > 0 and len(encoding2) > 0:
                     distance = np.linalg.norm(encoding1 - encoding2)
                     if distance < 0.6:  # Similar faces
                         group.append(face2)
                         used_indices.add(j)
-            
+
             groups.append({
                 "id": f"group_{i}",
                 "count": len(group),
                 "faces": group
             })
-        
+
         return {"groups": groups}
-        
+
     except Exception as e:
         logger.error(f"Failed to get unknown faces: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1499,23 +1499,23 @@ async def label_unknown_faces(request: dict, background_tasks: BackgroundTasks):
         filenames = request.get('filenames', [])
         person_name = request.get('person_name', '').strip()
         action = request.get('action', 'label')  # 'label' or 'ignore'
-        
+
         if not person_name and action == 'label':
             raise HTTPException(status_code=400, detail="Person name required")
-        
+
         if not filenames:
             raise HTTPException(status_code=400, detail="No files specified")
-        
+
         # Create person directory in training folder
         if action == 'label':
             person_dir = FACE_TRAINING_PATH / person_name
             person_dir.mkdir(parents=True, exist_ok=True)
-        
+
         moved_count = 0
         for filename in filenames:
             image_path = UNKNOWN_FACES_PATH / filename
             metadata_path = UNKNOWN_FACES_PATH / f"{filename}.json"
-            
+
             if image_path.exists():
                 if action == 'label':
                     # Move to training folder
@@ -1526,11 +1526,11 @@ async def label_unknown_faces(request: dict, background_tasks: BackgroundTasks):
                     # Delete the file
                     image_path.unlink()
                     moved_count += 1
-                
+
                 # Remove metadata
                 if metadata_path.exists():
                     metadata_path.unlink()
-        
+
         # Retrain face recognition if labeled
         if action == 'label' and moved_count > 0:
             def retrain_task():
@@ -1542,12 +1542,12 @@ async def label_unknown_faces(request: dict, background_tasks: BackgroundTasks):
                     logger.info(f"Retrained face recognition with {len(images)} images for {person_name}")
                 except Exception as e:
                     logger.error(f"Failed to retrain: {e}")
-            
+
             background_tasks.add_task(retrain_task)
-        
+
         message = f"{moved_count} face(s) {'labeled as ' + person_name if action == 'label' else 'ignored'}"
         return {"status": "success", "message": message}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1567,29 +1567,29 @@ async def return_videos_to_downloads(background_tasks: BackgroundTasks):
     try:
         if app_state["is_processing"]:
             return {"status": "already_running", "message": "A task is already in progress"}
-        
+
         if not SORTED_PATH.exists():
             return {"status": "no_videos", "message": "No sorted videos found"}
-        
+
         # Count videos to move
         video_count = 0
         for video_file in SORTED_PATH.rglob("*.mp4"):
             video_count += 1
-        
+
         if video_count == 0:
             return {"status": "no_videos", "message": "No videos found in sorted directories"}
-        
+
         logger.info(f"Returning {video_count} videos back to downloads")
-        
+
         def return_task():
             app_state["is_processing"] = True
             try:
                 import shutil
-                
+
                 # Move all videos back
                 DOWNLOADS_PATH.mkdir(parents=True, exist_ok=True)
                 moved_count = 0
-                
+
                 for video_file in list(SORTED_PATH.rglob("*.mp4")):
                     dest = DOWNLOADS_PATH / video_file.name
                     # Handle name conflicts
@@ -1597,34 +1597,34 @@ async def return_videos_to_downloads(background_tasks: BackgroundTasks):
                     while dest.exists():
                         dest = DOWNLOADS_PATH / f"{video_file.stem}_{counter}{video_file.suffix}"
                         counter += 1
-                    
+
                     shutil.move(str(video_file), str(dest))
                     moved_count += 1
                     logger.debug(f"Moved: {video_file.name} -> {dest.name}")
-                
+
                 logger.info(f"Moved {moved_count} videos back to downloads")
-                
+
                 # Delete sorted directories
                 if SORTED_PATH.exists():
                     for item in SORTED_PATH.iterdir():
                         if item.is_dir():
                             shutil.rmtree(item)
                     logger.info("Deleted sorted directories")
-                
+
                 logger.info("Videos returned to downloads. Use 'Cleanup Downloads' or 'Process Now' to reprocess them.")
-                
+
             except Exception as e:
                 logger.error(f"Failed to return videos to downloads: {e}", exc_info=True)
             finally:
                 app_state["is_processing"] = False
-        
+
         background_tasks.add_task(return_task)
-        
+
         return {
             "status": "started",
             "message": f"Moving {video_count} videos back to downloads..."
         }
-    
+
     except Exception as e:
         logger.error(f"Failed to return videos to downloads: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1637,25 +1637,25 @@ async def check_update():
         # GitHub repo details
         repo_owner = "Ahazii"
         repo_name = "CritterCatcherAI"
-        
+
         # Get current version
         current_version = get_app_version()
-        
+
         # Check GitHub API for latest release
         api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
         response = requests.get(api_url, timeout=10)
-        
+
         if response.status_code == 200:
             release_data = response.json()
             latest_version = release_data.get('tag_name', '')
             release_url = release_data.get('html_url', '')
             release_notes = release_data.get('body', '')
             published_at = release_data.get('published_at', '')
-            
+
             # Compare versions (strip 'v' prefix if present)
             current_ver = current_version.lstrip('v')
             latest_ver = latest_version.lstrip('v')
-            
+
             # Improved version comparison:
             # - Treat 'dev' versions as pre-release (always older than proper releases)
             # - Compare semantic versions properly
@@ -1688,9 +1688,9 @@ async def check_update():
                         update_available = latest_parts > current_parts
                     except (ValueError, AttributeError):
                         update_available = latest_ver > current_ver
-            
+
             logger.debug(f"Update check: current={current_version}, latest={latest_version}, update_available={update_available}")
-            
+
             return {
                 "success": True,
                 "update_available": update_available,
@@ -1706,7 +1706,7 @@ async def check_update():
                 "success": False,
                 "message": f"GitHub API returned status {response.status_code}"
             }
-            
+
     except Exception as e:
         logger.debug(f"Error checking for updates: {e}")
         return {
@@ -1732,11 +1732,11 @@ async def get_analytics_stats():
                 "by_species": {}
             }
         }
-        
+
         # Get YOLO classes for comparison
         from object_detector import YOLO_COCO_CLASSES
         yolo_classes_lower = [c.lower() for c in YOLO_COCO_CLASSES]
-        
+
         # Count videos by category
         if SORTED_PATH.exists():
             for category_dir in SORTED_PATH.iterdir():
@@ -1761,13 +1761,13 @@ async def get_analytics_stats():
                             stats["stage2_classifications"] += video_count
                             stats["specialized_stats"]["total"] += video_count
                             stats["specialized_stats"]["by_species"][category_dir.name] = video_count
-        
+
         # V2: detections are now tracked per animal profile in review folders
-        
+
         # Top detections
         sorted_categories = sorted(stats["categories"].items(), key=lambda x: x[1], reverse=True)
         stats["top_detections"] = [{"label": k, "count": v} for k, v in sorted_categories[:10]]
-        
+
         # Face recognition stats
         if FACE_TRAINING_PATH.exists():
             for person_dir in FACE_TRAINING_PATH.iterdir():
@@ -1777,7 +1777,7 @@ async def get_analytics_stats():
                         "training_images": image_count,
                         "videos": stats["categories"].get(f"people/{person_dir.name}", 0)
                     }
-        
+
         return stats
     except Exception as e:
         logger.error(f"Failed to get analytics stats: {e}")
@@ -1789,31 +1789,31 @@ async def get_analytics_timeline(days: int = 30):
     """Get timeline data for analytics charts."""
     try:
         from datetime import timedelta
-        
+
         timeline = []
         now = datetime.now()
-        
+
         # Generate daily stats for the last N days
         for i in range(days, -1, -1):
             date = now - timedelta(days=i)
             date_str = date.strftime("%Y-%m-%d")
-            
+
             day_stats = {
                 "date": date_str,
                 "videos": 0,
                 "detections": 0,
                 "categories": {}
             }
-            
+
             # Count videos for this day
             if SORTED_PATH.exists():
                 for video_file in SORTED_PATH.rglob("*.mp4"):
                     file_date = datetime.fromtimestamp(video_file.stat().st_mtime)
                     if file_date.strftime("%Y-%m-%d") == date_str:
                         day_stats["videos"] += 1
-            
+
             timeline.append(day_stats)
-        
+
         return {"timeline": timeline}
     except Exception as e:
         logger.error(f"Failed to get timeline: {e}")
@@ -1827,7 +1827,7 @@ async def get_storage_data():
         storage_data = []
         total_size = 0
         total_videos = 0
-        
+
         if SORTED_PATH.exists():
             for category_dir in SORTED_PATH.iterdir():
                 if category_dir.is_dir():
@@ -1839,7 +1839,7 @@ async def get_storage_data():
                                 size = sum(f.stat().st_size for f in video_files)
                                 total_size += size
                                 total_videos += len(video_files)
-                                
+
                                 storage_data.append({
                                     "category": f"people/{person_dir.name}",
                                     "path": str(person_dir.relative_to(SORTED_PATH)),
@@ -1852,7 +1852,7 @@ async def get_storage_data():
                         size = sum(f.stat().st_size for f in video_files)
                         total_size += size
                         total_videos += len(video_files)
-                        
+
                         storage_data.append({
                             "category": category_dir.name,
                             "path": str(category_dir.relative_to(SORTED_PATH)),
@@ -1860,10 +1860,10 @@ async def get_storage_data():
                             "size_bytes": size,
                             "size_mb": round(size / (1024 * 1024), 2)
                         })
-        
+
         # Sort by size descending
         storage_data.sort(key=lambda x: x["size_bytes"], reverse=True)
-        
+
         return {
             "categories": storage_data,
             "total_videos": total_videos,
@@ -1881,25 +1881,25 @@ async def delete_category(category_path: str):
     """Delete all videos and metadata for a specific category."""
     try:
         import shutil
-        
+
         # Sanitize path to prevent directory traversal
         category_path = category_path.strip("/")
         full_path = SORTED_PATH / category_path
-        
+
         # Verify path is within SORTED_PATH
         if not str(full_path.resolve()).startswith(str(SORTED_PATH.resolve())):
             raise HTTPException(status_code=400, detail="Invalid category path")
-        
+
         if not full_path.exists():
             raise HTTPException(status_code=404, detail="Category not found")
-        
+
         # Count videos before deletion
         video_count = len(list(full_path.glob("*.mp4")))
-        
+
         # Delete the directory and all contents
         shutil.rmtree(full_path)
         logger.info(f"Deleted category '{category_path}' with {video_count} videos")
-        
+
         return {
             "status": "success",
             "message": f"Deleted {video_count} video(s) from {category_path}",
@@ -1918,7 +1918,7 @@ async def get_metrics():
     try:
         import psutil
         from pathlib import Path
-        
+
         metrics = {
             "processing": {
                 "is_active": app_state["is_processing"],
@@ -1938,7 +1938,7 @@ async def get_metrics():
                 "disk_percent": psutil.disk_usage('/data').percent if Path('/data').exists() else 0
             }
         }
-        
+
         # Calculate storage sizes
         def get_dir_size(path: Path) -> int:
             total = 0
@@ -1947,14 +1947,14 @@ async def get_metrics():
                     if item.is_file():
                         total += item.stat().st_size
             return total
-        
+
         metrics["storage"]["downloads"] = get_dir_size(DOWNLOADS_PATH) // (1024 * 1024)  # MB
         metrics["storage"]["sorted"] = get_dir_size(SORTED_PATH) // (1024 * 1024)
         metrics["storage"]["faces"] = get_dir_size(FACE_TRAINING_PATH) // (1024 * 1024)
         # V2: review data tracked per profile
         review_path = Path("/data/review")
         metrics["storage"]["objects"] = get_dir_size(review_path) // (1024 * 1024) if review_path.exists() else 0
-        
+
         return metrics
     except Exception as e:
         logger.error(f"Failed to get metrics: {e}")
@@ -1966,7 +1966,7 @@ async def export_detections(format: str = "json"):
     """Export detection data in JSON or CSV format (V2: from animal profiles)."""
     try:
         detections = []
-        
+
         # V2: Collect detection data from animal profile review folders
         review_path = Path("/data/review")
         if review_path.exists():
@@ -1984,16 +1984,16 @@ async def export_detections(format: str = "json"):
                                     "timestamp": metadata.get('timestamp', ''),
                                     "video": metadata.get('video', '')
                                 })
-        
+
         if format == "csv":
             import csv
             import io
-            
+
             output = io.StringIO()
             writer = csv.DictWriter(output, fieldnames=["label", "confidence", "filename", "timestamp", "video"])
             writer.writeheader()
             writer.writerows(detections)
-            
+
             return StreamingResponse(
                 iter([output.getvalue()]),
                 media_type="text/csv",
@@ -2002,7 +2002,7 @@ async def export_detections(format: str = "json"):
         else:
             # JSON format
             return JSONResponse(content={"detections": detections})
-    
+
     except Exception as e:
         logger.error(f"Failed to export detections: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2014,18 +2014,18 @@ async def export_analytics(format: str = "json"):
     try:
         # Get comprehensive stats
         stats_response = await get_analytics_stats()
-        
+
         if format == "csv":
             import csv
             import io
-            
+
             output = io.StringIO()
             writer = csv.writer(output)
             writer.writerow(["Category", "Count"])
-            
+
             for category, count in stats_response["categories"].items():
                 writer.writerow([category, count])
-            
+
             return StreamingResponse(
                 iter([output.getvalue()]),
                 media_type="text/csv",
@@ -2033,7 +2033,7 @@ async def export_analytics(format: str = "json"):
             )
         else:
             return JSONResponse(content=stats_response)
-    
+
     except Exception as e:
         logger.error(f"Failed to export analytics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2046,13 +2046,13 @@ async def delete_person(person_name: str):
         person_dir = FACE_TRAINING_PATH / person_name
         if not person_dir.exists():
             raise HTTPException(status_code=404, detail="Person not found")
-        
+
         import shutil
         shutil.rmtree(person_dir)
-        
+
         logger.info(f"Deleted training data for {person_name}")
         return {"status": "success", "message": f"Deleted {person_name}"}
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2066,35 +2066,35 @@ async def retrain_all_faces(background_tasks: BackgroundTasks):
     try:
         if not FACE_TRAINING_PATH.exists():
             raise HTTPException(status_code=404, detail="No training data found")
-        
+
         people = [d.name for d in FACE_TRAINING_PATH.iterdir() if d.is_dir()]
-        
+
         if not people:
             raise HTTPException(status_code=404, detail="No people to train")
-        
+
         def retrain_task():
             try:
                 from face_recognizer import FaceRecognizer
                 fr = FaceRecognizer()
-                
+
                 for person in people:
                     person_dir = FACE_TRAINING_PATH / person
                     images = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
                     if images:
                         fr.add_person(person, images)
                         logger.info(f"Retrained {person} with {len(images)} images")
-                
+
                 logger.info(f"Completed retraining for {len(people)} people")
             except Exception as e:
                 logger.error(f"Retraining failed: {e}")
-        
+
         background_tasks.add_task(retrain_task)
-        
+
         return {
             "status": "success",
             "message": f"Started retraining for {len(people)} people"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2121,42 +2121,42 @@ async def add_object_labels(request: dict):
     """Add labels to the object detection list in config."""
     try:
         labels_to_add = request.get('labels', [])
-        
+
         if not labels_to_add:
             raise HTTPException(status_code=400, detail="No labels provided")
-        
+
         # Load config
         with open(CONFIG_PATH, 'r') as f:
             config = yaml.safe_load(f)
-        
+
         # Get current object_labels
         current_labels = config.get('detection', {}).get('object_labels', [])
-        
+
         # Add new labels (avoiding duplicates)
         added_labels = []
         for label in labels_to_add:
             if label not in current_labels:
                 current_labels.append(label)
                 added_labels.append(label)
-        
+
         # Update config
         if 'detection' not in config:
             config['detection'] = {}
         config['detection']['object_labels'] = current_labels
-        
+
         # Save config
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
-        
+
         logger.info(f"Added {len(added_labels)} labels to object_labels: {added_labels}")
-        
+
         return {
             "status": "success",
             "added_labels": added_labels,
             "current_labels": current_labels,
             "message": f"Added {len(added_labels)} label(s) to detection list"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2175,7 +2175,7 @@ async def create_animal_profile(request: dict):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         name = request.get('name', '').strip()
         yolo_categories = request.get('yolo_categories', [])
         text_description = request.get('text_description', '')
@@ -2184,19 +2184,19 @@ async def create_animal_profile(request: dict):
         requires_manual_confirmation = request.get('requires_manual_confirmation', True)
         retraining_threshold = request.get('retraining_threshold', 0.85)
         confirmation_count_recommendation = request.get('confirmation_count_recommendation', 50)
-        
+
         if not name:
             raise HTTPException(status_code=400, detail="Animal name is required")
         if not yolo_categories:
             raise HTTPException(status_code=400, detail="At least one YOLO category is required")
-        
+
         # Create profile
         profile = animal_profile_manager.create_profile(
             name=name,
             yolo_categories=yolo_categories,
             text_description=text_description if text_description else None
         )
-        
+
         # Set optional parameters
         profile = animal_profile_manager.update_profile(
             profile.id,
@@ -2206,7 +2206,7 @@ async def create_animal_profile(request: dict):
             retraining_threshold=retraining_threshold,
             confirmation_count_recommendation=confirmation_count_recommendation
         )
-        
+
         # Create data directories
         profile_id = profile.id
         base_path = Path("/data")
@@ -2217,7 +2217,7 @@ async def create_animal_profile(request: dict):
             base_path / "training" / profile_id / "rejected",
             base_path / "models" / profile_id
         ]
-        
+
         for dir_path in dirs_to_create:
             dir_path.mkdir(parents=True, exist_ok=True)
             # Set permissions (rule: folders created by AI should have full permissions)
@@ -2226,9 +2226,9 @@ async def create_animal_profile(request: dict):
                 dir_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
             except Exception as e:
                 logger.warning(f"Could not set permissions on {dir_path}: {e}")
-        
+
         logger.info(f"Created animal profile: {name} with categories {yolo_categories}")
-        
+
         return {
             "status": "success",
             "profile": {
@@ -2261,9 +2261,9 @@ async def list_animal_profiles():
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profiles = animal_profile_manager.list_profiles()
-        
+
         return {
             "status": "success",
             "profiles": [
@@ -2299,11 +2299,11 @@ async def get_animal_profile(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         return {
             "status": "success",
             "profile": {
@@ -2337,21 +2337,21 @@ async def get_animal_profile_training_status(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         model_path = Path(profile.classifier_model_path) if profile.classifier_model_path else Path("/data/models") / profile.id / "classifier.json"
         model_present = model_path.exists()
-        
+
         # Get actual file counts from training folders
         confirmed_dir = Path("/data/training") / profile.id / "confirmed"
         rejected_dir = Path("/data/training") / profile.id / "rejected"
-        
+
         confirmed_count = len(list(confirmed_dir.glob("*.jpg"))) if confirmed_dir.exists() else 0
         rejected_count = len(list(rejected_dir.glob("*.jpg"))) if rejected_dir.exists() else 0
-        
+
         return {
             "status": "success",
             "profile_id": profile.id,
@@ -2376,11 +2376,11 @@ async def update_animal_profile(profile_id: str, request: dict):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Prepare update data
         update_data = {}
         if 'name' in request:
@@ -2399,11 +2399,11 @@ async def update_animal_profile(profile_id: str, request: dict):
             update_data['retraining_threshold'] = float(request['retraining_threshold'])
         if 'confirmation_count_recommendation' in request:
             update_data['confirmation_count_recommendation'] = int(request['confirmation_count_recommendation'])
-        
+
         profile = animal_profile_manager.update_profile(profile_id, **update_data)
-        
+
         logger.info(f"Updated animal profile: {profile.name}")
-        
+
         return {
             "status": "success",
             "profile": {
@@ -2434,20 +2434,20 @@ async def delete_animal_profile(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         profile_name = profile.name
-        
+
         # Delete profile from storage
         animal_profile_manager.delete_profile(profile_id)
-        
+
         # Optionally clean up associated directories
         # Note: We don't delete them by default to preserve review/training data
         logger.info(f"Deleted animal profile: {profile_name}")
-        
+
         return {
             "status": "success",
             "message": f"Deleted profile '{profile_name}'. Associated data directories remain for manual cleanup if needed."
@@ -2465,13 +2465,13 @@ async def enable_animal_profile(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.update_profile(profile_id, enabled=True)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         logger.info(f"Enabled animal profile: {profile.name}")
-        
+
         return {
             "status": "success",
             "message": f"Enabled profile '{profile.name}'",
@@ -2494,13 +2494,13 @@ async def disable_animal_profile(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.update_profile(profile_id, enabled=False)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         logger.info(f"Disabled animal profile: {profile.name}")
-        
+
         return {
             "status": "success",
             "message": f"Disabled profile '{profile.name}'",
@@ -2523,19 +2523,19 @@ async def update_profile_accuracy(profile_id: str, request: dict):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         confirmed = int(request.get('confirmed', 0))
         rejected = int(request.get('rejected', 0))
-        
+
         animal_profile_manager.update_accuracy(profile_id, confirmed, rejected)
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         logger.info(f"Updated accuracy for {profile.name}: {confirmed} confirmed, {rejected} rejected")
-        
+
         should_retrain, retrain_message = profile.should_recommend_retraining
-        
+
         return {
             "status": "success",
             "profile_id": profile.id,
@@ -2561,13 +2561,13 @@ async def get_pending_reviews(profile_id: str):
     try:
         if animal_profile_manager is None or review_manager is None:
             raise HTTPException(status_code=500, detail="Managers not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         pending_frames = review_manager.list_pending_reviews(profile_id)
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -2596,34 +2596,34 @@ async def get_review_frame_image(profile_id: str, filename: str):
     try:
         from PIL import Image, ImageOps
         import io
-        
+
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Construct frame path from review folder
         frame_path = Path("/data") / "review" / profile_id / filename
-        
+
         if not frame_path.exists():
             raise HTTPException(status_code=404, detail=f"Frame '{filename}' not found")
-        
+
         # Load image and add border
         image = Image.open(frame_path)
-        
+
         # Add 4px border (using ImageOps)
         border_color = (100, 150, 200)  # Light blue
         bordered_image = ImageOps.expand(image, border=4, fill=border_color)
-        
+
         # Convert to bytes
         img_bytes = io.BytesIO()
         bordered_image.save(img_bytes, format='JPEG')
         img_bytes.seek(0)
-        
+
         logger.debug(f"Serving review frame: {profile_id}/{filename}")
-        
+
         return StreamingResponse(
             iter([img_bytes.getvalue()]),
             media_type="image/jpeg",
@@ -2642,20 +2642,20 @@ async def confirm_images(profile_id: str, request: dict):
     try:
         if animal_profile_manager is None or review_manager is None:
             raise HTTPException(status_code=500, detail="Managers not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         filenames = request.get('filenames', [])
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
-        
+
         # Bulk confirm frames
         results = review_manager.bulk_confirm_frames(profile_id, filenames)
-        
+
         logger.info(f"Confirmed {len(results['confirmed'])} frames for {profile.name}")
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -2678,22 +2678,22 @@ async def reject_images(profile_id: str, request: dict):
     try:
         if animal_profile_manager is None or review_manager is None:
             raise HTTPException(status_code=500, detail="Managers not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         filenames = request.get('filenames', [])
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
-        
+
         save_as_negative = request.get('save_as_negative', False)
-        
+
         # Bulk reject frames
         results = review_manager.bulk_reject_frames(profile_id, filenames, save_as_negative)
-        
+
         logger.info(f"Rejected {len(results['rejected'])} frames for {profile.name}")
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -2714,44 +2714,44 @@ async def reject_images(profile_id: str, request: dict):
 async def reject_animal_profile_videos(request: dict, background_tasks: BackgroundTasks):
     """Reject videos from an animal profile as misclassifications (for negative training)."""
     global animal_profile_manager
-    
+
     try:
         profile_id = request.get('profile_id')
         profile_name = request.get('profile_name')
         filenames = request.get('filenames', [])
-        
+
         if not profile_id or not profile_name or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
-        
+
         if not animal_profile_manager:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Processing video rejections...")
-        
+
         def reject_videos_background():
             """Background task to extract negative frames and move videos."""
             try:
                 import cv2
-                
+
                 task_tracker.start_task(task_id, message=f"Extracting negative examples for '{profile_name}'...")
                 results = {"processed": [], "failed": [], "total_frames": 0}
-                
+
                 sorted_path = Path("/data/sorted") / profile_name
                 rejected_dir = Path("/data/training") / profile_id / "rejected"
                 rejected_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set permissions
                 try:
                     import stat
                     rejected_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                 except Exception as e:
                     logger.warning(f"Could not set permissions: {e}")
-                
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         task_tracker.update_task(
@@ -2760,81 +2760,81 @@ async def reject_animal_profile_videos(request: dict, background_tasks: Backgrou
                             message=f"Processing video {idx} of {len(filenames)}...",
                             details=f"Extracting negative frames from {filename}"
                         )
-                        
+
                         video_path = sorted_path / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         # Extract frames from video as negative examples
                         cap = cv2.VideoCapture(str(video_path))
                         fps = cap.get(cv2.CAP_PROP_FPS)
                         frame_interval = int(fps) if fps > 0 else 30
-                        
+
                         frame_count = 0
                         extracted_count = 0
                         max_frames = 10
-                        
+
                         while extracted_count < max_frames:
                             ret, frame = cap.read()
                             if not ret:
                                 break
-                            
+
                             if frame_count % frame_interval == 0:
                                 # Save frame as negative example
                                 frame_filename = f"{video_path.stem}_negative_{extracted_count:03d}.jpg"
                                 frame_path = rejected_dir / frame_filename
                                 cv2.imwrite(str(frame_path), frame)
-                                
+
                                 extracted_count += 1
-                            
+
                             frame_count += 1
-                        
+
                         cap.release()
-                        
+
                         # Move video back to review for reprocessing
                         review_path = Path("/data/review") / profile_name
                         review_path.mkdir(parents=True, exist_ok=True)
-                        
+
                         dest_path = review_path / filename
                         import shutil
                         shutil.move(str(video_path), str(dest_path))
-                        
+
                         # Move metadata if exists
                         metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                         if metadata_path.exists():
                             dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
                             shutil.move(str(metadata_path), str(dest_metadata))
-                        
+
                         results["processed"].append({
                             "filename": filename,
                             "frames_extracted": extracted_count
                         })
                         results["total_frames"] += extracted_count
-                        
+
                         logger.info(f"Extracted {extracted_count} negative frames from {filename} for {profile_name}")
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile rejected count
                 if results["total_frames"] > 0:
                     new_rejected = profile.rejected_count + results["total_frames"]
                     animal_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
-                
+
                 task_tracker.complete_task(
                     task_id,
                     message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_frames']} negative frames"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Reject videos task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(reject_videos_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -2854,22 +2854,22 @@ async def mark_training_complete(profile_id: str):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         from datetime import datetime
-        
+
         # Update profile
         animal_profile_manager.update_profile(
             profile_id,
             training_manually_completed=True,
             last_training_date=datetime.now().isoformat()
         )
-        
+
         logger.info(f"Training marked as complete for '{profile.name}'")
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -2890,52 +2890,52 @@ async def train_classifier(profile_id: str, background_tasks: BackgroundTasks):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Check for training data
         confirmed_dir = Path("/data/training") / profile_id / "confirmed"
         rejected_dir = Path("/data/training") / profile_id / "rejected"
-        
+
         if not confirmed_dir.exists() or not rejected_dir.exists():
             raise HTTPException(
                 status_code=400,
                 detail="Training folders not found. Confirm/reject some videos first."
             )
-        
+
         # Count JPG files (only JPGs are used for training)
         confirmed_images = list(confirmed_dir.glob("*.jpg"))
         rejected_images = list(rejected_dir.glob("*.jpg"))
-        
+
         if len(confirmed_images) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="No confirmed training images found. Confirm some videos first."
             )
-        
+
         if len(rejected_images) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="No rejected training images found. Need negative examples to train."
             )
-        
+
         logger.info(f"Starting classifier training for '{profile.name}': {len(confirmed_images)} confirmed, {len(rejected_images)} rejected")
-        
+
         def train_task():
             """Background task to train the classifier."""
             try:
                 from clip_vit_classifier import CLIPVitClassifier
                 from datetime import datetime
-                
+
                 # Initialize CLIP classifier
                 clip = CLIPVitClassifier()
-                
+
                 # Prepare paths
                 model_path = Path("/data/models") / profile_id / "classifier.json"
                 model_path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # Train classifier
                 logger.info(f"Training classifier for {profile.name}...")
                 model_data = clip.train_classifier(
@@ -2947,7 +2947,7 @@ async def train_classifier(profile_id: str, background_tasks: BackgroundTasks):
                     l2=0.001,
                     batch_size=8
                 )
-                
+
                 # Update profile with training metadata
                 animal_profile_manager.update_profile(
                     profile_id,
@@ -2957,16 +2957,16 @@ async def train_classifier(profile_id: str, background_tasks: BackgroundTasks):
                     classifier_model_path=str(model_path),
                     training_manually_completed=False  # Reset so retraining can be recommended again
                 )
-                
+
                 logger.info(f"✓ Classifier training complete for '{profile.name}': {model_path}")
                 logger.info(f"  Trained on {model_data['positive_count']} positive and {model_data['negative_count']} negative examples")
-            
+
             except Exception as e:
                 logger.error(f"Classifier training failed for '{profile.name}': {e}", exc_info=True)
-        
+
         # Start training in background
         background_tasks.add_task(train_task)
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -2988,14 +2988,14 @@ async def get_top_frames(profile_id: str, limit: int = 10):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Get confirmed training frames
         training_dir = Path("/data/training") / profile_id / "confirmed"
-        
+
         if not training_dir.exists():
             return {
                 "status": "success",
@@ -3004,7 +3004,7 @@ async def get_top_frames(profile_id: str, limit: int = 10):
                 "frames": [],
                 "message": "No training data found"
             }
-        
+
         # Load frames with metadata
         frames_with_confidence = []
         for img_file in training_dir.glob("*.jpg"):
@@ -3021,13 +3021,13 @@ async def get_top_frames(profile_id: str, limit: int = 10):
                     })
                 except Exception as e:
                     logger.warning(f"Failed to load metadata for {img_file}: {e}")
-        
+
         # Sort by confidence (highest first) and limit
         frames_with_confidence.sort(key=lambda x: x['confidence'], reverse=True)
         top_frames = frames_with_confidence[:limit]
-        
+
         logger.info(f"Returning {len(top_frames)} top frames for '{profile.name}'")
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -3047,24 +3047,24 @@ async def get_frame_image(profile_id: str, filename: str):
     """Serve a specific training frame image."""
     try:
         from fastapi.responses import FileResponse
-        
+
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Security: validate filename to prevent directory traversal
         if ".." in filename or "/" in filename or "\\" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
-        
+
         # Get frame path
         frame_path = Path("/data/training") / profile_id / "confirmed" / filename
-        
+
         if not frame_path.exists():
             raise HTTPException(status_code=404, detail="Frame not found")
-        
+
         return FileResponse(frame_path, media_type="image/jpeg")
     except HTTPException:
         raise
@@ -3080,10 +3080,10 @@ async def get_yolo_categories():
     """Get all YOLO categories with usage information."""
     try:
         from object_detector import YOLO_COCO_CLASSES
-        
+
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         # Load manual categories from config (normalize to lowercase for comparison)
         manual_categories = set()
         manual_categories_lower = set()
@@ -3098,10 +3098,10 @@ async def get_yolo_categories():
                 logger.warning(f"Config file not found at {CONFIG_PATH}")
         except Exception as e:
             logger.error(f"Failed to load manual categories: {e}", exc_info=True)
-        
+
         # Get all profiles to compute auto-enabled categories
         profiles = animal_profile_manager.list_profiles()
-        
+
         # Build category info
         categories_info = []
         for category in YOLO_COCO_CLASSES:
@@ -3110,17 +3110,17 @@ async def get_yolo_categories():
             for profile in profiles:
                 if profile.enabled and category.lower() in [c.lower() for c in profile.yolo_categories]:
                     used_by_profiles.append(profile.name)
-            
+
             # Check if manually enabled (case-insensitive)
             is_manually_enabled = category.lower() in manual_categories_lower
-            
+
             categories_info.append({
                 "name": category,
                 "used_by_profiles": used_by_profiles,
                 "manually_enabled": is_manually_enabled,
                 "is_enabled": len(used_by_profiles) > 0 or is_manually_enabled
             })
-        
+
         return {
             "status": "success",
             "categories": categories_info,
@@ -3140,21 +3140,21 @@ async def toggle_manual_category(request: dict):
     try:
         category = request.get('category')
         enabled = request.get('enabled', False)
-        
+
         if not category:
             raise HTTPException(status_code=400, detail="Category is required")
-        
+
         # Load config
         if not CONFIG_PATH.exists():
             raise HTTPException(status_code=500, detail="Config file not found")
-        
+
         with open(CONFIG_PATH, 'r') as f:
             config = yaml.safe_load(f) or {}
-        
+
         # Get current manual categories
         manual_categories = config.get('yolo_manual_categories', [])
         manual_categories_lower = [c.lower() for c in manual_categories]
-        
+
         # Update list
         if enabled:
             # Add if not present
@@ -3165,22 +3165,22 @@ async def toggle_manual_category(request: dict):
             # Remove if present
             manual_categories = [c for c in manual_categories if c.lower() != category.lower()]
             logger.info(f"Manually disabled YOLO category: {category}")
-        
+
         # Update config
         config['yolo_manual_categories'] = manual_categories
-        
+
         logger.info(f"Saving {len(manual_categories)} manual categories to {CONFIG_PATH}: {sorted(manual_categories)}")
-        
+
         # Save config
         with open(CONFIG_PATH, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
-        
+
         # Verify save by re-reading
         with open(CONFIG_PATH, 'r') as f:
             verify_config = yaml.safe_load(f) or {}
             verify_categories = verify_config.get('yolo_manual_categories', [])
             logger.info(f"Verified save: {len(verify_categories)} categories in file: {sorted(verify_categories)}")
-        
+
         return {
             "status": "success",
             "category": category,
@@ -3200,7 +3200,7 @@ async def get_active_yolo_categories():
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         # Load manual categories
         manual_categories = set()
         try:
@@ -3210,17 +3210,17 @@ async def get_active_yolo_categories():
                 manual_categories = set([c.lower() for c in config.get('yolo_manual_categories', [])])
         except Exception as e:
             logger.warning(f"Failed to load manual categories: {e}")
-        
+
         # Get all enabled profiles
         profiles = animal_profile_manager.list_profiles()
         auto_enabled = set()
         for profile in profiles:
             if profile.enabled:
                 auto_enabled.update([c.lower() for c in profile.yolo_categories])
-        
+
         # Compute union
         active_categories = list(auto_enabled | manual_categories)
-        
+
         return {
             "status": "success",
             "active_categories": sorted(active_categories),
@@ -3244,7 +3244,7 @@ async def list_review_categories():
         review_base = Path("/data/review")
         if not review_base.exists():
             return {"status": "success", "categories": [], "total_videos": 0}
-        
+
         categories = []
         for category_dir in review_base.iterdir():
             if category_dir.is_dir():
@@ -3255,10 +3255,10 @@ async def list_review_categories():
                         "name": category_dir.name,
                         "video_count": video_count
                     })
-        
+
         # Sort by name
         categories.sort(key=lambda x: x["name"])
-        
+
         return {
             "status": "success",
             "categories": categories,
@@ -3276,10 +3276,10 @@ async def list_category_videos(category: str):
         category_dir = Path("/data/review") / category
         if not category_dir.exists():
             return {"status": "success", "category": category, "video_count": 0, "videos": []}
-        
+
         videos = []
         tracked_videos_dir = Path("/data/objects/detected/annotated_videos")
-        
+
         for video_file in sorted(category_dir.glob("*.mp4")):
             # Try to load metadata
             metadata = {}
@@ -3290,17 +3290,17 @@ async def list_category_videos(category: str):
                         metadata = json.load(f)
                 except Exception as e:
                     logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
-            
+
             # Check if tracked video exists
             # First try metadata, fall back to naming convention
             tracked_filename = metadata.get("tracked_video_filename")
             if not tracked_filename:
                 # Fall back to old naming convention for backward compatibility
                 tracked_filename = f"tracked_{video_file.name}"
-            
+
             tracked_video_path = tracked_videos_dir / tracked_filename
             has_tracked_video = tracked_video_path.exists()
-            
+
             videos.append({
                 "filename": video_file.name,
                 "category": category,
@@ -3313,7 +3313,7 @@ async def list_category_videos(category: str):
                 "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
                 "tracked_video_filename": tracked_filename if has_tracked_video else None
             })
-        
+
         return {
             "status": "success",
             "category": category,
@@ -3330,10 +3330,10 @@ async def serve_review_video(category: str, filename: str):
     """Serve a video file from review folder."""
     try:
         video_path = Path("/data/review") / category / filename
-        
+
         if not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
-        
+
         # Return video file
         return FileResponse(
             path=str(video_path),
@@ -3346,6 +3346,31 @@ async def serve_review_video(category: str, filename: str):
         logger.error(f"Failed to serve video: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/review/video-file")
+async def serve_review_video_file(category: str, filename: str):
+    """Serve a video file from review folder using query params for nested categories."""
+    try:
+        if not category or not filename:
+            raise HTTPException(status_code=400, detail="Missing category or filename")
+        if ".." in category or ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid category or filename")
+
+        video_path = Path("/data/review") / category / filename
+
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
+
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve review video file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/review/tracked-video/{filename}")
 async def serve_tracked_video(filename: str):
@@ -3353,10 +3378,10 @@ async def serve_tracked_video(filename: str):
     try:
         # Tracked videos are stored with 'tracked_' prefix
         video_path = Path("/data/objects/detected/annotated_videos") / filename
-        
+
         if not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Tracked video not found: {filename}")
-        
+
         # Return video file
         return FileResponse(
             path=str(video_path),
@@ -3375,10 +3400,10 @@ async def serve_face_image(filename: str):
     """Serve a face image file from unassigned faces folder."""
     try:
         image_path = Path("/data/training/faces/unassigned") / filename
-        
+
         if not image_path.exists():
             raise HTTPException(status_code=404, detail=f"Image not found: {filename}")
-        
+
         # Return image file
         return FileResponse(
             path=str(image_path),
@@ -3398,32 +3423,32 @@ async def serve_video_thumbnail(filename: str):
     try:
         import cv2
         import tempfile
-        
+
         # Try to find video in review folders
         review_base = Path("/data/review")
         video_path = None
-        
+
         for category_dir in review_base.rglob(filename):
             if category_dir.is_file() and category_dir.suffix == '.mp4':
                 video_path = category_dir
                 break
-        
+
         if not video_path or not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
-        
+
         # Extract first frame as thumbnail
         cap = cv2.VideoCapture(str(video_path))
         ret, frame = cap.read()
         cap.release()
-        
+
         if not ret:
             raise HTTPException(status_code=500, detail="Failed to read video frame")
-        
+
         # Save frame as temporary JPEG
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             cv2.imwrite(tmp.name, frame)
             tmp_path = tmp.name
-        
+
         return FileResponse(
             path=tmp_path,
             media_type="image/jpeg",
@@ -3441,13 +3466,13 @@ async def get_review_videos(category: str = None):
     """Get videos from review folders, optionally filtered by category (supports nested like person/unknown)."""
     try:
         review_base = Path("/data/review")
-        
+
         if category:
             # Support nested categories like person/unknown
             category_path = review_base / category
             if not category_path.exists():
                 return {"status": "success", "videos": [], "count": 0}
-            
+
             videos = []
             for video_file in category_path.glob("*.mp4"):
                 videos.append({
@@ -3455,7 +3480,7 @@ async def get_review_videos(category: str = None):
                     "category": category,
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
                 })
-            
+
             return {"status": "success", "videos": videos, "count": len(videos)}
         else:
             # Return all videos from all categories
@@ -3467,7 +3492,7 @@ async def get_review_videos(category: str = None):
                     "category": str(rel_path),
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
                 })
-            
+
             return {"status": "success", "videos": videos, "count": len(videos)}
     except Exception as e:
         logger.error(f"Failed to get review videos: {e}", exc_info=True)
@@ -3479,13 +3504,13 @@ async def get_sorted_videos(category: str = None):
     """Get videos from sorted folders, optionally filtered by category (supports nested like person/Claire Banner)."""
     try:
         sorted_base = Path("/data/sorted")
-        
+
         if category:
             # Support nested categories like person/Claire Banner
             category_path = sorted_base / category
             if not category_path.exists():
                 return {"status": "success", "videos": [], "count": 0}
-            
+
             videos = []
             for video_file in category_path.glob("*.mp4"):
                 videos.append({
@@ -3493,7 +3518,7 @@ async def get_sorted_videos(category: str = None):
                     "category": category,
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
                 })
-            
+
             return {"status": "success", "videos": videos, "count": len(videos)}
         else:
             # Return all videos from all categories
@@ -3505,7 +3530,7 @@ async def get_sorted_videos(category: str = None):
                     "category": str(rel_path),
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
                 })
-            
+
             return {"status": "success", "videos": videos, "count": len(videos)}
     except Exception as e:
         logger.error(f"Failed to get sorted videos: {e}", exc_info=True)
@@ -3518,14 +3543,14 @@ async def serve_sorted_video(category_name: str, filename: str):
     try:
         # Try person subfolder first (e.g., person/Claire Banner)
         video_path = Path("/data/sorted/person") / category_name / filename
-        
+
         # If not found, try direct category folder (e.g., hedgehog, jack_russell)
         if not video_path.exists():
             video_path = Path("/data/sorted") / category_name / filename
-        
+
         if not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
-        
+
         return FileResponse(
             path=str(video_path),
             media_type="video/mp4",
@@ -3542,46 +3567,46 @@ async def serve_sorted_video(category_name: str, filename: str):
 async def reject_face_profile_videos(request: dict, background_tasks: BackgroundTasks):
     """Reject videos from a face profile as misclassifications (for negative training)."""
     global face_profile_manager
-    
+
     try:
         profile_id = request.get('profile_id')
         person_name = request.get('person_name')
         filenames = request.get('filenames', [])
-        
+
         if not profile_id or not person_name or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
-        
+
         # Get face profile
         if not face_profile_manager:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         profile = face_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Processing video rejections...")
-        
+
         def reject_videos_background():
             """Background task to extract negative faces and move videos."""
             try:
                 import cv2
                 import face_recognition as fr
-                
+
                 task_tracker.start_task(task_id, message=f"Extracting negative examples for '{person_name}'...")
                 results = {"processed": [], "failed": [], "total_faces": 0}
-                
+
                 sorted_path = Path("/data/sorted/person") / person_name
                 rejected_dir = Path("/data/training/faces") / person_name / "rejected"
                 rejected_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set permissions
                 try:
                     import stat
                     rejected_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                 except Exception as e:
                     logger.warning(f"Could not set permissions: {e}")
-                
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         task_tracker.update_task(
@@ -3590,104 +3615,104 @@ async def reject_face_profile_videos(request: dict, background_tasks: Background
                             message=f"Processing video {idx} of {len(filenames)}...",
                             details=f"Extracting negative faces from {filename}"
                         )
-                        
+
                         video_path = sorted_path / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         # Extract faces from video as negative examples
                         cap = cv2.VideoCapture(str(video_path))
                         fps = cap.get(cv2.CAP_PROP_FPS)
                         frame_interval = int(fps) if fps > 0 else 30
-                        
+
                         face_count = 0
                         frame_count = 0
                         max_faces = 10
-                        
+
                         while face_count < max_faces:
                             ret, frame = cap.read()
                             if not ret:
                                 break
-                            
+
                             if frame_count % frame_interval == 0:
                                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                                 face_locations = fr.face_locations(rgb_frame)
-                                
+
                                 for top, right, bottom, left in face_locations:
                                     padding = 20
                                     top = max(0, top - padding)
                                     left = max(0, left - padding)
                                     bottom = min(frame.shape[0], bottom + padding)
                                     right = min(frame.shape[1], right + padding)
-                                    
+
                                     face_img = rgb_frame[top:bottom, left:right]
-                                    
+
                                     face_filename = f"{video_path.stem}_negative_{face_count:03d}.jpg"
                                     face_path = rejected_dir / face_filename
-                                    
+
                                     import PIL.Image as Image
                                     face_pil = Image.fromarray(face_img)
                                     face_pil.save(str(face_path))
-                                    
+
                                     face_count += 1
                                     if face_count >= max_faces:
                                         break
-                            
+
                             frame_count += 1
-                        
+
                         cap.release()
-                        
+
                         # Move video to review/person/unknown for reprocessing
                         review_unknown = Path("/data/review/person/unknown")
                         review_unknown.mkdir(parents=True, exist_ok=True)
-                        
+
                         dest_path = review_unknown / filename
                         import shutil
                         shutil.move(str(video_path), str(dest_path))
-                        
+
                         # Move metadata if exists
                         metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                         if metadata_path.exists():
                             dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
                             shutil.move(str(metadata_path), str(dest_metadata))
-                        
+
                         results["processed"].append({
                             "filename": filename,
                             "faces_extracted": face_count
                         })
                         results["total_faces"] += face_count
-                        
+
                         logger.info(f"Extracted {face_count} negative faces from {filename} for {person_name}")
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile rejected count
                 if results["total_faces"] > 0:
                     new_rejected = profile.rejected_count + results["total_faces"]
                     face_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
-                
+
                 # Retrain face profile with new negative examples
                 try:
                     import asyncio
                     asyncio.run(retrain_face_profile(person_name))
                 except Exception as retrain_err:
                     logger.error(f"Failed to retrain profile: {retrain_err}", exc_info=True)
-                
+
                 task_tracker.complete_task(
                     task_id,
                     message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_faces']} negative faces"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Reject videos task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(reject_videos_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -3707,20 +3732,20 @@ async def assign_videos_to_profile(request: dict):
     try:
         if animal_profile_manager is None:
             raise HTTPException(status_code=500, detail="Animal profile manager not initialized")
-        
+
         category = request.get('category')
         filenames = request.get('filenames', [])
         profile_id = request.get('profile_id')
         extract_frames = bool(request.get('extract_frames', True))
         as_negative = bool(request.get('as_negative', False))
-        
+
         if not category or not filenames or not profile_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
-        
+
         profile = animal_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Move videos from review to profile's training folder
         import shutil
         results = {"moved": [], "failed": []}
@@ -3740,26 +3765,26 @@ async def assign_videos_to_profile(request: dict):
                 logger.warning(f"Failed to read training config: {config_err}")
 
         frame_extractor = FrameExtractor(target_fps=1) if extract_frames else None
-        
+
         for filename in filenames:
             try:
                 source_path = Path("/data/review") / category / filename
                 if not source_path.exists():
                     results["failed"].append({"filename": filename, "error": "File not found"})
                     continue
-                
+
                 # Create destination directory (confirmed or rejected based on as_negative flag)
                 folder_type = "rejected" if as_negative else "confirmed"
                 dest_dir = Path("/data/training") / profile_id / folder_type
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set permissions for created folders (per user rule)
                 try:
                     import stat
                     dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                 except Exception as perm_err:
                     logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
-                
+
                 dest_path = dest_dir / filename
 
                 # Try to load video metadata for confidence score
@@ -3773,7 +3798,7 @@ async def assign_videos_to_profile(request: dict):
                             video_confidence = video_meta.get('clip_confidence', video_meta.get('yolo_confidence', 0.0))
                     except Exception as meta_err:
                         logger.warning(f"Could not load video metadata for confidence: {meta_err}")
-                
+
                 extracted_for_video = 0
                 if extract_frames:
                     temp_dir = Path(tempfile.mkdtemp(prefix="profile_frames_"))
@@ -3808,30 +3833,30 @@ async def assign_videos_to_profile(request: dict):
                         results["failed"].append({"filename": filename, "error": f"Frame extraction failed: {extract_err}"})
                     finally:
                         shutil.rmtree(temp_dir, ignore_errors=True)
-                
+
                 # Move video to training folder
                 shutil.move(str(source_path), str(dest_path))
-                
+
                 # Move metadata if exists
                 metadata_source = source_path.with_suffix(source_path.suffix + ".json")
                 if metadata_source.exists():
                     metadata_dest = dest_path.with_suffix(dest_path.suffix + ".json")
                     shutil.move(str(metadata_source), str(metadata_dest))
-                
+
                 # Only copy to sorted folder if POSITIVE example (not negative)
                 if not as_negative:
                     sorted_dir = Path("/data/sorted") / profile_id
                     sorted_dir.mkdir(parents=True, exist_ok=True)
-                    
+
                     # Set permissions for created folders (per user rule)
                     try:
                         import stat
                         sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                     except Exception as perm_err:
                         logger.warning(f"Could not set permissions on {sorted_dir}: {perm_err}")
-                    
+
                     sorted_video_path = sorted_dir / filename
-                    
+
                     # Handle duplicates in sorted folder
                     if sorted_video_path.exists():
                         counter = 1
@@ -3841,12 +3866,12 @@ async def assign_videos_to_profile(request: dict):
                             new_name = f"{stem}_{counter}{suffix}"
                             sorted_video_path = sorted_dir / new_name
                             counter += 1
-                    
+
                     try:
                         # Copy video to sorted folder
                         shutil.copy2(str(dest_path), str(sorted_video_path))
                         logger.info(f"Copied video to sorted/{profile_id}: {filename}")
-                        
+
                         # Copy metadata to sorted folder
                         if metadata_dest.exists():
                             sorted_metadata_path = sorted_video_path.with_suffix(sorted_video_path.suffix + ".json")
@@ -3854,9 +3879,9 @@ async def assign_videos_to_profile(request: dict):
                     except Exception as copy_err:
                         logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
                         # Don't fail the whole operation if sorted copy fails
-                
+
                 results["moved"].append(filename)
-                
+
                 # Increment confirmed or rejected count
                 if as_negative:
                     if extract_frames:
@@ -3868,27 +3893,27 @@ async def assign_videos_to_profile(request: dict):
                         confirmed_increment += extracted_for_video
                     else:
                         confirmed_increment += 1
-                
+
             except Exception as e:
                 logger.error(f"Failed to move {filename}: {e}")
                 results["failed"].append({"filename": filename, "error": str(e)})
-        
+
         # Save updated profile
         if confirmed_increment > 0:
             profile.confirmed_count += confirmed_increment
         if rejected_increment > 0:
             profile.rejected_count += rejected_increment
         animal_profile_manager._save_profile(profile)
-        
+
         type_str = "negative examples" if as_negative else "positive examples (training + sorted)"
         logger.info(f"Assigned {len(results['moved'])} videos to {profile.name} as {type_str}")
-        
+
         # Build appropriate message
         if as_negative:
             message = f"Assigned {len(results['moved'])} videos to '{profile.name}' as NEGATIVE examples (saved to /data/training/{profile_id}/rejected/)"
         else:
             message = f"Assigned {len(results['moved'])} videos to '{profile.name}' (saved to /data/sorted/{profile_id}/ + training data)"
-        
+
         return {
             "status": "success",
             "profile_id": profile_id,
@@ -3915,19 +3940,19 @@ async def delete_review_videos(request: dict):
     try:
         category = request.get('category')
         filenames = request.get('filenames', [])
-        
+
         if not category or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
-        
+
         results = {"deleted": [], "failed": []}
-        
+
         for filename in filenames:
             try:
                 video_path = Path("/data/review") / category / filename
                 if video_path.exists():
                     video_path.unlink()
                     results["deleted"].append(filename)
-                    
+
                     # Delete metadata if exists
                     metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                     if metadata_path.exists():
@@ -3937,9 +3962,9 @@ async def delete_review_videos(request: dict):
             except Exception as e:
                 logger.error(f"Failed to delete {filename}: {e}")
                 results["failed"].append({"filename": filename, "error": str(e)})
-        
+
         logger.info(f"Deleted {len(results['deleted'])} videos from review")
-        
+
         return {
             "status": "success",
             "deleted_count": len(results["deleted"]),
@@ -3964,9 +3989,9 @@ async def list_face_profiles():
     try:
         if face_profile_manager is None:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         profiles = face_profile_manager.list_profiles()
-        
+
         return {
             "status": "success",
             "profiles": [
@@ -3996,17 +4021,17 @@ async def get_face_profile_stats(profile_id: str):
     try:
         if face_profile_manager is None:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         profile = face_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Count training images
         training_path = Path(profile.training_images_path)
         training_images = []
         if training_path.exists():
             training_images = list(training_path.glob("*.jpg"))
-        
+
         # Count face encodings from encodings file
         encoding_count = 0
         encoding_path = Path("/data/faces/encodings.pkl")
@@ -4020,7 +4045,7 @@ async def get_face_profile_stats(profile_id: str):
                         encoding_count = len(encodings_data[profile.name])
             except Exception as e:
                 logger.warning(f"Failed to load encodings for count: {e}")
-        
+
         # Get sample images (up to 6 recent ones)
         sample_images = []
         for img in sorted(training_images, key=lambda x: x.stat().st_mtime, reverse=True)[:6]:
@@ -4029,7 +4054,7 @@ async def get_face_profile_stats(profile_id: str):
                 "path": str(img),
                 "timestamp": datetime.fromtimestamp(img.stat().st_mtime).isoformat()
             })
-        
+
         return {
             "status": "success",
             "profile": {
@@ -4059,23 +4084,23 @@ async def get_face_training_image(profile_id: str, filename: str):
     """Serve a face training image."""
     try:
         from fastapi.responses import FileResponse
-        
+
         if face_profile_manager is None:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         profile = face_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
-        
+
         # Security: validate filename
         if ".." in filename or "/" in filename or "\\" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
-        
+
         image_path = Path(profile.training_images_path) / filename
-        
+
         if not image_path.exists():
             raise HTTPException(status_code=404, detail="Image not found")
-        
+
         return FileResponse(image_path, media_type="image/jpeg")
     except HTTPException:
         raise
@@ -4090,17 +4115,17 @@ async def create_face_profile(request: dict):
     try:
         if face_profile_manager is None:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         name = request.get('name')
         if not name:
             raise HTTPException(status_code=400, detail="Name is required")
-        
+
         confidence_threshold = request.get('confidence_threshold', 0.6)
-        
+
         profile = face_profile_manager.create_profile(name, confidence_threshold)
-        
+
         logger.info(f"Created face profile: {name}")
-        
+
         return {
             "status": "success",
             "profile": {
@@ -4126,7 +4151,7 @@ async def list_unassigned_faces():
     try:
         unassigned_path = Path("/data/training/faces/unassigned")
         unassigned_path.mkdir(parents=True, exist_ok=True)
-        
+
         faces = []
         for img_file in unassigned_path.glob("*.jpg"):
             # Get metadata if exists
@@ -4135,17 +4160,17 @@ async def list_unassigned_faces():
             if metadata_file.exists():
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
-            
+
             faces.append({
                 "filename": img_file.name,
                 "path": str(img_file),
                 "timestamp": metadata.get('timestamp', datetime.fromtimestamp(img_file.stat().st_mtime).isoformat()),
                 "source_video": metadata.get('source_video', 'unknown')
             })
-        
+
         # Sort by timestamp descending
         faces.sort(key=lambda x: x['timestamp'], reverse=True)
-        
+
         return {
             "status": "success",
             "faces": faces,
@@ -4162,53 +4187,59 @@ async def assign_faces_to_person(request: dict, background_tasks: BackgroundTask
     try:
         if face_profile_manager is None:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         person_name = request.get('person_name')
         filenames = request.get('filenames', [])
-        
+
         if not person_name or not filenames:
             raise HTTPException(status_code=400, detail="Missing person_name or filenames")
-        
+
         # Get or create face profile
         profile = face_profile_manager.get_profile_by_name(person_name)
         if not profile:
             profile = face_profile_manager.create_profile(person_name)
             logger.info(f"Created new face profile: {person_name}")
-        
+
         unassigned_path = Path("/data/training/faces/unassigned")
         confirmed_path = Path(profile.training_images_path)
         confirmed_path.mkdir(parents=True, exist_ok=True)
-        
+
+        try:
+            import stat
+            confirmed_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception as perm_err:
+            logger.warning(f"Could not set permissions on {confirmed_path}: {perm_err}")
+
         results = {"moved": [], "failed": []}
-        
+
         for filename in filenames:
             try:
                 source = unassigned_path / filename
                 if not source.exists():
                     results["failed"].append({"filename": filename, "error": "File not found"})
                     continue
-                
+
                 # Move image
                 dest = confirmed_path / filename
                 import shutil
                 shutil.move(str(source), str(dest))
-                
+
                 # Move metadata if exists
                 metadata_source = source.with_suffix(".json")
                 if metadata_source.exists():
                     metadata_dest = dest.with_suffix(".json")
                     shutil.move(str(metadata_source), str(metadata_dest))
-                
+
                 results["moved"].append(filename)
                 profile.confirmed_count += 1
-                
+
             except Exception as e:
                 logger.error(f"Failed to move {filename}: {e}")
                 results["failed"].append({"filename": filename, "error": str(e)})
-        
+
         # Save updated profile
         face_profile_manager._save_profile(profile)
-        
+
         # Trigger face encoding retraining in background
         def retrain_task():
             try:
@@ -4220,11 +4251,11 @@ async def assign_faces_to_person(request: dict, background_tasks: BackgroundTask
                     logger.info(f"Retrained face recognition with {len(images)} images for {person_name}")
             except Exception as e:
                 logger.error(f"Failed to retrain face recognition: {e}")
-        
+
         background_tasks.add_task(retrain_task)
-        
+
         logger.info(f"Assigned {len(results['moved'])} faces to {person_name}")
-        
+
         return {
             "status": "success",
             "person_name": person_name,
@@ -4239,26 +4270,113 @@ async def assign_faces_to_person(request: dict, background_tasks: BackgroundTask
         logger.error(f"Failed to assign faces: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/faces/assign-negative")
+async def assign_faces_as_negative(request: dict):
+    """Assign unassigned face crops as negative examples for an existing profile."""
+    try:
+        if face_profile_manager is None:
+            raise HTTPException(status_code=500, detail="Face profile manager not initialized")
+
+        profile_id = request.get("profile_id")
+        filenames = request.get("filenames", [])
+
+        if not profile_id or not filenames:
+            raise HTTPException(status_code=400, detail="Missing profile_id or filenames")
+
+        profile = face_profile_manager.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
+
+        unassigned_path = Path("/data/training/faces/unassigned")
+        rejected_path = Path("/data/training/faces") / profile.id / "rejected"
+        rejected_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import stat
+            rejected_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception as perm_err:
+            logger.warning(f"Could not set permissions on {rejected_path}: {perm_err}")
+
+        results = {"moved": [], "failed": []}
+
+        for filename in filenames:
+            try:
+                if ".." in filename or "/" in filename or "\\" in filename:
+                    results["failed"].append({"filename": filename, "error": "Invalid filename"})
+                    continue
+
+                source = unassigned_path / filename
+                if not source.exists():
+                    results["failed"].append({"filename": filename, "error": "File not found"})
+                    continue
+
+                dest = rejected_path / filename
+                if dest.exists():
+                    counter = 1
+                    while dest.exists():
+                        dest = rejected_path / f"{source.stem}_{counter}{source.suffix}"
+                        counter += 1
+
+                shutil.move(str(source), str(dest))
+
+                metadata_source = source.with_suffix(".json")
+                if metadata_source.exists():
+                    metadata_dest = dest.with_suffix(".json")
+                    shutil.move(str(metadata_source), str(metadata_dest))
+                    try:
+                        with open(metadata_dest, "r") as metadata_file:
+                            metadata = json.load(metadata_file)
+                        metadata["negative_for_profile_id"] = profile.id
+                        metadata["negative_for_profile_name"] = profile.name
+                        with open(metadata_dest, "w") as metadata_file:
+                            json.dump(metadata, metadata_file, indent=2)
+                    except Exception as metadata_err:
+                        logger.warning(f"Failed to update negative metadata for {filename}: {metadata_err}")
+
+                results["moved"].append(filename)
+                profile.rejected_count += 1
+            except Exception as e:
+                logger.error(f"Failed to move negative face {filename}: {e}", exc_info=True)
+                results["failed"].append({"filename": filename, "error": str(e)})
+
+        face_profile_manager._save_profile(profile)
+        logger.info(f"Assigned {len(results['moved'])} negative faces to {profile.name}")
+
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "profile_name": profile.name,
+            "moved_count": len(results["moved"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+            "message": f"Assigned {len(results['moved'])} faces as NOT '{profile.name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to assign negative faces: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/faces/reject")
 async def reject_faces(request: dict):
     """Reject/delete face images (not useful for training)."""
     try:
         filenames = request.get('filenames', [])
-        
+
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
-        
+
         unassigned_path = Path("/data/training/faces/unassigned")
         results = {"deleted": [], "failed": []}
-        
+
         for filename in filenames:
             try:
                 img_path = unassigned_path / filename
                 if img_path.exists():
                     img_path.unlink()
                     results["deleted"].append(filename)
-                    
+
                     # Delete metadata if exists
                     metadata_path = img_path.with_suffix(".json")
                     if metadata_path.exists():
@@ -4268,9 +4386,9 @@ async def reject_faces(request: dict):
             except Exception as e:
                 logger.error(f"Failed to delete {filename}: {e}")
                 results["failed"].append({"filename": filename, "error": str(e)})
-        
+
         logger.info(f"Rejected {len(results['deleted'])} face images")
-        
+
         return {
             "status": "success",
             "deleted_count": len(results["deleted"]),
@@ -4291,13 +4409,14 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
     try:
         category = request.get('category')
         filenames = request.get('filenames', [])
-        
+        delete_after = bool(request.get('delete_after', False))
+
         if not category or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
-        
+
         # Create background task for face extraction
         task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
-        
+
         def extract_faces_background():
             """Background task to extract faces from person videos."""
             try:
@@ -4305,7 +4424,13 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
                 results = {"processed": [], "failed": []}
                 unassigned_path = Path("/data/training/faces/unassigned")
                 unassigned_path.mkdir(parents=True, exist_ok=True)
-                
+
+                try:
+                    import stat
+                    unassigned_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as perm_err:
+                    logger.warning(f"Could not set permissions on {unassigned_path}: {perm_err}")
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         # Update progress
@@ -4315,40 +4440,40 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
                             message=f"Processing video {idx} of {len(filenames)}...",
                             details=f"Extracting faces from {filename}"
                         )
-                        
+
                         video_path = Path("/data/review") / category / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         # Extract faces from video
                         import cv2
                         import face_recognition as fr
-                        
+
                         cap = cv2.VideoCapture(str(video_path))
                         fps = cap.get(cv2.CAP_PROP_FPS)
                         frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
-                        
+
                         face_count = 0
                         frame_count = 0
                         max_faces = 10  # Limit faces per video
-                        
+
                         while face_count < max_faces:
                             ret, frame = cap.read()
                             if not ret:
                                 break
-                            
+
                             if frame_count % frame_interval == 0:
                                 # Update progress with frame info
                                 task_tracker.update_task(
                                     task_id,
                                     details=f"Processing frame {frame_count} of {filename}"
                                 )
-                                
+
                                 # Detect faces
                                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                                 face_locations = fr.face_locations(rgb_frame)
-                                
+
                                 # Save each detected face
                                 for face_idx, (top, right, bottom, left) in enumerate(face_locations):
                                     # Crop face with some padding
@@ -4357,65 +4482,73 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
                                     left = max(0, left - padding)
                                     bottom = min(frame.shape[0], bottom + padding)
                                     right = min(frame.shape[1], right + padding)
-                                    
+
                                     face_img = rgb_frame[top:bottom, left:right]
-                                    
-                                    # Save face image
-                                    face_filename = f"{video_path.stem}_face_{face_count:03d}.jpg"
+
+                                    # Save face image with unique filename so repeated scans do not overwrite crops
+                                    scan_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                                    face_filename = f"{video_path.stem}_frame_{frame_count:06d}_face_{face_count:03d}_{scan_timestamp}.jpg"
                                     face_path = unassigned_path / face_filename
-                                    
+
                                     import PIL.Image as Image
                                     face_pil = Image.fromarray(face_img)
                                     face_pil.save(str(face_path))
-                                    
+
                                     # Save metadata
                                     metadata = {
                                         "source_video": filename,
                                         "timestamp": datetime.now().isoformat(),
-                                        "face_index": face_count
+                                        "face_index": face_count,
+                                        "frame_number": frame_count,
+                                        "review_category": category
                                     }
                                     metadata_path = face_path.with_suffix(".json")
                                     with open(metadata_path, 'w') as f:
                                         json.dump(metadata, f, indent=2)
-                                    
+
                                     face_count += 1
                                     if face_count >= max_faces:
                                         break
-                            
+
                             frame_count += 1
-                        
+
                         cap.release()
-                        
-                        # Delete the original video from review
-                        video_path.unlink()
-                        metadata_path = video_path.with_suffix(video_path.suffix + ".json")
-                        if metadata_path.exists():
-                            metadata_path.unlink()
-                        
+
+                        if delete_after and face_count > 0:
+                            # Optional cleanup for callers that explicitly request it. Keep by default
+                            # so users can replay videos or rescan if no visible faces are found.
+                            video_path.unlink()
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                metadata_path.unlink()
+
                         results["processed"].append({
                             "filename": filename,
                             "faces_extracted": face_count
                         })
-                        
+
                         logger.info(f"Extracted {face_count} faces from {filename}")
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Task completed
-                task_tracker.complete_task(
-                    task_id,
-                    message=f"Completed! Processed {len(results['processed'])} videos, extracted faces from {sum(r['faces_extracted'] for r in results['processed'])} frames"
-                )
-                
+                total_faces = sum(r["faces_extracted"] for r in results["processed"])
+                zero_face_count = sum(1 for r in results["processed"] if r["faces_extracted"] == 0)
+                message = f"Completed scan: extracted {total_faces} face crop(s) from {len(results['processed'])} video(s)."
+                if zero_face_count:
+                    message += f" {zero_face_count} video(s) had no detectable visible faces and were kept for review."
+
+                task_tracker.complete_task(task_id, message=message)
+
             except Exception as e:
                 logger.error(f"Face extraction task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(extract_faces_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -4431,46 +4564,46 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
 
 def extract_faces_from_video_sync(video_path: Path, output_dir: Path, profile_name: str, max_faces: int = 10) -> int:
     """Extract faces from a video file and save to output directory.
-    
+
     Args:
         video_path: Path to source video file
         output_dir: Directory to save extracted face images
         profile_name: Name of profile (for filename prefix)
         max_faces: Maximum number of faces to extract per video
-    
+
     Returns:
         Number of faces extracted
     """
     import cv2
     import face_recognition as fr
     import PIL.Image as Image
-    
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Set permissions (rule: folders created by AI should have full permissions)
     try:
         import stat
         output_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 777 permissions
     except Exception as e:
         logger.warning(f"Could not set permissions on {output_dir}: {e}")
-    
+
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_interval = int(fps) if fps > 0 else 30  # Extract 1 frame per second
-    
+
     face_count = 0
     frame_count = 0
-    
+
     while face_count < max_faces:
         ret, frame = cap.read()
         if not ret:
             break
-        
+
         if frame_count % frame_interval == 0:
             # Detect faces
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             face_locations = fr.face_locations(rgb_frame)
-            
+
             # Save each detected face
             for top, right, bottom, left in face_locations:
                 # Crop face with padding
@@ -4479,17 +4612,17 @@ def extract_faces_from_video_sync(video_path: Path, output_dir: Path, profile_na
                 left = max(0, left - padding)
                 bottom = min(frame.shape[0], bottom + padding)
                 right = min(frame.shape[1], right + padding)
-                
+
                 face_img = rgb_frame[top:bottom, left:right]
-                
+
                 # Save face image
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 face_filename = f"{profile_name}_{video_path.stem}_{timestamp}_{face_count:03d}.jpg"
                 face_path = output_dir / face_filename
-                
+
                 face_pil = Image.fromarray(face_img)
                 face_pil.save(str(face_path))
-                
+
                 # Save metadata
                 metadata = {
                     "source_video": video_path.name,
@@ -4500,13 +4633,13 @@ def extract_faces_from_video_sync(video_path: Path, output_dir: Path, profile_na
                 metadata_path = face_path.with_suffix(".json")
                 with open(metadata_path, 'w') as f:
                     json.dump(metadata, f, indent=2)
-                
+
                 face_count += 1
                 if face_count >= max_faces:
                     break
-        
+
         frame_count += 1
-    
+
     cap.release()
     return face_count
 
@@ -4515,48 +4648,48 @@ def extract_faces_from_video_sync(video_path: Path, output_dir: Path, profile_na
 async def assign_person_video_to_face_profile(request: dict, background_tasks: BackgroundTasks):
     """Assign person videos to a face profile with training extraction (unified workflow)."""
     global face_profile_manager
-    
+
     try:
         filenames = request.get('filenames', [])
         profile_id = request.get('profile_id')
         extract_frames = bool(request.get('extract_frames', True))
         extract_type = request.get('extract_type', 'positive')  # 'positive', 'negative', or 'both'
-        
+
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
         if not profile_id:
             raise HTTPException(status_code=400, detail="Missing profile_id")
         if extract_type not in ['positive', 'negative', 'both']:
             raise HTTPException(status_code=400, detail="extract_type must be 'positive', 'negative', or 'both'")
-        
+
         # Get face profile
         if not face_profile_manager:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
-        
+
         profile = face_profile_manager.get_profile(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
-        
+
         def assign_face_profile_background():
             """Background task to extract faces and move videos."""
             try:
                 task_tracker.start_task(task_id, message=f"Extracting faces for '{profile.name}'...")
                 results = {"processed": [], "failed": [], "total_faces": 0}
-                
+
                 review_path = Path("/data/review/person")
                 sorted_path = Path("/data/sorted") / profile_id
                 sorted_path.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set permissions on sorted folder
                 try:
                     import stat
                     sorted_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                 except Exception as e:
                     logger.warning(f"Could not set permissions: {e}")
-                
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         task_tracker.update_task(
@@ -4565,28 +4698,28 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                             message=f"Processing video {idx} of {len(filenames)}...",
                             details=f"Extracting faces from {filename}"
                         )
-                        
+
                         video_path = review_path / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         faces_extracted = 0
-                        
+
                         # Extract positive training frames
                         if extract_frames and extract_type in ['positive', 'both']:
                             positive_dir = Path("/data/face_training") / profile_id / "confirmed"
                             faces = extract_faces_from_video_sync(video_path, positive_dir, profile.name)
                             faces_extracted += faces
                             logger.info(f"Extracted {faces} positive faces from {filename} for {profile.name}")
-                        
+
                         # Extract negative training frames
                         if extract_frames and extract_type in ['negative', 'both']:
                             negative_dir = Path("/data/face_training") / profile_id / "rejected"
                             faces = extract_faces_from_video_sync(video_path, negative_dir, profile.name)
                             faces_extracted += faces
                             logger.info(f"Extracted {faces} negative faces from {filename} for {profile.name}")
-                        
+
                         # Move video to sorted if positive or both
                         if extract_type in ['positive', 'both']:
                             dest_path = sorted_path / filename
@@ -4595,10 +4728,10 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                                 while dest_path.exists():
                                     dest_path = sorted_path / f"{video_path.stem}_{counter}{video_path.suffix}"
                                     counter += 1
-                            
+
                             import shutil
                             shutil.move(str(video_path), str(dest_path))
-                            
+
                             # Move metadata
                             metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                             if metadata_path.exists():
@@ -4610,22 +4743,22 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                             metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                             if metadata_path.exists():
                                 metadata_path.unlink()
-                        
+
                         # Delete tracked video if exists
                         tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
                         if tracked_video_path.exists():
                             tracked_video_path.unlink()
-                        
+
                         results["processed"].append({
                             "filename": filename,
                             "faces_extracted": faces_extracted
                         })
                         results["total_faces"] += faces_extracted
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile counts
                 if extract_type == 'positive':
                     new_confirmed = profile.confirmed_count + results["total_faces"]
@@ -4643,20 +4776,20 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                         confirmed_count=new_confirmed,
                         rejected_count=new_rejected
                     )
-                
+
                 # Task completed
                 task_tracker.complete_task(
                     task_id,
                     message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_faces']} faces for '{profile.name}'"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Assign face profile task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(assign_face_profile_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -4675,10 +4808,10 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
 async def get_task_progress(task_id: str):
     """Get progress of a background task."""
     task = task_tracker.get_task(task_id)
-    
+
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     return task.to_dict()
 
 
@@ -4686,29 +4819,29 @@ async def get_task_progress(task_id: str):
 async def confirm_videos(category: str, request: dict, background_tasks: BackgroundTasks):
     """Confirm videos are correct and move to sorted folder (async)."""
     global animal_profile_manager
-    
+
     try:
         filenames = request.get('filenames', [])
-        
+
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
-        
+
         # Try to get a matching profile (optional)
         profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Starting video confirmation...")
-        
+
         def confirm_videos_background():
             """Background task to move videos to sorted."""
             try:
                 task_tracker.start_task(task_id, message="Moving videos to sorted...")
                 results = {"confirmed": [], "failed": []}
-                
+
                 review_path = Path("/data/review") / category
                 sorted_path = Path("/data/sorted") / category
                 sorted_path.mkdir(parents=True, exist_ok=True)
-                
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         # Update progress
@@ -4718,12 +4851,12 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
                             message=f"Confirming video {idx} of {len(filenames)}...",
                             details=f"Moving {filename}"
                         )
-                        
+
                         video_path = review_path / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         # Move ORIGINAL video to sorted (not tracked version)
                         dest_path = sorted_path / filename
                         if dest_path.exists():
@@ -4732,29 +4865,29 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
                             while dest_path.exists():
                                 dest_path = sorted_path / f"{video_path.stem}_{counter}{video_path.suffix}"
                                 counter += 1
-                        
+
                         import shutil
                         shutil.move(str(video_path), str(dest_path))
-                        
+
                         # Move metadata if exists
                         metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                         if metadata_path.exists():
                             dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
                             shutil.move(str(metadata_path), str(dest_metadata))
-                        
+
                         # Delete tracked video (for review only, not needed in sorted)
                         tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
                         if tracked_video_path.exists():
                             tracked_video_path.unlink()
                             logger.debug(f"Deleted tracked video: tracked_{filename}")
-                        
+
                         results["confirmed"].append(filename)
                         logger.info(f"Confirmed {filename} for category {category}")
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to confirm {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile accuracy if profile exists
                 if profile:
                     new_confirmed = profile.confirmed_count + len(results["confirmed"])
@@ -4763,20 +4896,20 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
                     acc_msg = f" Accuracy: {updated_profile.accuracy_percentage:.1f}%"
                 else:
                     acc_msg = ""
-                
+
                 # Task completed
                 task_tracker.complete_task(
                     task_id,
                     message=f"Completed! Confirmed {len(results['confirmed'])} videos.{acc_msg}"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Confirm videos task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(confirm_videos_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -4794,16 +4927,16 @@ async def confirm_videos(category: str, request: dict, background_tasks: Backgro
 async def reject_videos(category: str, request: dict, background_tasks: BackgroundTasks):
     """Reject/delete videos from review (async)."""
     global animal_profile_manager, download_tracker
-    
+
     try:
         filenames = request.get('filenames', [])
         save_as_negative = bool(request.get('save_as_negative', False))
         extract_frames = bool(request.get('extract_frames', True))
         profile_id = request.get('profile_id')
-        
+
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
-        
+
         # Try to get a matching profile (optional)
         profile = None
         if save_as_negative:
@@ -4814,10 +4947,10 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                 raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         else:
             profile = animal_profile_manager.get_profile(category) if animal_profile_manager else None
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Starting video rejection...")
-        
+
         def reject_videos_background():
             """Background task to delete videos."""
             try:
@@ -4825,7 +4958,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                 results = {"deleted": [], "failed": []}
                 total_extracted_frames = 0
                 rejected_increment = 0
-                
+
                 review_path = Path("/data/review") / category
 
                 max_frames_per_video = 10
@@ -4840,7 +4973,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                         logger.warning(f"Failed to read training config: {config_err}")
 
                 frame_extractor = FrameExtractor(target_fps=1) if (save_as_negative and extract_frames) else None
-                
+
                 for idx, filename in enumerate(filenames, 1):
                     try:
                         # Update progress
@@ -4850,7 +4983,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                             message=f"Deleting video {idx} of {len(filenames)}...",
                             details=f"Deleting {filename}"
                         )
-                        
+
                         video_path = review_path / filename
                         if video_path.exists():
                             # Try to load video metadata for confidence (for negative frames)
@@ -4863,7 +4996,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                         video_confidence = video_meta.get('clip_confidence', video_meta.get('yolo_confidence', 0.0))
                                 except Exception as meta_err:
                                     logger.debug(f"Could not load video metadata: {meta_err}")
-                            
+
                             extracted_for_video = 0
                             if save_as_negative and extract_frames:
                                 temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
@@ -4913,22 +5046,22 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                     logger.debug(f"Marked event {event_id} as rejected in download tracker (entry preserved)")
                             except Exception as e:
                                 logger.warning(f"Could not extract event_id from {filename}: {e}")
-                            
+
                             # Delete original video
                             video_path.unlink()
                             results["deleted"].append(filename)
-                            
+
                             # Delete metadata if exists
                             metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                             if metadata_path.exists():
                                 metadata_path.unlink()
-                            
+
                             # Delete tracked video if exists
                             tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
                             if tracked_video_path.exists():
                                 tracked_video_path.unlink()
                                 logger.debug(f"Deleted tracked video: tracked_{filename}")
-                            
+
                             logger.info(f"Rejected and deleted {filename} for category {category} (DB entry preserved)")
                             if save_as_negative and extract_frames:
                                 rejected_increment += extracted_for_video
@@ -4936,43 +5069,43 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                 rejected_increment += 1
                         else:
                             results["failed"].append({"filename": filename, "error": "File not found"})
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to delete {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile accuracy if profile exists
                 if profile and rejected_increment > 0:
                     # Update rejected count directly on profile
                     profile.rejected_count += rejected_increment
                     animal_profile_manager._save_profile(profile)
-                    
+
                     # Trigger training check via ReviewManager
                     if review_manager:
                         try:
                             review_manager._maybe_train_profile(profile)
                         except Exception as train_err:
                             logger.warning(f"Training check failed: {train_err}")
-                    
+
                     updated_profile = animal_profile_manager.get_profile(profile.id)
                     acc_msg = f" Negatives: {updated_profile.rejected_count}"
                 else:
                     acc_msg = ""
-                
+
                 # Task completed
                 extracted_msg = f" Extracted {total_extracted_frames} negative frames." if total_extracted_frames else ""
                 task_tracker.complete_task(
                     task_id,
                     message=f"Completed! Deleted {len(results['deleted'])} videos.{extracted_msg}{acc_msg}"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Reject videos task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(reject_videos_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,
@@ -4990,25 +5123,25 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
 async def advanced_review(request: dict, background_tasks: BackgroundTasks):
     """Process videos with per-video configuration (advanced review modal)."""
     global animal_profile_manager, download_tracker
-    
+
     try:
         actions = request.get('actions', [])
-        
+
         if not actions:
             raise HTTPException(status_code=400, detail="Missing actions array")
-        
+
         # Create background task
         task_id = task_tracker.create_task(total=len(actions), message="Starting advanced review...")
-        
+
         def advanced_review_background():
             """Background task to process each video action."""
             try:
                 task_tracker.start_task(task_id, message="Processing videos...")
                 results = {"processed": [], "failed": []}
-                
+
                 # Group statistics by profile
                 profile_stats = {}  # profile_id -> {confirmed: 0, rejected: 0, frames: 0}
-                
+
                 for idx, action in enumerate(actions, 1):
                     try:
                         filename = action.get('filename')
@@ -5019,7 +5152,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                         move_to_sorted = action.get('move_to_sorted', False)
                         delete_after = action.get('delete_after', False)
                         extract_faces = action.get('extract_faces', False)
-                        
+
                         # Update progress
                         task_tracker.update_task(
                             task_id,
@@ -5027,26 +5160,26 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                             message=f"Processing video {idx} of {len(actions)}...",
                             details=f"{filename}"
                         )
-                        
+
                         video_path = Path("/data/review") / category / filename
                         if not video_path.exists():
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
-                        
+
                         # If no actions selected, skip
                         if not any([extract_positive, extract_negative, move_to_sorted, delete_after, extract_faces]):
                             logger.debug(f"No actions selected for {filename}, skipping")
                             continue
-                        
+
                         # Initialize profile stats if needed
                         if profile_id and profile_id not in profile_stats:
                             profile_stats[profile_id] = {"confirmed": 0, "rejected": 0, "frames": 0}
-                        
+
                         # Extract training frames (positive and/or negative)
                         if (extract_positive or extract_negative) and profile_id:
                             frame_extractor = FrameExtractor(target_fps=1)
                             max_frames = 10
-                            
+
                             # Get config for batch size
                             if CONFIG_PATH.exists():
                                 try:
@@ -5057,19 +5190,19 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         max_frames = min(batch_size, 30)
                                 except Exception as config_err:
                                     logger.warning(f"Failed to read training config: {config_err}")
-                            
+
                             # Extract positive frames
                             if extract_positive:
                                 dest_dir = Path("/data/training") / profile_id / "confirmed"
                                 dest_dir.mkdir(parents=True, exist_ok=True)
-                                
+
                                 # Set permissions
                                 try:
                                     import stat
                                     dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                                 except Exception as perm_err:
                                     logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
-                                
+
                                 temp_dir = Path(tempfile.mkdtemp(prefix="positive_frames_"))
                                 try:
                                     frame_paths = frame_extractor.extract_frames(
@@ -5077,13 +5210,13 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         str(temp_dir),
                                         max_frames=max_frames
                                     )
-                                    
+
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
                                     for frame_idx, frame_path in enumerate(frame_paths):
                                         frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
                                         dest_frame_path = dest_dir / frame_name
                                         shutil.move(frame_path, dest_frame_path)
-                                        
+
                                         metadata = {
                                             "source_video": filename,
                                             "profile_id": profile_id,
@@ -5093,25 +5226,25 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         metadata_path = Path(str(dest_frame_path) + ".json")
                                         with open(metadata_path, "w") as metadata_file:
                                             json.dump(metadata, metadata_file, indent=2)
-                                    
+
                                     profile_stats[profile_id]["confirmed"] += len(frame_paths)
                                     profile_stats[profile_id]["frames"] += len(frame_paths)
                                     logger.info(f"Extracted {len(frame_paths)} positive frames for {profile_id} from {filename}")
                                 finally:
                                     shutil.rmtree(temp_dir, ignore_errors=True)
-                            
+
                             # Extract negative frames
                             if extract_negative:
                                 dest_dir = Path("/data/training") / profile_id / "rejected"
                                 dest_dir.mkdir(parents=True, exist_ok=True)
-                                
+
                                 # Set permissions
                                 try:
                                     import stat
                                     dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                                 except Exception as perm_err:
                                     logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
-                                
+
                                 temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
                                 try:
                                     frame_paths = frame_extractor.extract_frames(
@@ -5119,13 +5252,13 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         str(temp_dir),
                                         max_frames=max_frames
                                     )
-                                    
+
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
                                     for frame_idx, frame_path in enumerate(frame_paths):
                                         frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
                                         dest_frame_path = dest_dir / frame_name
                                         shutil.move(frame_path, dest_frame_path)
-                                        
+
                                         metadata = {
                                             "source_video": filename,
                                             "profile_id": profile_id,
@@ -5135,49 +5268,49 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         metadata_path = Path(str(dest_frame_path) + ".json")
                                         with open(metadata_path, "w") as metadata_file:
                                             json.dump(metadata, metadata_file, indent=2)
-                                    
+
                                     profile_stats[profile_id]["rejected"] += len(frame_paths)
                                     profile_stats[profile_id]["frames"] += len(frame_paths)
                                     logger.info(f"Extracted {len(frame_paths)} negative frames for {profile_id} from {filename}")
                                 finally:
                                     shutil.rmtree(temp_dir, ignore_errors=True)
-                        
+
                         # Extract faces (for person videos)
                         if extract_faces and category == 'person':
                             try:
                                 # Use existing face extraction logic
                                 from face_recognition_module import FaceRecognitionManager
                                 face_manager = FaceRecognitionManager()
-                                
+
                                 faces_dir = Path("/data/training/faces/unassigned")
                                 faces_dir.mkdir(parents=True, exist_ok=True)
-                                
+
                                 # Set permissions
                                 try:
                                     import stat
                                     faces_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                                 except Exception as perm_err:
                                     logger.warning(f"Could not set permissions on {faces_dir}: {perm_err}")
-                                
+
                                 face_count = face_manager.extract_faces_from_video(video_path, faces_dir)
                                 logger.info(f"Extracted {face_count} faces from {filename}")
                             except Exception as face_err:
                                 logger.warning(f"Failed to extract faces from {filename}: {face_err}")
-                        
+
                         # Move to sorted (copy video)
                         if move_to_sorted and profile_id:
                             sorted_dir = Path("/data/sorted") / profile_id
                             sorted_dir.mkdir(parents=True, exist_ok=True)
-                            
+
                             # Set permissions
                             try:
                                 import stat
                                 sorted_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                             except Exception as perm_err:
                                 logger.warning(f"Could not set permissions on {sorted_dir}: {perm_err}")
-                            
+
                             sorted_video_path = sorted_dir / filename
-                            
+
                             # Handle duplicates
                             if sorted_video_path.exists():
                                 counter = 1
@@ -5187,11 +5320,11 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     new_name = f"{stem}_{counter}{suffix}"
                                     sorted_video_path = sorted_dir / new_name
                                     counter += 1
-                            
+
                             try:
                                 shutil.copy2(str(video_path), str(sorted_video_path))
                                 logger.info(f"Copied video to sorted/{profile_id}: {filename}")
-                                
+
                                 # Copy metadata if exists
                                 metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                                 if metadata_path.exists():
@@ -5199,7 +5332,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     shutil.copy2(str(metadata_path), str(sorted_metadata_path))
                             except Exception as copy_err:
                                 logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
-                        
+
                         # Delete video if requested
                         if delete_after:
                             try:
@@ -5215,13 +5348,13 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                 logger.info(f"Deleted {filename} from review")
                             except Exception as delete_err:
                                 logger.warning(f"Failed to delete {filename}: {delete_err}")
-                        
+
                         results["processed"].append(filename)
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
-                
+
                 # Update profile statistics
                 for profile_id, stats in profile_stats.items():
                     if animal_profile_manager:
@@ -5232,7 +5365,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                 profile.rejected_count += stats["rejected"]
                                 animal_profile_manager._save_profile(profile)
                                 logger.info(f"Updated {profile_id}: +{stats['confirmed']} confirmed, +{stats['rejected']} rejected")
-                                
+
                                 # Trigger training check
                                 if review_manager:
                                     try:
@@ -5241,7 +5374,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                         logger.warning(f"Training check failed: {train_err}")
                         except Exception as profile_err:
                             logger.error(f"Failed to update profile {profile_id}: {profile_err}")
-                
+
                 # Task completed
                 total_frames = sum(stats["frames"] for stats in profile_stats.values())
                 frames_msg = f" Extracted {total_frames} training frames." if total_frames else ""
@@ -5249,14 +5382,14 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                     task_id,
                     message=f"Completed! Processed {len(results['processed'])} videos.{frames_msg}"
                 )
-                
+
             except Exception as e:
                 logger.error(f"Advanced review task failed: {e}", exc_info=True)
                 task_tracker.fail_task(task_id, str(e))
-        
+
         # Queue background task
         background_tasks.add_task(advanced_review_background)
-        
+
         return {
             "status": "processing",
             "task_id": task_id,

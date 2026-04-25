@@ -16,6 +16,7 @@
             --accent-color: #4299e1;
             --accent-hover: #3182ce;
             --success-color: #48bb78;
+            --warning-color: #ed8936;
             --danger-color: #f56565;
             --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
             --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -130,6 +131,14 @@
             background: #e53e3e;
         }
 
+        .btn-warning {
+            background: var(--warning-color);
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #dd6b20;
+        }
+
         .btn-small {
             padding: 0.4rem 0.8rem;
             font-size: 0.875rem;
@@ -152,6 +161,7 @@
             display: flex;
             gap: 0.5rem;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .selection-info {
@@ -159,7 +169,8 @@
             font-size: 0.875rem;
         }
 
-        input[type="text"] {
+        input[type="text"],
+        input[type="number"] {
             padding: 0.5rem 1rem;
             border: 1px solid var(--border-color);
             border-radius: 6px;
@@ -311,18 +322,97 @@
             font-size: 0.875rem;
             color: var(--text-secondary);
         }
-        
+
         .profile-section {
             margin-bottom: 2rem;
         }
-        
+
+        .profile-create-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+        }
+
+        .profile-create-form {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-top: 0.75rem;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .form-field label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .video-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .unknown-video-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .unknown-video-card video {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            background: #000;
+        }
+
+        .video-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem;
+        }
+
+        .status-message {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            min-height: 1.2rem;
+        }
+
+        .status-message.success {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        .status-message.warning {
+            color: var(--warning-color);
+            font-weight: 600;
+        }
+
+        .status-message.error {
+            color: var(--danger-color);
+            font-weight: 600;
+        }
+
         .profile-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 1.5rem;
             margin-top: 1rem;
         }
-        
+
         .profile-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -330,53 +420,53 @@
             padding: 1.25rem;
             box-shadow: var(--shadow);
         }
-        
+
         .profile-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
         }
-        
+
         .profile-name {
             font-size: 1.25rem;
             font-weight: 600;
             color: var(--text-primary);
         }
-        
+
         .profile-stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 0.75rem;
             margin-bottom: 1rem;
         }
-        
+
         .stat-item {
             text-align: center;
             padding: 0.5rem;
             background: var(--bg-secondary);
             border-radius: 6px;
         }
-        
+
         .stat-value {
             font-size: 1.5rem;
             font-weight: bold;
             color: var(--accent-color);
         }
-        
+
         .stat-label {
             font-size: 0.75rem;
             color: var(--text-secondary);
             margin-top: 0.25rem;
         }
-        
+
         .sample-images {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 0.5rem;
             margin-top: 0.75rem;
         }
-        
+
         .sample-image {
             width: 100%;
             height: 90px;
@@ -384,20 +474,20 @@
             border-radius: 6px;
             border: 1px solid var(--border-color);
         }
-        
+
         .section-divider {
             border-top: 2px solid var(--border-color);
             margin: 2rem 0;
             padding-top: 1rem;
         }
-        
+
         .section-title {
             font-size: 1.5rem;
             font-weight: 600;
             color: var(--text-primary);
             margin-bottom: 1rem;
         }
-        
+
         .modal {
             display: none;
             position: fixed;
@@ -409,14 +499,14 @@
             z-index: 1000;
             overflow-y: auto;
         }
-        
+
         .modal.active {
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 2rem;
         }
-        
+
         .modal-content {
             background: var(--bg-card);
             border-radius: 12px;
@@ -427,7 +517,7 @@
             padding: 2rem;
             position: relative;
         }
-        
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -436,13 +526,13 @@
             padding-bottom: 1rem;
             border-bottom: 1px solid var(--border-color);
         }
-        
+
         .modal-title {
             font-size: 1.5rem;
             font-weight: 600;
             color: var(--text-primary);
         }
-        
+
         .close-btn {
             background: none;
             border: none;
@@ -451,11 +541,11 @@
             color: var(--text-secondary);
             padding: 0.5rem;
         }
-        
+
         .close-btn:hover {
             color: var(--text-primary);
         }
-        
+
         .video-card {
             background: var(--bg-card);
             border: 2px solid var(--border-color);
@@ -464,28 +554,28 @@
             transition: all 0.3s ease;
             cursor: pointer;
         }
-        
+
         .video-card:hover {
             transform: translateY(-4px);
             box-shadow: var(--shadow-lg);
         }
-        
+
         .video-card.selected {
             border-color: var(--danger-color);
             box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.3);
         }
-        
+
         .video-card video {
             width: 100%;
             height: 180px;
             object-fit: cover;
             background: #000;
         }
-        
+
         .video-info {
             padding: 0.75rem;
         }
-        
+
         .video-filename {
             font-size: 0.75rem;
             color: var(--text-secondary);
@@ -514,6 +604,23 @@
 
         <div class="profile-section">
             <div class="section-title">Trained People</div>
+            <div class="profile-create-card">
+                <h3>Create New Person Profile</h3>
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;">
+                    Create a profile first, then assign extracted face crops as positive or negative examples below.
+                </p>
+                <div class="profile-create-form">
+                    <div class="form-field">
+                        <label for="newProfileName">Person name</label>
+                        <input type="text" id="newProfileName" placeholder="e.g. Claire Banner">
+                    </div>
+                    <div class="form-field">
+                        <label for="newProfileThreshold">Face tolerance</label>
+                        <input type="number" id="newProfileThreshold" min="0.3" max="0.9" step="0.05" value="0.6">
+                    </div>
+                    <button class="btn btn-success" onclick="createFaceProfile()">+ Create Profile</button>
+                </div>
+            </div>
             <div id="profilesGrid" class="profile-grid"></div>
         </div>
 
@@ -522,9 +629,9 @@
         <div class="profile-section" id="unknownVideosSection" style="display: none;">
             <div class="section-title">Unknown Person Videos</div>
             <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                These videos contain people who were not recognized. Extract faces from them to train new or existing profiles.
+                These videos contain people who were not recognized. Play or scrub the video to inspect it, then scan it for visible faces. Videos are kept if no faces are found.
             </p>
-            <div id="unknownVideosGrid" class="face-gallery"></div>
+            <div id="unknownVideosGrid" class="video-gallery"></div>
         </div>
 
         <div class="section-divider" id="unknownVideosDivider" style="display: none;"></div>
@@ -536,11 +643,13 @@
                 <button class="btn btn-small" onclick="deselectAll()">Deselect All</button>
             </div>
             <div class="control-group">
-                <label for="personInput">Person name:</label>
-                <input type="text" id="personInput" placeholder="Enter name or select existing" list="personList">
-                <datalist id="personList"></datalist>
-                <button class="btn btn-success btn-small" onclick="assignFaces()" id="assignBtn" disabled>✓ Assign to Person</button>
-                <button class="btn btn-danger btn-small" onclick="rejectFaces()" id="rejectBtn" disabled>✗ Reject</button>
+                <label for="positiveProfileSelect">Positive for:</label>
+                <select id="positiveProfileSelect" onchange="updateSelectionInfo()"></select>
+                <button class="btn btn-success btn-small" onclick="assignPositiveFaces()" id="assignBtn" disabled>✓ Assign Positive</button>
+                <label for="negativeProfileSelect">Negative for:</label>
+                <select id="negativeProfileSelect" onchange="updateSelectionInfo()"></select>
+                <button class="btn btn-warning btn-small" onclick="assignNegativeFaces()" id="negativeBtn" disabled>✗ Assign Negative</button>
+                <button class="btn btn-danger btn-small" onclick="rejectFaces()" id="rejectBtn" disabled>Delete Unusable</button>
             </div>
         </div>
 
@@ -549,7 +658,7 @@
         <div id="emptyState" class="empty-state" style="display: none;">
             <div class="empty-state-icon">✅</div>
             <h3>No faces to assign</h3>
-            <p>Go to the Review tab and click "Confirm Person" on person videos to extract faces.</p>
+            <p>Scan unknown person videos above to extract visible face crops for assignment.</p>
         </div>
     </div>
 
@@ -560,11 +669,11 @@
                 <div class="modal-title" id="reviewModalTitle">Review Videos</div>
                 <button class="close-btn" onclick="closeReviewModal()">&times;</button>
             </div>
-            
+
             <div class="info-banner" style="margin-bottom: 1.5rem;">
                 <p style="margin: 0;">Select videos that are <strong>NOT</strong> this person. They will be used as negative training examples to improve recognition accuracy.</p>
             </div>
-            
+
             <div class="controls" style="margin-bottom: 1.5rem;">
                 <div class="control-group">
                     <span class="selection-info" id="reviewSelectionInfo">0 selected</span>
@@ -575,9 +684,9 @@
                     <button class="btn btn-danger btn-small" onclick="markAsNotPerson()" id="markNotPersonBtn" disabled>✗ Mark as NOT This Person</button>
                 </div>
             </div>
-            
+
             <div id="reviewVideosGrid" class="face-gallery"></div>
-            
+
             <div id="noVideosMessage" class="empty-state" style="display: none;">
                 <div class="empty-state-icon">📹</div>
                 <h3>No videos found</h3>
@@ -602,42 +711,105 @@
                 const response = await fetch('/api/face-profiles');
                 const data = await response.json();
                 profiles = data.profiles || [];
-                
-                // Populate datalist with existing person names
-                const datalist = document.getElementById('personList');
-                datalist.innerHTML = '';
-                profiles.forEach(profile => {
-                    const option = document.createElement('option');
-                    option.value = profile.name;
-                    datalist.appendChild(option);
-                });
-                
+
+                populateProfileSelects();
+
                 // Load detailed stats for each profile and render cards
                 await renderProfileCards();
             } catch (error) {
                 console.error('Failed to load face profiles:', error);
             }
         }
-        
+
+        function populateProfileSelects() {
+            const selects = [
+                document.getElementById('positiveProfileSelect'),
+                document.getElementById('negativeProfileSelect')
+            ];
+
+            selects.forEach(select => {
+                if (!select) return;
+                const selectedValue = select.value;
+                select.innerHTML = '<option value="">-- Select profile --</option>';
+
+                profiles.forEach(profile => {
+                    const option = document.createElement('option');
+                    option.value = profile.id;
+                    option.textContent = profile.name;
+                    option.dataset.name = profile.name;
+                    select.appendChild(option);
+                });
+
+                if (selectedValue && profiles.some(profile => profile.id === selectedValue)) {
+                    select.value = selectedValue;
+                }
+            });
+
+            updateSelectionInfo();
+        }
+
+        async function createFaceProfile() {
+            const nameInput = document.getElementById('newProfileName');
+            const thresholdInput = document.getElementById('newProfileThreshold');
+            const name = nameInput.value.trim();
+            const confidenceThreshold = parseFloat(thresholdInput.value || '0.6');
+
+            if (!name) {
+                alert('Please enter a person name');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/face-profiles', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name,
+                        confidence_threshold: confidenceThreshold
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || data.status !== 'success') {
+                    alert('Failed to create profile: ' + (data.detail || 'Unknown error'));
+                    return;
+                }
+
+                nameInput.value = '';
+                alert(`✓ ${data.message}`);
+                await loadFaceProfiles();
+
+                const positiveSelect = document.getElementById('positiveProfileSelect');
+                const negativeSelect = document.getElementById('negativeProfileSelect');
+                if (positiveSelect) positiveSelect.value = data.profile.id;
+                if (negativeSelect) negativeSelect.value = data.profile.id;
+                updateSelectionInfo();
+            } catch (error) {
+                console.error('Failed to create face profile:', error);
+                alert('Error creating profile: ' + error.message);
+            }
+        }
+
         async function renderProfileCards() {
             const grid = document.getElementById('profilesGrid');
             grid.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading trained profiles...</p></div>';
-            
+
             if (profiles.length === 0) {
                 grid.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No trained profiles yet</p>';
                 return;
             }
-            
+
             grid.innerHTML = '';
-            
+
             for (const profile of profiles) {
                 try {
                     const statsResponse = await fetch(`/api/face-profiles/${profile.id}/stats`);
                     const statsData = await statsResponse.json();
-                    
+
                     const card = document.createElement('div');
                     card.className = 'profile-card';
-                    
+
                     card.innerHTML = `
                         <div class="profile-header">
                             <div class="profile-name">${profile.name}</div>
@@ -658,18 +830,18 @@
                         ${statsData.stats.sample_images.length > 0 ? `
                             <div class="sample-images">
                                 ${statsData.stats.sample_images.map(img => `
-                                    <img src="/api/face-profiles/${profile.id}/image/${img.filename}" 
-                                         class="sample-image" 
+                                    <img src="/api/face-profiles/${profile.id}/image/${img.filename}"
+                                         class="sample-image"
                                          alt="Sample face">
                                 `).join('')}
                             </div>
                         ` : ''}
-                        <button class="btn btn-small" style="width: 100%; margin-top: 0.75rem;" 
+                        <button class="btn btn-small" style="width: 100%; margin-top: 0.75rem;"
                                 onclick="reviewProfileVideos('${profile.id}', '${profile.name}')">
                             📹 Review Sorted Videos
                         </button>
                     `;
-                    
+
                     grid.appendChild(card);
                 } catch (error) {
                     console.error(`Failed to load stats for ${profile.name}:`, error);
@@ -681,124 +853,147 @@
             const section = document.getElementById('unknownVideosSection');
             const divider = document.getElementById('unknownVideosDivider');
             const grid = document.getElementById('unknownVideosGrid');
-            
+
             try {
                 const response = await fetch('/api/review/videos?category=person/unknown');
                 const data = await response.json();
                 const videos = data.videos || [];
-                
+
                 if (videos.length === 0) {
                     section.style.display = 'none';
                     divider.style.display = 'none';
                     return;
                 }
-                
+
                 section.style.display = 'block';
                 divider.style.display = 'block';
                 grid.innerHTML = '';
-                
+
                 videos.forEach(video => {
                     const card = createVideoCard(video);
                     grid.appendChild(card);
                 });
-                
+
             } catch (error) {
                 console.error('Failed to load unknown person videos:', error);
                 section.style.display = 'none';
                 divider.style.display = 'none';
             }
         }
-        
+
         function createVideoCard(video) {
             const card = document.createElement('div');
-            card.className = 'face-card';
-            card.style.cursor = 'default';
-            
-            const thumbnail = document.createElement('img');
-            thumbnail.src = `/api/review/thumbnail/${video.filename}`;
-            thumbnail.alt = video.filename;
-            thumbnail.onerror = () => {
-                thumbnail.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23555" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3EVideo%3C/text%3E%3C/svg%3E';
-            };
-            
+            card.className = 'unknown-video-card';
+
+            const videoEl = document.createElement('video');
+            videoEl.src = `/api/review/video-file?category=${encodeURIComponent(video.category)}&filename=${encodeURIComponent(video.filename)}`;
+            videoEl.poster = `/api/review/thumbnail/${encodeURIComponent(video.filename)}`;
+            videoEl.controls = true;
+            videoEl.preload = 'metadata';
+
             const info = document.createElement('div');
-            info.className = 'face-info';
-            info.style.display = 'flex';
-            info.style.flexDirection = 'column';
-            info.style.gap = '0.5rem';
-            
+            info.className = 'video-actions';
+
             const filename = document.createElement('div');
             filename.className = 'face-source';
             filename.textContent = video.filename;
             filename.style.fontSize = '0.7rem';
-            
+
+            const status = document.createElement('div');
+            status.className = 'status-message';
+            status.textContent = 'Play or scrub the video, then scan for visible faces.';
+
             const extractBtn = document.createElement('button');
             extractBtn.className = 'btn btn-small btn-success';
-            extractBtn.textContent = '👤 Extract Faces';
+            extractBtn.textContent = '👤 Scan Video for Faces';
             extractBtn.style.width = '100%';
-            extractBtn.onclick = () => extractFacesFromVideo(video.filename);
-            
+            extractBtn.onclick = () => extractFacesFromVideo(video.filename, extractBtn, status);
+
             info.appendChild(filename);
+            info.appendChild(status);
             info.appendChild(extractBtn);
-            
-            card.appendChild(thumbnail);
+
+            card.appendChild(videoEl);
             card.appendChild(info);
-            
+
             return card;
         }
-        
-        async function extractFacesFromVideo(filename) {
+
+        async function extractFacesFromVideo(filename, button, statusEl) {
+            button.disabled = true;
+            button.textContent = 'Scanning...';
+            statusEl.className = 'status-message';
+            statusEl.textContent = 'Scanning sampled frames for visible faces...';
             try {
                 const response = await fetch('/api/review/confirm-person', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         category: 'person/unknown',
-                        filenames: [filename]
+                        filenames: [filename],
+                        delete_after: false
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'processing') {
-                    alert(`✓ Extracting faces from "${filename}"...\n\nFaces will appear below once extraction completes.`);
-                    
-                    // Poll for completion
                     const taskId = data.task_id;
-                    pollTaskProgress(taskId, async () => {
-                        await loadUnknownPersonVideos();
+                    pollTaskProgress(taskId, async (task) => {
+                        const message = task.message || 'Face scan complete.';
+                        const extractedCountMatch = message.match(/extracted\s+(\d+)/i);
+                        const extractedCount = extractedCountMatch ? parseInt(extractedCountMatch[1], 10) : null;
+                        statusEl.textContent = message;
+                        statusEl.className = extractedCount === 0 ? 'status-message warning' : 'status-message success';
+                        button.disabled = false;
+                        button.textContent = 'Scan Again';
                         await loadUnassignedFaces();
+                    }, (task) => {
+                        statusEl.className = 'status-message error';
+                        statusEl.textContent = 'Face scan failed: ' + (task.error || 'Unknown error');
+                        button.disabled = false;
+                        button.textContent = '👤 Scan Video for Faces';
                     });
                 } else {
-                    alert('Failed to extract faces: ' + (data.detail || 'Unknown error'));
+                    statusEl.className = 'status-message error';
+                    statusEl.textContent = 'Failed to scan faces: ' + (data.detail || 'Unknown error');
+                    button.disabled = false;
+                    button.textContent = '👤 Scan Video for Faces';
                 }
             } catch (error) {
                 console.error('Failed to extract faces:', error);
-                alert('Error extracting faces: ' + error.message);
+                statusEl.className = 'status-message error';
+                statusEl.textContent = 'Error scanning faces: ' + error.message;
+                button.disabled = false;
+                button.textContent = '👤 Scan Video for Faces';
             }
         }
-        
-        async function pollTaskProgress(taskId, onComplete) {
+
+        async function pollTaskProgress(taskId, onComplete, onFailed) {
             const checkProgress = async () => {
                 try {
                     const response = await fetch(`/api/progress/${taskId}`);
                     const task = await response.json();
-                    
+
                     if (task.status === 'completed') {
-                        if (onComplete) await onComplete();
+                        if (onComplete) await onComplete(task);
                         return;
                     } else if (task.status === 'failed') {
-                        alert('Face extraction failed: ' + (task.error || 'Unknown error'));
+                        if (onFailed) {
+                            onFailed(task);
+                        } else {
+                            alert('Face extraction failed: ' + (task.error || 'Unknown error'));
+                        }
                         return;
                     }
-                    
+
                     // Still processing, check again in 2 seconds
                     setTimeout(checkProgress, 2000);
                 } catch (error) {
                     console.error('Failed to check task progress:', error);
                 }
             };
-            
+
             checkProgress();
         }
 
@@ -806,31 +1001,31 @@
             const gallery = document.getElementById('faceGallery');
             const emptyState = document.getElementById('emptyState');
             const controls = document.getElementById('controls');
-            
+
             gallery.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading faces...</p></div>';
             emptyState.style.display = 'none';
             controls.style.display = 'none';
-            
+
             try {
                 // Add cache-busting parameter to prevent stale data
                 const response = await fetch(`/api/faces/unassigned?_=${Date.now()}`);
                 const data = await response.json();
                 faces = data.faces || [];
-                
+
                 gallery.innerHTML = '';
-                
+
                 if (faces.length === 0) {
                     emptyState.style.display = 'block';
                     return;
                 }
-                
+
                 controls.style.display = 'flex';
-                
+
                 faces.forEach(face => {
                     const card = createFaceCard(face);
                     gallery.appendChild(card);
                 });
-                
+
                 updateSelectionInfo();
             } catch (error) {
                 console.error('Failed to load faces:', error);
@@ -842,40 +1037,40 @@
             const card = document.createElement('div');
             card.className = 'face-card';
             card.dataset.filename = face.filename;
-            
+
             const checkbox = document.createElement('div');
             checkbox.className = 'select-checkbox';
             checkbox.onclick = (e) => {
                 e.stopPropagation();
                 toggleSelection(face.filename);
             };
-            
+
             const img = document.createElement('img');
             img.src = `/api/review/image/${face.filename}`;
             img.alt = 'Face';
             img.onerror = () => {
                 img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ccc" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3ENo Image%3C/text%3E%3C/svg%3E';
             };
-            
+
             const info = document.createElement('div');
             info.className = 'face-info';
-            
+
             const source = document.createElement('div');
             source.className = 'face-source';
             source.textContent = `From: ${face.source_video}`;
-            
+
             info.appendChild(source);
-            
+
             card.appendChild(checkbox);
             card.appendChild(img);
             card.appendChild(info);
-            
+
             card.onclick = (e) => {
                 if (e.target.tagName !== 'IMG' && !e.target.classList.contains('select-checkbox')) {
                     toggleSelection(face.filename);
                 }
             };
-            
+
             return card;
         }
 
@@ -885,80 +1080,85 @@
             } else {
                 selectedFaces.add(filename);
             }
-            
+
             const card = document.querySelector(`[data-filename="${filename}"]`);
             if (card) {
                 card.classList.toggle('selected', selectedFaces.has(filename));
             }
-            
+
             updateSelectionInfo();
         }
 
         function selectAll() {
             faces.forEach(face => selectedFaces.add(face.filename));
-            document.querySelectorAll('.face-card').forEach(card => card.classList.add('selected'));
+            document.querySelectorAll('#faceGallery .face-card').forEach(card => card.classList.add('selected'));
             updateSelectionInfo();
         }
 
         function deselectAll() {
             selectedFaces.clear();
-            document.querySelectorAll('.face-card').forEach(card => card.classList.remove('selected'));
+            document.querySelectorAll('#faceGallery .face-card').forEach(card => card.classList.remove('selected'));
             updateSelectionInfo();
         }
 
         function updateSelectionInfo() {
             const count = selectedFaces.size;
             document.getElementById('selectionInfo').textContent = `${count} of ${faces.length} selected`;
-            document.getElementById('assignBtn').disabled = count === 0;
+            document.getElementById('assignBtn').disabled = count === 0 || !document.getElementById('positiveProfileSelect').value;
+            document.getElementById('negativeBtn').disabled = count === 0 || !document.getElementById('negativeProfileSelect').value;
             document.getElementById('rejectBtn').disabled = count === 0;
         }
 
-        async function assignFaces() {
-            const personName = document.getElementById('personInput').value.trim();
-            
-            if (!personName) {
-                alert('Please enter a person name');
+        function getSelectedProfile(selectId) {
+            const profileId = document.getElementById(selectId).value;
+            return profiles.find(profile => profile.id === profileId);
+        }
+
+        async function assignPositiveFaces() {
+            const profile = getSelectedProfile('positiveProfileSelect');
+
+            if (!profile) {
+                alert('Please select a profile for positive training');
                 return;
             }
-            
+
             if (selectedFaces.size === 0) {
                 alert('No faces selected');
                 return;
             }
-            
+
             const filenames = Array.from(selectedFaces);
-            
+
             // Disable buttons during assignment
             document.getElementById('assignBtn').disabled = true;
+            document.getElementById('negativeBtn').disabled = true;
             document.getElementById('rejectBtn').disabled = true;
-            
+
             try {
                 const response = await fetch('/api/faces/assign', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        person_name: personName,
+                        person_name: profile.name,
                         filenames: filenames
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     // Show success message
                     alert(`✓ ${data.message}`);
-                    
-                    // Clear input and selection
-                    document.getElementById('personInput').value = '';
+
                     selectedFaces.clear();
-                    
+
                     // Refresh data with retry on failure
                     try {
                         await loadFaceProfiles();
                     } catch (e) {
                         console.warn('Failed to reload face profiles, will retry on next page visit:', e);
                     }
-                    
+
                     try {
                         await loadUnassignedFaces();
                     } catch (e) {
@@ -969,7 +1169,7 @@
                             <div class="empty-state">
                                 <div class="empty-state-icon">✅</div>
                                 <h3>Faces Assigned Successfully!</h3>
-                                <p>The faces have been assigned to "${personName}".</p>
+                                <p>The faces have been assigned to "${profile.name}".</p>
                                 <button class="btn" onclick="loadUnassignedFaces()">Refresh to see remaining faces</button>
                             </div>
                         `;
@@ -986,18 +1186,68 @@
             }
         }
 
+        async function assignNegativeFaces() {
+            const profile = getSelectedProfile('negativeProfileSelect');
+
+            if (!profile) {
+                alert('Please select a profile for negative training');
+                return;
+            }
+
+            if (selectedFaces.size === 0) {
+                alert('No faces selected');
+                return;
+            }
+
+            if (!confirm(`Assign ${selectedFaces.size} face(s) as NOT ${profile.name}?`)) {
+                return;
+            }
+
+            const filenames = Array.from(selectedFaces);
+            document.getElementById('assignBtn').disabled = true;
+            document.getElementById('negativeBtn').disabled = true;
+            document.getElementById('rejectBtn').disabled = true;
+
+            try {
+                const response = await fetch('/api/faces/assign-negative', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        profile_id: profile.id,
+                        filenames: filenames
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    alert(`✓ ${data.message}`);
+                    selectedFaces.clear();
+                    await loadFaceProfiles();
+                    await loadUnassignedFaces();
+                } else {
+                    alert('Failed to assign negative faces: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Failed to assign negative faces:', error);
+                alert('Error assigning negative faces: ' + error.message);
+            } finally {
+                updateSelectionInfo();
+            }
+        }
+
         async function rejectFaces() {
             if (selectedFaces.size === 0) {
                 alert('No faces selected');
                 return;
             }
-            
+
             if (!confirm(`Reject ${selectedFaces.size} face(s)? These will be permanently deleted.`)) {
                 return;
             }
-            
+
             const filenames = Array.from(selectedFaces);
-            
+
             try {
                 const response = await fetch('/api/faces/reject', {
                     method: 'POST',
@@ -1006,9 +1256,9 @@
                         filenames: filenames
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     alert(`✓ Rejected ${data.deleted_count} face(s)`);
                     await loadUnassignedFaces();
@@ -1025,144 +1275,144 @@
         let currentReviewProfile = null;
         let reviewVideos = [];
         let selectedReviewVideos = new Set();
-        
+
         async function reviewProfileVideos(profileId, profileName) {
             currentReviewProfile = { id: profileId, name: profileName };
-            
+
             // Update modal title
             document.getElementById('reviewModalTitle').textContent = `Review Videos: ${profileName}`;
-            
+
             // Show modal
             document.getElementById('reviewModal').classList.add('active');
-            
+
             // Load videos
             await loadProfileVideos(profileId, profileName);
         }
-        
+
         function closeReviewModal() {
             document.getElementById('reviewModal').classList.remove('active');
             selectedReviewVideos.clear();
             reviewVideos = [];
         }
-        
+
         async function loadProfileVideos(profileId, profileName) {
             const grid = document.getElementById('reviewVideosGrid');
             const noVideosMsg = document.getElementById('noVideosMessage');
-            
+
             grid.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading videos...</p></div>';
             noVideosMsg.style.display = 'none';
-            
+
             try {
                 // Get sorted videos for this person
                 const response = await fetch(`/api/sorted/videos?category=person/${encodeURIComponent(profileName)}`);
                 const data = await response.json();
                 reviewVideos = data.videos || [];
-                
+
                 grid.innerHTML = '';
-                
+
                 if (reviewVideos.length === 0) {
                     noVideosMsg.style.display = 'block';
                     return;
                 }
-                
+
                 reviewVideos.forEach(video => {
                     const card = createReviewVideoCard(video);
                     grid.appendChild(card);
                 });
-                
+
                 updateReviewSelectionInfo();
             } catch (error) {
                 console.error('Failed to load profile videos:', error);
                 grid.innerHTML = '<div class="empty-state"><p>Failed to load videos</p></div>';
             }
         }
-        
+
         function createReviewVideoCard(video) {
             const card = document.createElement('div');
             card.className = 'video-card';
             card.dataset.filename = video.filename;
-            
+
             const checkbox = document.createElement('div');
             checkbox.className = 'select-checkbox';
             checkbox.onclick = (e) => {
                 e.stopPropagation();
                 toggleReviewVideoSelection(video.filename);
             };
-            
+
             const videoEl = document.createElement('video');
             videoEl.src = `/api/sorted/video/${encodeURIComponent(currentReviewProfile.name)}/${video.filename}`;
             videoEl.controls = false;
             videoEl.muted = true;
             videoEl.onmouseover = () => videoEl.play();
             videoEl.onmouseout = () => { videoEl.pause(); videoEl.currentTime = 0; };
-            
+
             const info = document.createElement('div');
             info.className = 'video-info';
-            
+
             const filename = document.createElement('div');
             filename.className = 'video-filename';
             filename.textContent = video.filename;
-            
+
             info.appendChild(filename);
-            
+
             card.appendChild(checkbox);
             card.appendChild(videoEl);
             card.appendChild(info);
-            
+
             card.onclick = (e) => {
                 if (e.target.tagName !== 'VIDEO' && !e.target.classList.contains('select-checkbox')) {
                     toggleReviewVideoSelection(video.filename);
                 }
             };
-            
+
             return card;
         }
-        
+
         function toggleReviewVideoSelection(filename) {
             if (selectedReviewVideos.has(filename)) {
                 selectedReviewVideos.delete(filename);
             } else {
                 selectedReviewVideos.add(filename);
             }
-            
+
             const card = document.querySelector(`#reviewVideosGrid [data-filename="${filename}"]`);
             if (card) {
                 card.classList.toggle('selected', selectedReviewVideos.has(filename));
             }
-            
+
             updateReviewSelectionInfo();
         }
-        
+
         function selectAllVideos() {
             reviewVideos.forEach(video => selectedReviewVideos.add(video.filename));
             document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.add('selected'));
             updateReviewSelectionInfo();
         }
-        
+
         function deselectAllVideos() {
             selectedReviewVideos.clear();
             document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.remove('selected'));
             updateReviewSelectionInfo();
         }
-        
+
         function updateReviewSelectionInfo() {
             const count = selectedReviewVideos.size;
             document.getElementById('reviewSelectionInfo').textContent = `${count} of ${reviewVideos.length} selected`;
             document.getElementById('markNotPersonBtn').disabled = count === 0;
         }
-        
+
         async function markAsNotPerson() {
             if (selectedReviewVideos.size === 0) {
                 alert('No videos selected');
                 return;
             }
-            
+
             if (!confirm(`Mark ${selectedReviewVideos.size} video(s) as NOT ${currentReviewProfile.name}?\n\nThese will be used as negative training examples and moved out of this person's folder.`)) {
                 return;
             }
-            
+
             const filenames = Array.from(selectedReviewVideos);
-            
+
             try {
                 const response = await fetch('/api/face-profiles/reject-videos', {
                     method: 'POST',
@@ -1173,16 +1423,16 @@
                         filenames: filenames
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success' || data.status === 'processing') {
                     alert(`✓ ${data.message}`);
-                    
+
                     // Refresh the videos list
                     selectedReviewVideos.clear();
                     await loadProfileVideos(currentReviewProfile.id, currentReviewProfile.name);
-                    
+
                     // Refresh profile stats in background
                     await loadFaceProfiles();
                 } else {
