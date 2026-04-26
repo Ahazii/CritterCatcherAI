@@ -581,6 +581,118 @@
             color: var(--text-secondary);
             word-break: break-word;
         }
+
+        .pagination-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .pagination-info {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .pagination-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .page-size-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .video-controls-panel {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .video-control-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .control-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .video-timestamp {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .help-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .help-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .help-toggle h3 {
+            color: var(--accent-color);
+            margin: 0;
+        }
+
+        .help-content {
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .help-content.show {
+            display: block;
+        }
+
+        .help-content h4 {
+            color: var(--text-primary);
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .help-content ul {
+            margin-left: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        .help-content li {
+            margin-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -597,9 +709,43 @@
     </header>
 
     <div class="container">
-        <div class="info-banner">
-            <h3>👤 Face Training</h3>
-            <p>Assign face images to people. Once trained, the system will automatically recognize these people in future videos.</p>
+        <div class="help-section">
+            <div class="help-toggle" onclick="toggleHelp()">
+                <h3>📚 Help & Workflow Guide</h3>
+                <span id="helpToggleIcon">▼</span>
+            </div>
+            <div class="help-content" id="helpContent">
+                <h4>Overview</h4>
+                <p>The Face Training system helps you identify and organize videos by the people in them. Train profiles with positive and negative examples for accurate recognition.</p>
+
+                <h4>Workflow</h4>
+                <ul>
+                    <li><strong>Step 1:</strong> Create person profiles with unique names and face tolerance settings (0.3-0.9, lower = stricter matching)</li>
+                    <li><strong>Step 2:</strong> Review "Unknown Person Videos" - these contain unrecognized faces</li>
+                    <li><strong>Step 3:</strong> Use video controls to navigate frame-by-frame and find clear face shots</li>
+                    <li><strong>Step 4:</strong> Click "Scan Video for Faces" to extract face crops from the current position (±15 frames)</li>
+                    <li><strong>Step 5:</strong> Select extracted faces and assign them as positive (is this person) or negative (not this person) examples</li>
+                    <li><strong>Step 6:</strong> Review sorted videos to correct any misidentified people</li>
+                </ul>
+
+                <h4>Features</h4>
+                <ul>
+                    <li><strong>Face Model:</strong> Choose HOG (faster, CPU) or CNN (more accurate, GPU) detection</li>
+                    <li><strong>Frame-Area Scanning:</strong> Extracts faces only from ±15 frames around your current video position for faster processing</li>
+                    <li><strong>Video Controls:</strong> Navigate frame-by-frame, adjust playback speed, and see current timestamp</li>
+                    <li><strong>Pagination:</strong> Browse videos in pages (10/25/50/100 per page) for faster loading</li>
+                    <li><strong>Bulk Actions:</strong> Select multiple videos to delete or reprocess at once</li>
+                    <li><strong>Negative Examples:</strong> Improve accuracy by marking faces that are NOT a specific person</li>
+                </ul>
+
+                <h4>Tips</h4>
+                <ul>
+                    <li>Use lower face tolerance (0.4-0.5) for faces that look similar, higher (0.6-0.7) for varied lighting/angles</li>
+                    <li>Pause on clear, front-facing shots before scanning for best results</li>
+                    <li>Add both positive AND negative examples for each profile to reduce false positives</li>
+                    <li>Use CNN model for challenging lighting or partial faces, HOG for speed</li>
+                </ul>
+            </div>
         </div>
 
         <div class="profile-section">
@@ -635,6 +781,40 @@
         </div>
 
         <div class="section-divider" id="unknownVideosDivider" style="display: none;"></div>
+
+        <div id="unknownVideosPagination" class="pagination-controls" style="display: none;">
+            <div class="page-size-selector">
+                <label for="videosPerPage">Videos per page:</label>
+                <select id="videosPerPage" onchange="changeVideosPerPage()">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="pagination-info" id="videosPaginationInfo">Page 1 of 1</div>
+            <div class="pagination-buttons">
+                <button class="btn btn-small" onclick="previousVideosPage()" id="prevVideosBtn" disabled>← Previous</button>
+                <button class="btn btn-small" onclick="nextVideosPage()" id="nextVideosBtn" disabled>Next →</button>
+            </div>
+        </div>
+
+        <div class="controls" id="videoBulkControls" style="display: none;">
+            <div class="control-group">
+                <span class="selection-info" id="videoSelectionInfo">0 selected</span>
+                <button class="btn btn-small" onclick="selectAllVideos()">Select All</button>
+                <button class="btn btn-small" onclick="deselectAllVideos()">Deselect All</button>
+            </div>
+            <div class="control-group">
+                <label for="faceModelSelect">Face Model:</label>
+                <select id="faceModelSelect" title="HOG: Fast, CPU-based. CNN: More accurate, GPU-based">
+                    <option value="hog">HOG (Fast)</option>
+                    <option value="cnn">CNN (Accurate)</option>
+                </select>
+                <button class="btn btn-danger btn-small" onclick="bulkDeleteVideos()" id="bulkDeleteBtn" disabled>🗑️ Delete Selected</button>
+                <button class="btn btn-warning btn-small" onclick="bulkReprocessVideos()" id="bulkReprocessBtn" disabled>↻ Reprocess Selected</button>
+            </div>
+        </div>
 
         <div class="controls" id="controls" style="display: none;">
             <div class="control-group">
@@ -677,8 +857,8 @@
             <div class="controls" style="margin-bottom: 1.5rem;">
                 <div class="control-group">
                     <span class="selection-info" id="reviewSelectionInfo">0 selected</span>
-                    <button class="btn btn-small" onclick="selectAllVideos()">Select All</button>
-                    <button class="btn btn-small" onclick="deselectAllVideos()">Deselect All</button>
+                    <button class="btn btn-small" onclick="selectAllReviewVideos()">Select All</button>
+                    <button class="btn btn-small" onclick="deselectAllReviewVideos()">Deselect All</button>
                 </div>
                 <div class="control-group">
                     <button class="btn btn-danger btn-small" onclick="markAsNotPerson()" id="markNotPersonBtn" disabled>✗ Mark as NOT This Person</button>
@@ -699,11 +879,60 @@
         let faces = [];
         let selectedFaces = new Set();
         let profiles = [];
+        let currentVideosPage = 1;
+        let videosPerPage = 25;
+        let totalVideosPages = 1;
+        let totalVideosCount = 0;
+        let selectedVideos = new Set();
 
         async function init() {
+            // Load face model preference from localStorage
+            const savedFaceModel = localStorage.getItem('faceModel') || 'hog';
+            const faceModelSelect = document.getElementById('faceModelSelect');
+            if (faceModelSelect) {
+                faceModelSelect.value = savedFaceModel;
+            }
+
             await loadFaceProfiles();
             await loadUnknownPersonVideos();
             await loadUnassignedFaces();
+        }
+
+        function toggleHelp() {
+            const content = document.getElementById('helpContent');
+            const icon = document.getElementById('helpToggleIcon');
+            content.classList.toggle('show');
+            icon.textContent = content.classList.contains('show') ? '▲' : '▼';
+        }
+
+        function changeVideosPerPage() {
+            videosPerPage = parseInt(document.getElementById('videosPerPage').value);
+            currentVideosPage = 1;
+            loadUnknownPersonVideos();
+        }
+
+        function previousVideosPage() {
+            if (currentVideosPage > 1) {
+                currentVideosPage--;
+                loadUnknownPersonVideos();
+            }
+        }
+
+        function nextVideosPage() {
+            if (currentVideosPage < totalVideosPages) {
+                currentVideosPage++;
+                loadUnknownPersonVideos();
+            }
+        }
+
+        function updateVideosPaginationControls() {
+            const info = document.getElementById('videosPaginationInfo');
+            const prevBtn = document.getElementById('prevVideosBtn');
+            const nextBtn = document.getElementById('nextVideosBtn');
+
+            info.textContent = `Page ${currentVideosPage} of ${totalVideosPages} (${totalVideosCount} total videos)`;
+            prevBtn.disabled = currentVideosPage <= 1;
+            nextBtn.disabled = currentVideosPage >= totalVideosPages;
         }
 
         async function loadFaceProfiles() {
@@ -853,43 +1082,124 @@
             const section = document.getElementById('unknownVideosSection');
             const divider = document.getElementById('unknownVideosDivider');
             const grid = document.getElementById('unknownVideosGrid');
+            const pagination = document.getElementById('unknownVideosPagination');
+            const bulkControls = document.getElementById('videoBulkControls');
 
             try {
-                const response = await fetch('/api/review/videos?category=person/unknown');
+                const response = await fetch(`/api/review/videos?category=person/unknown&page=${currentVideosPage}&limit=${videosPerPage}`);
                 const data = await response.json();
                 const videos = data.videos || [];
+                totalVideosCount = data.total || 0;
+                totalVideosPages = data.pages || 1;
 
-                if (videos.length === 0) {
+                if (totalVideosCount === 0) {
                     section.style.display = 'none';
                     divider.style.display = 'none';
+                    pagination.style.display = 'none';
+                    bulkControls.style.display = 'none';
                     return;
                 }
 
                 section.style.display = 'block';
                 divider.style.display = 'block';
+                pagination.style.display = 'flex';
+                bulkControls.style.display = 'flex';
                 grid.innerHTML = '';
+                selectedVideos.clear();
 
                 videos.forEach(video => {
                     const card = createVideoCard(video);
                     grid.appendChild(card);
                 });
 
+                updateVideosPaginationControls();
+                updateVideoSelectionInfo();
+
             } catch (error) {
                 console.error('Failed to load unknown person videos:', error);
                 section.style.display = 'none';
                 divider.style.display = 'none';
+                pagination.style.display = 'none';
+                bulkControls.style.display = 'none';
             }
         }
 
         function createVideoCard(video) {
             const card = document.createElement('div');
             card.className = 'unknown-video-card';
+            card.dataset.filename = video.filename;
+
+            // Checkbox for selection
+            const checkbox = document.createElement('div');
+            checkbox.className = 'select-checkbox';
+            checkbox.onclick = (e) => {
+                e.stopPropagation();
+                toggleVideoSelection(video.filename);
+            };
 
             const videoEl = document.createElement('video');
             videoEl.src = `/api/review/video-file?category=${encodeURIComponent(video.category)}&filename=${encodeURIComponent(video.filename)}`;
             videoEl.poster = `/api/review/thumbnail/${encodeURIComponent(video.filename)}`;
             videoEl.controls = true;
             videoEl.preload = 'metadata';
+            videoEl.dataset.filename = video.filename;
+
+            // Video controls panel
+            const controlsPanel = document.createElement('div');
+            controlsPanel.className = 'video-controls-panel';
+
+            const controlRow1 = document.createElement('div');
+            controlRow1.className = 'video-control-row';
+
+            const timestamp = document.createElement('span');
+            timestamp.className = 'video-timestamp';
+            timestamp.textContent = '0:00 / 0:00';
+            timestamp.id = `timestamp-${video.filename}`;
+
+            const frameBackBtn = document.createElement('button');
+            frameBackBtn.className = 'control-btn';
+            frameBackBtn.textContent = '◄◄ -1s';
+            frameBackBtn.onclick = () => seekVideo(videoEl, -1, timestamp);
+
+            const frameForwardBtn = document.createElement('button');
+            frameForwardBtn.className = 'control-btn';
+            frameForwardBtn.textContent = '+1s ►►';
+            frameForwardBtn.onclick = () => seekVideo(videoEl, 1, timestamp);
+
+            const speedLabel = document.createElement('span');
+            speedLabel.textContent = 'Speed:';
+            speedLabel.style.fontSize = '0.75rem';
+            speedLabel.style.color = 'var(--text-secondary)';
+
+            const speedSelect = document.createElement('select');
+            speedSelect.style.fontSize = '0.75rem';
+            speedSelect.style.padding = '0.2rem';
+            ['0.25', '0.5', '0.75', '1', '1.25', '1.5', '2'].forEach(speed => {
+                const option = document.createElement('option');
+                option.value = speed;
+                option.textContent = speed + 'x';
+                if (speed === '1') option.selected = true;
+                speedSelect.appendChild(option);
+            });
+            speedSelect.onchange = () => {
+                videoEl.playbackRate = parseFloat(speedSelect.value);
+            };
+
+            controlRow1.appendChild(timestamp);
+            controlRow1.appendChild(frameBackBtn);
+            controlRow1.appendChild(frameForwardBtn);
+            controlRow1.appendChild(speedLabel);
+            controlRow1.appendChild(speedSelect);
+
+            controlsPanel.appendChild(controlRow1);
+
+            // Update timestamp on video time update
+            videoEl.addEventListener('loadedmetadata', () => {
+                updateTimestamp(videoEl, timestamp);
+            });
+            videoEl.addEventListener('timeupdate', () => {
+                updateTimestamp(videoEl, timestamp);
+            });
 
             const info = document.createElement('div');
             info.className = 'video-actions';
@@ -901,29 +1211,112 @@
 
             const status = document.createElement('div');
             status.className = 'status-message';
-            status.textContent = 'Play or scrub the video, then scan for visible faces.';
+            status.textContent = 'Navigate to a clear face, then scan ±15 frames.';
 
             const extractBtn = document.createElement('button');
             extractBtn.className = 'btn btn-small btn-success';
             extractBtn.textContent = '👤 Scan Video for Faces';
             extractBtn.style.width = '100%';
-            extractBtn.onclick = () => extractFacesFromVideo(video.filename, extractBtn, status);
+            extractBtn.onclick = () => extractFacesFromVideo(video.filename, videoEl, extractBtn, status);
 
             info.appendChild(filename);
+            info.appendChild(controlsPanel);
             info.appendChild(status);
             info.appendChild(extractBtn);
 
+            card.appendChild(checkbox);
             card.appendChild(videoEl);
             card.appendChild(info);
+
+            card.onclick = (e) => {
+                if (e.target.tagName !== 'VIDEO' && 
+                    e.target.tagName !== 'BUTTON' && 
+                    e.target.tagName !== 'SELECT' &&
+                    !e.target.classList.contains('select-checkbox')) {
+                    toggleVideoSelection(video.filename);
+                }
+            };
 
             return card;
         }
 
-        async function extractFacesFromVideo(filename, button, statusEl) {
+        function updateTimestamp(videoEl, timestampEl) {
+            const current = formatTime(videoEl.currentTime);
+            const duration = formatTime(videoEl.duration);
+            timestampEl.textContent = `${current} / ${duration}`;
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function seekVideo(videoEl, deltaSeconds, timestampEl) {
+            videoEl.currentTime = Math.max(0, Math.min(videoEl.duration, videoEl.currentTime + deltaSeconds));
+            updateTimestamp(videoEl, timestampEl);
+        }
+
+        function toggleVideoSelection(filename) {
+            if (selectedVideos.has(filename)) {
+                selectedVideos.delete(filename);
+            } else {
+                selectedVideos.add(filename);
+            }
+
+            const card = document.querySelector(`#unknownVideosGrid [data-filename="${filename}"]`);
+            if (card) {
+                card.classList.toggle('selected', selectedVideos.has(filename));
+            }
+
+            updateVideoSelectionInfo();
+        }
+
+        function selectAllVideos() {
+            const cards = document.querySelectorAll('#unknownVideosGrid .unknown-video-card');
+            cards.forEach(card => {
+                const filename = card.dataset.filename;
+                if (filename) {
+                    selectedVideos.add(filename);
+                    card.classList.add('selected');
+                }
+            });
+            updateVideoSelectionInfo();
+        }
+
+        function deselectAllVideos() {
+            selectedVideos.clear();
+            document.querySelectorAll('#unknownVideosGrid .unknown-video-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            updateVideoSelectionInfo();
+        }
+
+        function updateVideoSelectionInfo() {
+            const count = selectedVideos.size;
+            const infoEl = document.getElementById('videoSelectionInfo');
+            if (infoEl) {
+                infoEl.textContent = `${count} selected`;
+            }
+            const deleteBtn = document.getElementById('bulkDeleteBtn');
+            const reprocessBtn = document.getElementById('bulkReprocessBtn');
+            if (deleteBtn) deleteBtn.disabled = count === 0;
+            if (reprocessBtn) reprocessBtn.disabled = count === 0;
+        }
+
+        async function extractFacesFromVideo(filename, videoEl, button, statusEl) {
             button.disabled = true;
             button.textContent = 'Scanning...';
             statusEl.className = 'status-message';
-            statusEl.textContent = 'Scanning sampled frames for visible faces...';
+            statusEl.textContent = 'Scanning ±15 frames around current position...';
+
+            // Get current video time and selected face model
+            const currentTime = videoEl.currentTime || 0;
+            const faceModel = document.getElementById('faceModelSelect').value;
+            // Save face model preference
+            localStorage.setItem('faceModel', faceModel);
+
             try {
                 const response = await fetch('/api/review/confirm-person', {
                     method: 'POST',
@@ -931,7 +1324,10 @@
                     body: JSON.stringify({
                         category: 'person/unknown',
                         filenames: [filename],
-                        delete_after: false
+                        delete_after: false,
+                        current_time: currentTime,
+                        face_model: faceModel,
+                        frame_range: 15
                     })
                 });
 
@@ -966,6 +1362,114 @@
                 statusEl.textContent = 'Error scanning faces: ' + error.message;
                 button.disabled = false;
                 button.textContent = '👤 Scan Video for Faces';
+            }
+        }
+
+        async function bulkDeleteVideos() {
+            if (selectedVideos.size === 0) {
+                alert('No videos selected');
+                return;
+            }
+
+            if (!confirm(`Delete ${selectedVideos.size} video(s) permanently?`)) {
+                return;
+            }
+
+            const filenames = Array.from(selectedVideos);
+            const deleteBtn = document.getElementById('bulkDeleteBtn');
+            const reprocessBtn = document.getElementById('bulkReprocessBtn');
+
+            deleteBtn.disabled = true;
+            reprocessBtn.disabled = true;
+            deleteBtn.textContent = 'Deleting...';
+
+            try {
+                const response = await fetch('/api/review/bulk-delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category: 'person/unknown',
+                        filenames: filenames
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'processing') {
+                    const taskId = data.task_id;
+                    pollTaskProgress(taskId, async (task) => {
+                        alert(`✓ ${task.message || 'Videos deleted successfully'}`);
+                        selectedVideos.clear();
+                        await loadUnknownPersonVideos();
+                    }, (task) => {
+                        alert('Delete failed: ' + (task.error || 'Unknown error'));
+                        deleteBtn.textContent = '🗑️ Delete Selected';
+                        updateVideoSelectionInfo();
+                    });
+                } else {
+                    alert('Failed to delete videos: ' + (data.detail || 'Unknown error'));
+                    deleteBtn.textContent = '🗑️ Delete Selected';
+                    updateVideoSelectionInfo();
+                }
+            } catch (error) {
+                console.error('Failed to delete videos:', error);
+                alert('Error deleting videos: ' + error.message);
+                deleteBtn.textContent = '🗑️ Delete Selected';
+                updateVideoSelectionInfo();
+            }
+        }
+
+        async function bulkReprocessVideos() {
+            if (selectedVideos.size === 0) {
+                alert('No videos selected');
+                return;
+            }
+
+            if (!confirm(`Move ${selectedVideos.size} video(s) back to downloads for reprocessing?`)) {
+                return;
+            }
+
+            const filenames = Array.from(selectedVideos);
+            const deleteBtn = document.getElementById('bulkDeleteBtn');
+            const reprocessBtn = document.getElementById('bulkReprocessBtn');
+
+            deleteBtn.disabled = true;
+            reprocessBtn.disabled = true;
+            reprocessBtn.textContent = 'Processing...';
+
+            try {
+                const response = await fetch('/api/review/bulk-reprocess', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category: 'person/unknown',
+                        filenames: filenames
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'processing') {
+                    const taskId = data.task_id;
+                    pollTaskProgress(taskId, async (task) => {
+                        alert(`✓ ${task.message || 'Videos moved for reprocessing'}`);
+                        selectedVideos.clear();
+                        await loadUnknownPersonVideos();
+                    }, (task) => {
+                        alert('Reprocess failed: ' + (task.error || 'Unknown error'));
+                        reprocessBtn.textContent = '↻ Reprocess Selected';
+                        updateVideoSelectionInfo();
+                    });
+                } else {
+                    alert('Failed to reprocess videos: ' + (data.detail || 'Unknown error'));
+                    reprocessBtn.textContent = '↻ Reprocess Selected';
+                    updateVideoSelectionInfo();
+                }
+            } catch (error) {
+                console.error('Failed to reprocess videos:', error);
+                alert('Error reprocessing videos: ' + error.message);
+                reprocessBtn.textContent = '↻ Reprocess Selected';
+                updateVideoSelectionInfo();
             }
         }
 
@@ -1383,13 +1887,13 @@
             updateReviewSelectionInfo();
         }
 
-        function selectAllVideos() {
+        function selectAllReviewVideos() {
             reviewVideos.forEach(video => selectedReviewVideos.add(video.filename));
             document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.add('selected'));
             updateReviewSelectionInfo();
         }
 
-        function deselectAllVideos() {
+        function deselectAllReviewVideos() {
             selectedReviewVideos.clear();
             document.querySelectorAll('#reviewVideosGrid .video-card').forEach(card => card.classList.remove('selected'));
             updateReviewSelectionInfo();

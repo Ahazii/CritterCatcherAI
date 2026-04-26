@@ -3462,8 +3462,8 @@ async def serve_video_thumbnail(filename: str):
 
 
 @app.get("/api/review/videos")
-async def get_review_videos(category: str = None):
-    """Get videos from review folders, optionally filtered by category (supports nested like person/unknown)."""
+async def get_review_videos(category: str = None, page: int = 1, limit: int = 25):
+    """Get videos from review folders with pagination, optionally filtered by category (supports nested like person/unknown)."""
     try:
         review_base = Path("/data/review")
 
@@ -3471,29 +3471,65 @@ async def get_review_videos(category: str = None):
             # Support nested categories like person/unknown
             category_path = review_base / category
             if not category_path.exists():
-                return {"status": "success", "videos": [], "count": 0}
+                return {"status": "success", "videos": [], "count": 0, "total": 0, "page": page, "pages": 0}
 
-            videos = []
-            for video_file in category_path.glob("*.mp4"):
-                videos.append({
+            # Get all videos first
+            all_videos = []
+            for video_file in sorted(category_path.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True):
+                all_videos.append({
                     "filename": video_file.name,
                     "category": category,
-                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
+                    "modified": datetime.fromtimestamp(video_file.stat().st_mtime).isoformat()
                 })
 
-            return {"status": "success", "videos": videos, "count": len(videos)}
+            # Paginate
+            total = len(all_videos)
+            pages = (total + limit - 1) // limit if limit > 0 else 1
+            start = (page - 1) * limit
+            end = start + limit
+            videos = all_videos[start:end]
+
+            return {
+                "status": "success",
+                "videos": videos,
+                "count": len(videos),
+                "total": total,
+                "page": page,
+                "pages": pages,
+                "limit": limit
+            }
         else:
             # Return all videos from all categories
-            videos = []
+            all_videos = []
             for video_file in review_base.rglob("*.mp4"):
                 rel_path = video_file.parent.relative_to(review_base)
-                videos.append({
+                all_videos.append({
                     "filename": video_file.name,
                     "category": str(rel_path),
-                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2)
+                    "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
+                    "modified": datetime.fromtimestamp(video_file.stat().st_mtime).isoformat()
                 })
 
-            return {"status": "success", "videos": videos, "count": len(videos)}
+            # Sort by modified time, newest first
+            all_videos.sort(key=lambda x: x["modified"], reverse=True)
+
+            # Paginate
+            total = len(all_videos)
+            pages = (total + limit - 1) // limit if limit > 0 else 1
+            start = (page - 1) * limit
+            end = start + limit
+            videos = all_videos[start:end]
+
+            return {
+                "status": "success",
+                "videos": videos,
+                "count": len(videos),
+                "total": total,
+                "page": page,
+                "pages": pages,
+                "limit": limit
+            }
     except Exception as e:
         logger.error(f"Failed to get review videos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -4405,11 +4441,17 @@ async def reject_faces(request: dict):
 
 @app.post("/api/review/confirm-person")
 async def confirm_person_video(request: dict, background_tasks: BackgroundTasks):
-    """Confirm a video contains a person and extract faces for training (async with progress tracking)."""
+    """Confirm a video contains a person and extract faces for training (async with progress tracking).
+    
+    Supports frame-area scanning: when current_time is provided, only scans ±15 frames around that position.
+    """
     try:
         category = request.get('category')
         filenames = request.get('filenames', [])
         delete_after = bool(request.get('delete_after', False))
+        current_time = request.get('current_time')  # Optional: video playback time in seconds
+        face_model_override = request.get('face_model')  # Optional: 'hog' or 'cnn'
+        frame_range = int(request.get('frame_range', 15))  # ±frames to scan around current position
 
         if not category or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
@@ -4418,8 +4460,11 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
         from main import load_config
         config = load_config()
         detection_config = config.get('detection', {})
-        face_model = detection_config.get('face_model', 'hog')
+        face_model = face_model_override if face_model_override else detection_config.get('face_model', 'hog')
         logger.info(f"Face extraction using model: {face_model}")
+        
+        if current_time is not None:
+            logger.info(f"Frame-area scanning enabled: scanning ±{frame_range} frames around {current_time}s")
 
         # Create background task for face extraction
         task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
@@ -4464,10 +4509,27 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
                         face_count = 0
                         frame_count = 0
                         max_faces = 10  # Limit faces per video
-
+                        
+                        # Frame-area scanning logic
+                        if current_time is not None:
+                            # Calculate frame index from current_time
+                            target_frame_idx = int(current_time * fps) if fps > 0 else 0
+                            start_frame = max(0, target_frame_idx - frame_range)
+                            end_frame = target_frame_idx + frame_range
+                            
+                            logger.info(f"Frame-area scan for {filename}: target frame {target_frame_idx}, range {start_frame}-{end_frame}")
+                            
+                            # Seek to start frame
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                            frame_count = start_frame
+                        
                         while face_count < max_faces:
                             ret, frame = cap.read()
                             if not ret:
+                                break
+                            
+                            # If frame-area scanning, stop after end frame
+                            if current_time is not None and frame_count > end_frame:
                                 break
 
                             if frame_count % frame_interval == 0:
@@ -5407,6 +5469,154 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
         raise
     except Exception as e:
         logger.error(f"Failed to start advanced review: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/bulk-delete")
+async def bulk_delete_review_videos(request: dict, background_tasks: BackgroundTasks):
+    """Delete multiple videos from review folders."""
+    try:
+        category = request.get('category', 'person/unknown')
+        filenames = request.get('filenames', [])
+
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Deleting videos...")
+
+        def bulk_delete_background():
+            """Background task to delete videos."""
+            try:
+                task_tracker.start_task(task_id, message=f"Deleting {len(filenames)} videos...")
+                results = {"deleted": [], "failed": []}
+                review_path = Path("/data/review") / category
+
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Deleting {idx}/{len(filenames)}..."
+                        )
+
+                        video_path = review_path / filename
+                        if video_path.exists():
+                            video_path.unlink()
+                            results["deleted"].append(filename)
+
+                            # Delete metadata
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                metadata_path.unlink()
+
+                            logger.debug(f"Deleted {filename}")
+                        else:
+                            results["failed"].append({"filename": filename, "error": "Not found"})
+                    except Exception as e:
+                        logger.error(f"Failed to delete {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Deleted {len(results['deleted'])} videos"
+                )
+
+            except Exception as e:
+                logger.error(f"Bulk delete failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+
+        background_tasks.add_task(bulk_delete_background)
+
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": f"Deleting {len(filenames)} videos..."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk delete failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review/bulk-reprocess")
+async def bulk_reprocess_videos(request: dict, background_tasks: BackgroundTasks):
+    """Move multiple videos back to downloads for reprocessing."""
+    try:
+        category = request.get('category', 'person/unknown')
+        filenames = request.get('filenames', [])
+
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+
+        # Create background task
+        task_id = task_tracker.create_task(total=len(filenames), message="Moving videos to downloads...")
+
+        def bulk_reprocess_background():
+            """Background task to move videos to downloads."""
+            try:
+                task_tracker.start_task(task_id, message=f"Moving {len(filenames)} videos...")
+                results = {"moved": [], "failed": []}
+                review_path = Path("/data/review") / category
+                downloads_path = Path("/data/downloads")
+                downloads_path.mkdir(parents=True, exist_ok=True)
+
+                for idx, filename in enumerate(filenames, 1):
+                    try:
+                        task_tracker.update_task(
+                            task_id,
+                            current=idx,
+                            message=f"Moving {idx}/{len(filenames)}..."
+                        )
+
+                        video_path = review_path / filename
+                        if video_path.exists():
+                            dest_path = downloads_path / filename
+
+                            # Handle duplicates
+                            counter = 1
+                            while dest_path.exists():
+                                dest_path = downloads_path / f"{Path(filename).stem}_{counter}{Path(filename).suffix}"
+                                counter += 1
+
+                            import shutil
+                            shutil.move(str(video_path), str(dest_path))
+                            results["moved"].append(filename)
+
+                            # Move metadata
+                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                            if metadata_path.exists():
+                                dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                                shutil.move(str(metadata_path), str(dest_metadata))
+
+                            logger.debug(f"Moved {filename} to downloads")
+                        else:
+                            results["failed"].append({"filename": filename, "error": "Not found"})
+                    except Exception as e:
+                        logger.error(f"Failed to move {filename}: {e}", exc_info=True)
+                        results["failed"].append({"filename": filename, "error": str(e)})
+
+                task_tracker.complete_task(
+                    task_id,
+                    message=f"Moved {len(results['moved'])} videos to downloads"
+                )
+
+            except Exception as e:
+                logger.error(f"Bulk reprocess failed: {e}", exc_info=True)
+                task_tracker.fail_task(task_id, str(e))
+
+        background_tasks.add_task(bulk_reprocess_background)
+
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "message": f"Moving {len(filenames)} videos to downloads for reprocessing..."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk reprocess failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
