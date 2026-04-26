@@ -4414,6 +4414,13 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
         if not category or not filenames:
             raise HTTPException(status_code=400, detail="Missing required fields")
 
+        # Load config to get face detection model
+        from main import load_config
+        config = load_config()
+        detection_config = config.get('detection', {})
+        face_model = detection_config.get('face_model', 'hog')
+        logger.info(f"Face extraction using model: {face_model}")
+
         # Create background task for face extraction
         task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
 
@@ -4470,9 +4477,9 @@ async def confirm_person_video(request: dict, background_tasks: BackgroundTasks)
                                     details=f"Processing frame {frame_count} of {filename}"
                                 )
 
-                                # Detect faces
+                                # Detect faces using configured model (hog or cnn)
                                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                                face_locations = fr.face_locations(rgb_frame)
+                                face_locations = fr.face_locations(rgb_frame, model=face_model)
 
                                 # Save each detected face
                                 for face_idx, (top, right, bottom, left) in enumerate(face_locations):
