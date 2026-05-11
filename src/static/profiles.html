@@ -1240,36 +1240,60 @@
             
             if (vizDiv.style.display === 'none') {
                 // Show visualization - load top frames
-                vizDiv.innerHTML = '<div style="text-align: center; padding: 1rem;">Loading top frames...</div>';
+                vizDiv.innerHTML = '<div style="text-align: center; padding: 1rem;">Loading training data...</div>';
                 vizDiv.style.display = 'block';
                 
-                fetch(`/api/animal-profiles/${profileId}/top-frames?limit=10`)
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.frames && data.frames.length > 0) {
-                            vizDiv.innerHTML = `
-                                <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                                    <h4 style="margin-bottom: 0.75rem;">Top ${data.frames.length} Training Frames (Highest Confidence)</h4>
-                                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.5rem;">
-                                        ${data.frames.map(frame => `
-                                            <div style="text-align: center;">
-                                                <img src="/api/animal-profiles/${profileId}/frame/${frame.filename}" 
-                                                     style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px; border: 2px solid var(--border-color);" 
-                                                     alt="Training frame">
-                                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                                                    ${(frame.confidence * 100).toFixed(1)}%
-                                                </div>
+                // Load training status for counts
+                Promise.all([
+                    fetch(`/api/animal-profiles/${profileId}/top-frames?limit=20`).then(r => r.json()),
+                    fetch(`/api/animal-profiles/${profileId}/training-status`).then(r => r.json())
+                ])
+                    .then(([framesData, statusData]) => {
+                        const frames = framesData.frames || [];
+                        const confirmedCount = statusData.confirmed_count || 0;
+                        const rejectedCount = statusData.rejected_count || 0;
+                        
+                        let html = '<div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">';
+                        
+                        // Summary banner
+                        html += `
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                                <div style="flex: 1; min-width: 120px; background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; text-align: center; border-left: 3px solid var(--success-color);">
+                                    <div style="font-size: 1.25rem; font-weight: bold; color: var(--success-color);">${confirmedCount}</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Confirmed (Positive)</div>
+                                </div>
+                                <div style="flex: 1; min-width: 120px; background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; text-align: center; border-left: 3px solid var(--danger-color);">
+                                    <div style="font-size: 1.25rem; font-weight: bold; color: var(--danger-color);">${rejectedCount}</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Rejected (Negative)</div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        if (frames.length > 0) {
+                            html += `
+                                <h4 style="margin-bottom: 0.5rem;">Top ${frames.length} Training Frames — verify these contain the correct animal:</h4>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.5rem;">
+                                    ${frames.map(frame => `
+                                        <div style="text-align: center;">
+                                            <img src="/api/animal-profiles/${profileId}/frame/${frame.filename}" 
+                                                 style="width: 100%; height: 100px; object-fit: cover; border-radius: 6px; border: 2px solid ${frame.confidence >= 0.8 ? 'var(--success-color)' : frame.confidence >= 0.5 ? 'var(--warning-color)' : 'var(--border-color)'};" 
+                                                 alt="Training frame" title="${frame.filename}">
+                                            <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                                ${(frame.confidence * 100).toFixed(1)}%
                                             </div>
-                                        `).join('')}
-                                    </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
                             `;
                         } else {
-                            vizDiv.innerHTML = '<div style="text-align: center; padding: 1rem; color: var(--text-secondary);">No training frames available yet.</div>';
+                            html += '<p style="text-align: center; color: var(--text-secondary); padding: 0.5rem;">No training frames available yet. Confirm or reject videos in Review to build training data.</p>';
                         }
+                        
+                        html += '</div>';
+                        vizDiv.innerHTML = html;
                     })
                     .catch(err => {
-                        vizDiv.innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--danger-color);">Error loading frames: ${err}</div>`;
+                        vizDiv.innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--danger-color);">Error loading training data: ${err}</div>`;
                     });
             } else {
                 // Hide visualization

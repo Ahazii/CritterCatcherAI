@@ -369,6 +369,13 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow: var(--shadow);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .unknown-video-card.selected {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.3);
         }
 
         .unknown-video-card video {
@@ -774,9 +781,16 @@
 
         <div class="profile-section" id="unknownVideosSection" style="display: none;">
             <div class="section-title">Unknown Person Videos</div>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                These videos contain people who were not recognized. Play or scrub the video to inspect it, then scan it for visible faces. Videos are kept if no faces are found.
-            </p>
+            <div class="info-banner" style="margin-bottom: 1rem;">
+                <h3>How to scan for faces</h3>
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>1.</strong> Play or scrub the video until a <strong>clear face is visible</strong> on screen.<br>
+                    <strong>2.</strong> Click <strong>"Scan Video for Faces"</strong> — this scans only <strong>±15 frames around your current position</strong>, not the entire video.<br>
+                    <strong>3.</strong> Extracted face crops will appear in the gallery below. Select them and assign to a profile.<br>
+                    <strong>4.</strong> If a video has <strong>no people in it</strong> (false detection), use the checkbox in the top-left corner to select it, then click <strong>"Delete Selected"</strong>.
+                </p>
+                <p><strong>Tip:</strong> Pause on a clear, front-facing shot for best results. If scanning finds 0 faces, try scrubbing to a different position and scanning again.</p>
+            </div>
             <div id="unknownVideosGrid" class="video-gallery"></div>
         </div>
 
@@ -1064,7 +1078,14 @@
                                          alt="Sample face">
                                 `).join('')}
                             </div>
-                        ` : ''}
+                            ${statsData.stats.training_image_count > statsData.stats.sample_images.length ? `
+                                <button class="btn btn-small" style="width: 100%; margin-top: 0.5rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color);"
+                                        onclick="toggleAllTrainingImages('${profile.id}', this)">
+                                    🖼 Show All ${statsData.stats.training_image_count} Training Images
+                                </button>
+                                <div id="all-training-${profile.id}" style="display: none; margin-top: 0.5rem;"></div>
+                            ` : ''}
+                        ` : '<p style="color: var(--text-secondary); font-size: 0.875rem; text-align: center; padding: 0.5rem;">No training images yet. Scan videos and assign faces to build training data.</p>'}
                         <button class="btn btn-small" style="width: 100%; margin-top: 0.75rem;"
                                 onclick="reviewProfileVideos('${profile.id}', '${profile.name}')">
                             📹 Review Sorted Videos
@@ -1945,6 +1966,48 @@
             } catch (error) {
                 console.error('Failed to mark videos as not person:', error);
                 alert('Error marking videos: ' + error.message);
+            }
+        }
+
+        async function toggleAllTrainingImages(profileId, button) {
+            const container = document.getElementById(`all-training-${profileId}`);
+            if (!container) return;
+
+            if (container.style.display !== 'none') {
+                container.style.display = 'none';
+                button.textContent = button.textContent.replace('Hide', 'Show All');
+                return;
+            }
+
+            container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading all training images...</p></div>';
+            container.style.display = 'block';
+            button.textContent = '🖼 Hide Training Images';
+
+            try {
+                const response = await fetch(`/api/face-profiles/${profileId}/stats`);
+                const data = await response.json();
+                const images = data.stats.sample_images || [];
+
+                if (images.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 0.5rem;">No training images found.</p>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Showing ${images.length} training images — verify these contain the correct face:</p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.25rem;">
+                            ${images.map(img => `
+                                <img src="/api/face-profiles/${profileId}/image/${img.filename}"
+                                     style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color);"
+                                     alt="Training image" title="${img.filename}">
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load training images:', error);
+                container.innerHTML = '<p style="color: var(--danger-color); text-align: center;">Failed to load images.</p>';
             }
         }
 
