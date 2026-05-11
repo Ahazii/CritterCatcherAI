@@ -237,10 +237,10 @@
             position: absolute;
             top: 10px;
             left: 10px;
-            width: 28px;
-            height: 28px;
-            background: rgba(255, 255, 255, 0.95);
-            border: 2px solid var(--accent-color);
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid var(--accent-color);
             border-radius: 6px;
             display: flex;
             align-items: center;
@@ -248,26 +248,30 @@
             cursor: pointer;
             z-index: 10;
             transition: all 0.2s ease;
-        }
-
-        .select-checkbox:hover {
-            transform: scale(1.1);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .face-card.selected .select-checkbox {
-            background: var(--accent-color);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
 
         .select-checkbox::after {
             content: '✓';
-            color: white;
+            font-size: 18px;
             font-weight: bold;
-            display: none;
+            color: var(--accent-color);
         }
 
-        .face-card.selected .select-checkbox::after {
-            display: block;
+        .select-checkbox:hover {
+            transform: scale(1.1);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+            background: rgba(255, 255, 255, 1);
+        }
+
+        .face-card.selected .select-checkbox,
+        .unknown-video-card.selected .select-checkbox {
+            background: var(--accent-color);
+        }
+
+        .face-card.selected .select-checkbox::after,
+        .unknown-video-card.selected .select-checkbox::after {
+            color: white;
         }
 
         .empty-state {
