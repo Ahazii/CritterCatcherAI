@@ -255,7 +255,8 @@
             content: '✓';
             font-size: 18px;
             font-weight: bold;
-            color: var(--accent-color);
+            color: white;
+            display: none;
         }
 
         .select-checkbox:hover {
@@ -271,6 +272,7 @@
 
         .face-card.selected .select-checkbox::after,
         .unknown-video-card.selected .select-checkbox::after {
+            display: block;
             color: white;
         }
 
