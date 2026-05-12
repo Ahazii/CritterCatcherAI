@@ -1363,6 +1363,7 @@
                             extract_negative: action === 'assign_negative' || action === 'assign_both',
                             move_to_sorted: action === 'assign_positive' || action === 'assign_both',
                             delete_after: action === 'assign_negative',
+                            remove_from_review: action === 'assign_positive' || action === 'assign_both',
                             extract_faces: false
                         }));
                         body = {actions: videos};  // Backend expects 'actions' not 'videos'

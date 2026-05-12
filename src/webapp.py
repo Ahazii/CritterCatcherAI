@@ -5328,7 +5328,9 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                         extract_negative = action.get('extract_negative', False)
                         move_to_sorted = action.get('move_to_sorted', False)
                         delete_after = action.get('delete_after', False)
+                        remove_from_review_requested = action.get('remove_from_review', False)
                         extract_faces = action.get('extract_faces', False)
+                        sorted_copy_success = False
 
                         # Update progress
                         task_tracker.update_task(
@@ -5494,6 +5496,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
 
                             try:
                                 shutil.copy2(str(video_path), str(sorted_video_path))
+                                sorted_copy_success = True
                                 logger.info(f"Copied video to sorted/{profile_id}: {filename}")
 
                                 # Copy metadata if exists
@@ -5504,8 +5507,12 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                             except Exception as copy_err:
                                 logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
 
-                        # Delete video if requested
-                        if delete_after:
+                        # Remove from review after explicit deletion or a successful sorted copy.
+                        remove_from_review = (
+                            delete_after
+                            or ((move_to_sorted or remove_from_review_requested) and sorted_copy_success)
+                        )
+                        if remove_from_review:
                             try:
                                 video_path.unlink()
                                 # Delete metadata if exists
@@ -5516,9 +5523,9 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                 tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
                                 if tracked_video_path.exists():
                                     tracked_video_path.unlink()
-                                logger.info(f"Deleted {filename} from review")
+                                logger.info(f"Removed {filename} from review")
                             except Exception as delete_err:
-                                logger.warning(f"Failed to delete {filename}: {delete_err}")
+                                logger.warning(f"Failed to remove {filename} from review: {delete_err}")
 
                         results["processed"].append(filename)
 
