@@ -138,6 +138,53 @@ def _profile_allowed(pathway_config: dict, profile_id: str) -> bool:
     return profile_id in profiles
 
 
+def _camera_profile_overrides(config: dict) -> list:
+    """Load camera-specific profile overrides, with a hedgehog-camera default."""
+    overrides = config.get("camera_profile_overrides")
+    if overrides is None:
+        return [
+            {
+                "enabled": True,
+                "profile_id": "hedgehog",
+                "cameras": ["Hedgehog Camera"],
+            }
+        ]
+    if isinstance(overrides, dict):
+        return [overrides]
+    if isinstance(overrides, list):
+        return overrides
+    return []
+
+
+def _forced_profiles_for_camera(config: dict, camera_name: Optional[str], profiles: list) -> list:
+    """Return enabled profiles that should run for a camera regardless of YOLO category."""
+    if not camera_name:
+        return []
+
+    profiles_by_id = {profile.id: profile for profile in profiles if profile.enabled}
+    forced_profiles = []
+    seen_profile_ids = set()
+
+    for override in _camera_profile_overrides(config):
+        if not isinstance(override, dict) or not override.get("enabled", True):
+            continue
+
+        profile_id = override.get("profile_id")
+        cameras = override.get("cameras", [])
+        if isinstance(cameras, str):
+            cameras = [cameras]
+
+        if not profile_id or camera_name not in cameras:
+            continue
+
+        profile = profiles_by_id.get(profile_id)
+        if profile and profile.id not in seen_profile_ids:
+            forced_profiles.append(profile)
+            seen_profile_ids.add(profile.id)
+
+    return forced_profiles
+
+
 def process_videos(config: dict, manual_trigger: bool = False):
     """Main video processing pipeline.
     
@@ -446,6 +493,21 @@ def process_videos(config: dict, manual_trigger: bool = False):
             yolo_category = None
             yolo_confidence = 0.0
             needs_clip_processing = False
+            forced_clip_profiles = []
+
+            try:
+                all_profiles = profile_manager.list_profiles()
+                enabled_profiles = [p for p in all_profiles if p.enabled]
+                forced_clip_profiles = _forced_profiles_for_camera(config, camera_name, enabled_profiles)
+                if forced_clip_profiles:
+                    needs_clip_processing = True
+                    logger.info(
+                        "CLIP Stage 2 forced for camera '%s': %s",
+                        camera_name,
+                        [profile.name for profile in forced_clip_profiles],
+                    )
+            except Exception as profile_check_err:
+                logger.warning(f"Failed to check camera profile overrides: {profile_check_err}")
             
             if detected_objects:
                 # Get highest confidence detection
@@ -694,7 +756,9 @@ def process_videos(config: dict, manual_trigger: bool = False):
                     logger.info(f"SECURITY PATHWAY: Camera '{camera_name}' not enabled, leaving in review")
 
             # Only run CLIP Stage 2 if video is still in review (not already sorted)
-            if detected_objects and not security_routed and not face_sorted and needs_clip_processing:
+            can_run_clip_stage2 = (detected_objects or forced_clip_profiles) and not security_routed and not face_sorted and needs_clip_processing
+
+            if can_run_clip_stage2:
                 logger.info("Running CLIP Stage 2 processing...")
             elif detected_objects:
                 if face_sorted:
@@ -703,10 +767,15 @@ def process_videos(config: dict, manual_trigger: bool = False):
                     logger.info("Skipping CLIP Stage 2: video routed to security pathway")
                 elif not needs_clip_processing:
                     logger.info("Skipping CLIP Stage 2: YOLO-only detection, video already sorted")
+            elif forced_clip_profiles:
+                if security_routed:
+                    logger.info("Skipping CLIP Stage 2: video routed to security pathway")
+                elif face_sorted:
+                    logger.info("Skipping CLIP Stage 2: video already sorted by face recognition")
             
-            if detected_objects and not security_routed and not face_sorted and needs_clip_processing:
+            if can_run_clip_stage2:
                 # Get YOLO categories that were detected
-                detected_categories = list(detected_objects.keys())
+                detected_categories = list(detected_objects.keys()) if detected_objects else []
                 logger.debug(f"YOLO detected categories: {detected_categories}")
                 
                 # Load all enabled Animal Profiles
@@ -716,10 +785,17 @@ def process_videos(config: dict, manual_trigger: bool = False):
                     
                     # Find profiles with matching YOLO categories
                     matching_profiles = []
+                    seen_profile_ids = set()
                     for profile in enabled_profiles:
                         # Check if any detected category matches profile's YOLO categories
                         if any(cat in profile.yolo_categories for cat in detected_categories):
                             matching_profiles.append(profile)
+                            seen_profile_ids.add(profile.id)
+
+                    for profile in forced_clip_profiles:
+                        if profile.id not in seen_profile_ids:
+                            matching_profiles.append(profile)
+                            seen_profile_ids.add(profile.id)
                     
                     if matching_profiles:
                         logger.info(f"Found {len(matching_profiles)} matching profiles: {[p.name for p in matching_profiles]}")

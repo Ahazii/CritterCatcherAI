@@ -18,6 +18,15 @@ ring:
 # Categories manually enabled here will be used for detection even if not part of an Animal Profile
 yolo_manual_categories: []
 
+# Camera-specific profile checks.
+# These profiles run even when YOLO reports a different class or finds no object.
+# This is useful for dedicated wildlife cameras because YOLO has no hedgehog class.
+camera_profile_overrides:
+  - enabled: true
+    profile_id: hedgehog
+    cameras:
+      - Hedgehog Camera
+
 # Face Recognition settings
 face_recognition:
   # Enable face recognition for person detection
