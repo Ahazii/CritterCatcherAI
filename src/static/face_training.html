@@ -252,11 +252,10 @@
         }
 
         .select-checkbox::after {
-            content: '✓';
+            content: '';
             font-size: 18px;
             font-weight: bold;
             color: white;
-            display: none;
         }
 
         .select-checkbox:hover {
@@ -266,13 +265,15 @@
         }
 
         .face-card.selected .select-checkbox,
-        .unknown-video-card.selected .select-checkbox {
+        .unknown-video-card.selected .select-checkbox,
+        .video-card.selected .select-checkbox {
             background: var(--accent-color);
         }
 
         .face-card.selected .select-checkbox::after,
-        .unknown-video-card.selected .select-checkbox::after {
-            display: block;
+        .unknown-video-card.selected .select-checkbox::after,
+        .video-card.selected .select-checkbox::after {
+            content: '✓';
             color: white;
         }
 
