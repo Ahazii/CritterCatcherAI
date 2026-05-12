@@ -866,6 +866,12 @@
 
         <div class="controls" id="controls" style="display: none;">
             <div class="control-group">
+                <label for="reviewCameraFilter">Camera:</label>
+                <select id="reviewCameraFilter" onchange="changeReviewCameraFilter()">
+                    <option value="">All cameras</option>
+                </select>
+            </div>
+            <div class="control-group">
                 <span class="selection-info" id="selectionInfo">0 selected</span>
                 <button class="btn btn-small" onclick="selectAll()">Select All</button>
                 <button class="btn btn-small" onclick="deselectAll()">Deselect All</button>
@@ -1001,6 +1007,7 @@
         let videos = [];
         let selectedVideos = new Set();
         let profiles = [];
+        let selectedReviewCamera = '';
         
         // Queue state management
         let queuedActions = new Map(); // Map<filename, {category, action, config}>
@@ -1562,6 +1569,12 @@
             await loadVideos(categoryName);
         }
 
+        function changeReviewCameraFilter() {
+            selectedReviewCamera = document.getElementById('reviewCameraFilter').value;
+            selectedVideos.clear();
+            loadVideos(currentCategory);
+        }
+
         async function loadVideos(categoryName) {
             const gallery = document.getElementById('videoGallery');
             const emptyState = document.getElementById('emptyState');
@@ -1572,9 +1585,11 @@
             controls.style.display = 'none';
             
             try {
-                const response = await fetch(`/api/review/categories/${categoryName}/videos`);
+                const cameraParam = selectedReviewCamera ? `?camera=${encodeURIComponent(selectedReviewCamera)}` : '';
+                const response = await fetch(`/api/review/categories/${categoryName}/videos${cameraParam}`);
                 const data = await response.json();
                 videos = data.videos || [];
+                updateReviewCameraFilter(data.cameras || []);
                 
                 gallery.innerHTML = '';
                 
@@ -1594,6 +1609,28 @@
             } catch (error) {
                 console.error('Failed to load videos:', error);
                 gallery.innerHTML = '<div class="empty-state"><p>Failed to load videos</p></div>';
+            }
+        }
+
+        function updateReviewCameraFilter(cameras) {
+            const select = document.getElementById('reviewCameraFilter');
+            if (!select) return;
+
+            const previous = selectedReviewCamera || select.value;
+            select.innerHTML = '<option value="">All cameras</option>';
+
+            cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera;
+                option.textContent = camera;
+                select.appendChild(option);
+            });
+
+            if (previous && cameras.includes(previous)) {
+                select.value = previous;
+            } else {
+                select.value = '';
+                selectedReviewCamera = '';
             }
         }
 

@@ -805,6 +805,10 @@
 
         <div id="unknownVideosPagination" class="pagination-controls" style="display: none;">
             <div class="page-size-selector">
+                <label for="videoCameraFilter">Camera:</label>
+                <select id="videoCameraFilter" onchange="changeVideoCameraFilter()">
+                    <option value="">All cameras</option>
+                </select>
                 <label for="videosPerPage">Videos per page:</label>
                 <select id="videosPerPage" onchange="changeVideosPerPage()">
                     <option value="10">10</option>
@@ -904,6 +908,7 @@
         let videosPerPage = 25;
         let totalVideosPages = 1;
         let totalVideosCount = 0;
+        let selectedVideoCamera = '';
         let selectedVideos = new Set();
 
         async function init() {
@@ -928,6 +933,12 @@
 
         function changeVideosPerPage() {
             videosPerPage = parseInt(document.getElementById('videosPerPage').value);
+            currentVideosPage = 1;
+            loadUnknownPersonVideos();
+        }
+
+        function changeVideoCameraFilter() {
+            selectedVideoCamera = document.getElementById('videoCameraFilter').value;
             currentVideosPage = 1;
             loadUnknownPersonVideos();
         }
@@ -1114,11 +1125,13 @@
             const bulkControls = document.getElementById('videoBulkControls');
 
             try {
-                const response = await fetch(`/api/review/videos?category=person/unknown&page=${currentVideosPage}&limit=${videosPerPage}`);
+                const cameraParam = selectedVideoCamera ? `&camera=${encodeURIComponent(selectedVideoCamera)}` : '';
+                const response = await fetch(`/api/review/videos?category=person/unknown&page=${currentVideosPage}&limit=${videosPerPage}${cameraParam}`);
                 const data = await response.json();
                 const videos = data.videos || [];
                 totalVideosCount = data.total || 0;
                 totalVideosPages = data.pages || 1;
+                updateVideoCameraFilter(data.cameras || []);
 
                 if (totalVideosCount === 0) {
                     section.style.display = 'none';
@@ -1149,6 +1162,28 @@
                 divider.style.display = 'none';
                 pagination.style.display = 'none';
                 bulkControls.style.display = 'none';
+            }
+        }
+
+        function updateVideoCameraFilter(cameras) {
+            const select = document.getElementById('videoCameraFilter');
+            if (!select) return;
+
+            const previous = selectedVideoCamera || select.value;
+            select.innerHTML = '<option value="">All cameras</option>';
+
+            cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera;
+                option.textContent = camera;
+                select.appendChild(option);
+            });
+
+            if (previous && cameras.includes(previous)) {
+                select.value = previous;
+            } else {
+                select.value = '';
+                selectedVideoCamera = '';
             }
         }
 

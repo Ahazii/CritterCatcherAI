@@ -57,6 +57,96 @@ def _extract_camera_name(filename: str) -> Optional[str]:
     return None
 
 
+def _load_yaml_config() -> dict:
+    """Load runtime config from /config/config.yaml."""
+    if not CONFIG_PATH.exists():
+        return {}
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.warning(f"Failed to load config: {e}")
+        return {}
+
+
+def _get_training_frame_limit(default_limit: int = 10) -> int:
+    """Get bounded per-video training frame count from config."""
+    config = _load_yaml_config()
+    try:
+        batch_size = int(config.get("animal_training", {}).get("batch_size", default_limit))
+        if batch_size > 0:
+            return min(batch_size, 30)
+    except Exception as e:
+        logger.warning(f"Failed to read training frame limit: {e}")
+    return default_limit
+
+
+def _score_candidate_frames(profile_id: str, frame_paths: List[str]) -> Dict[str, float]:
+    """Score candidate frames for a profile using its trained classifier or CLIP text fallback."""
+    if not profile_id or not frame_paths or animal_profile_manager is None:
+        return {}
+
+    profile = animal_profile_manager.get_profile(profile_id)
+    if not profile:
+        return {}
+
+    try:
+        from clip_vit_classifier import CLIPVitClassifier
+
+        config = _load_yaml_config()
+        force_cpu = bool(config.get("detection", {}).get("force_cpu", False))
+        classifier = CLIPVitClassifier(force_cpu=force_cpu)
+
+        model_path = Path("/data/models") / profile_id / "classifier.json"
+        model_data = classifier.load_classifier(model_path)
+
+        if model_data:
+            scores = classifier.score_with_classifier(frame_paths, model_data)
+        elif profile.use_text_fallback:
+            scores = classifier.score_batch(frame_paths, profile.text_description)
+        else:
+            return {}
+
+        return {path: float(score) for path, score in zip(frame_paths, scores)}
+    except Exception as e:
+        logger.warning(f"Smart frame scoring unavailable for {profile_id}: {e}")
+        return {}
+
+
+def _extract_training_frames(video_path: Path, output_dir: Path, max_frames: int, profile_id: Optional[str] = None) -> tuple:
+    """
+    Extract training frames, preferring frames that score highly for the target profile.
+
+    Returns (selected_frame_paths, score_map). score_map is empty when scoring fell back
+    to ordinary even sampling.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    extractor = FrameExtractor(target_fps=1)
+    candidate_limit = max(max_frames, min(max_frames * 4, 60))
+    frame_paths = extractor.extract_frames(
+        str(video_path),
+        str(output_dir),
+        max_frames=candidate_limit
+    )
+
+    if not frame_paths:
+        return [], {}
+
+    score_map = _score_candidate_frames(profile_id, frame_paths)
+    if score_map:
+        selected = sorted(frame_paths, key=lambda p: score_map.get(p, 0.0), reverse=True)[:max_frames]
+        logger.info(
+            f"Selected {len(selected)}/{len(frame_paths)} scored training frames "
+            f"for {profile_id} from {video_path.name}"
+        )
+        return selected, score_map
+
+    selected = frame_paths[:max_frames]
+    logger.info(f"Selected {len(selected)}/{len(frame_paths)} evenly sampled training frames from {video_path.name}")
+    return selected, {}
+
+
 def get_docker_image_id():
     """Get Docker container ID from /etc/hostname"""
     try:
@@ -2736,8 +2826,6 @@ async def reject_animal_profile_videos(request: dict, background_tasks: Backgrou
         def reject_videos_background():
             """Background task to extract negative frames and move videos."""
             try:
-                import cv2
-
                 task_tracker.start_task(task_id, message=f"Extracting negative examples for '{profile_name}'...")
                 results = {"processed": [], "failed": [], "total_frames": 0}
 
@@ -2766,31 +2854,37 @@ async def reject_animal_profile_videos(request: dict, background_tasks: Backgrou
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
 
-                        # Extract frames from video as negative examples
-                        cap = cv2.VideoCapture(str(video_path))
-                        fps = cap.get(cv2.CAP_PROP_FPS)
-                        frame_interval = int(fps) if fps > 0 else 30
-
-                        frame_count = 0
                         extracted_count = 0
-                        max_frames = 10
+                        temp_dir = Path(tempfile.mkdtemp(prefix="profile_reject_frames_"))
+                        try:
+                            frame_paths, frame_scores = _extract_training_frames(
+                                video_path,
+                                temp_dir,
+                                max_frames=_get_training_frame_limit(),
+                                profile_id=profile_id
+                            )
 
-                        while extracted_count < max_frames:
-                            ret, frame = cap.read()
-                            if not ret:
-                                break
+                            safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", video_path.stem)[:64]
+                            for frame_idx, frame_path in enumerate(frame_paths):
+                                frame_filename = f"{safe_stem}_negative_{frame_idx:03d}.jpg"
+                                dest_frame_path = rejected_dir / frame_filename
+                                shutil.move(frame_path, dest_frame_path)
 
-                            if frame_count % frame_interval == 0:
-                                # Save frame as negative example
-                                frame_filename = f"{video_path.stem}_negative_{extracted_count:03d}.jpg"
-                                frame_path = rejected_dir / frame_filename
-                                cv2.imwrite(str(frame_path), frame)
+                                metadata = {
+                                    "source_video": filename,
+                                    "profile_id": profile_id,
+                                    "frame_index": frame_idx,
+                                    "label": "negative",
+                                    "confidence": frame_scores.get(frame_path, 0.0),
+                                    "selection_method": "profile_scored" if frame_scores else "even_sample",
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                                with open(Path(str(dest_frame_path) + ".json"), "w") as metadata_file:
+                                    json.dump(metadata, metadata_file, indent=2)
 
-                                extracted_count += 1
-
-                            frame_count += 1
-
-                        cap.release()
+                            extracted_count = len(frame_paths)
+                        finally:
+                            shutil.rmtree(temp_dir, ignore_errors=True)
 
                         # Move video back to review for reprocessing
                         review_path = Path("/data/review") / profile_name
@@ -3270,17 +3364,24 @@ async def list_review_categories():
 
 
 @app.get("/api/review/categories/{category}/videos")
-async def list_category_videos(category: str):
+async def list_category_videos(category: str, camera: Optional[str] = None):
     """List all videos in a review category."""
     try:
         category_dir = Path("/data/review") / category
         if not category_dir.exists():
-            return {"status": "success", "category": category, "video_count": 0, "videos": []}
+            return {"status": "success", "category": category, "video_count": 0, "videos": [], "cameras": []}
 
         videos = []
+        cameras = set()
         tracked_videos_dir = Path("/data/objects/detected/annotated_videos")
 
         for video_file in sorted(category_dir.glob("*.mp4")):
+            camera_name = _extract_camera_name(video_file.name)
+            if camera_name:
+                cameras.add(camera_name)
+            if camera and camera_name != camera:
+                continue
+
             # Try to load metadata
             metadata = {}
             metadata_file = video_file.with_suffix(video_file.suffix + ".json")
@@ -3304,6 +3405,7 @@ async def list_category_videos(category: str):
             videos.append({
                 "filename": video_file.name,
                 "category": category,
+                "camera": camera_name,
                 "detected_objects": metadata.get("all_detections", metadata.get("detected_objects", {})),
                 "yolo_category": metadata.get("yolo_category", category),
                 "yolo_confidence": metadata.get("yolo_confidence", 0.0),
@@ -3318,6 +3420,8 @@ async def list_category_videos(category: str):
             "status": "success",
             "category": category,
             "video_count": len(videos),
+            "cameras": sorted(cameras),
+            "camera": camera,
             "videos": videos
         }
     except Exception as e:
@@ -3462,7 +3566,7 @@ async def serve_video_thumbnail(filename: str):
 
 
 @app.get("/api/review/videos")
-async def get_review_videos(category: str = None, page: int = 1, limit: int = 25):
+async def get_review_videos(category: str = None, page: int = 1, limit: int = 25, camera: Optional[str] = None):
     """Get videos from review folders with pagination, optionally filtered by category (supports nested like person/unknown)."""
     try:
         review_base = Path("/data/review")
@@ -3475,10 +3579,18 @@ async def get_review_videos(category: str = None, page: int = 1, limit: int = 25
 
             # Get all videos first
             all_videos = []
+            cameras = set()
             for video_file in sorted(category_path.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True):
+                camera_name = _extract_camera_name(video_file.name)
+                if camera_name:
+                    cameras.add(camera_name)
+                if camera and camera_name != camera:
+                    continue
+
                 all_videos.append({
                     "filename": video_file.name,
                     "category": category,
+                    "camera": camera_name,
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
                     "modified": datetime.fromtimestamp(video_file.stat().st_mtime).isoformat()
                 })
@@ -3497,16 +3609,26 @@ async def get_review_videos(category: str = None, page: int = 1, limit: int = 25
                 "total": total,
                 "page": page,
                 "pages": pages,
-                "limit": limit
+                "limit": limit,
+                "camera": camera,
+                "cameras": sorted(cameras)
             }
         else:
             # Return all videos from all categories
             all_videos = []
+            cameras = set()
             for video_file in review_base.rglob("*.mp4"):
                 rel_path = video_file.parent.relative_to(review_base)
+                camera_name = _extract_camera_name(video_file.name)
+                if camera_name:
+                    cameras.add(camera_name)
+                if camera and camera_name != camera:
+                    continue
+
                 all_videos.append({
                     "filename": video_file.name,
                     "category": str(rel_path),
+                    "camera": camera_name,
                     "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
                     "modified": datetime.fromtimestamp(video_file.stat().st_mtime).isoformat()
                 })
@@ -3528,7 +3650,9 @@ async def get_review_videos(category: str = None, page: int = 1, limit: int = 25
                 "total": total,
                 "page": page,
                 "pages": pages,
-                "limit": limit
+                "limit": limit,
+                "camera": camera,
+                "cameras": sorted(cameras)
             }
     except Exception as e:
         logger.error(f"Failed to get review videos: {e}", exc_info=True)
@@ -3789,18 +3913,7 @@ async def assign_videos_to_profile(request: dict):
         confirmed_increment = 0
         rejected_increment = 0
 
-        max_frames_per_video = 10
-        if extract_frames and CONFIG_PATH.exists():
-            try:
-                with open(CONFIG_PATH, 'r') as f:
-                    config = yaml.safe_load(f) or {}
-                batch_size = int(config.get("animal_training", {}).get("batch_size", 10))
-                if batch_size > 0:
-                    max_frames_per_video = min(batch_size, 30)
-            except Exception as config_err:
-                logger.warning(f"Failed to read training config: {config_err}")
-
-        frame_extractor = FrameExtractor(target_fps=1) if extract_frames else None
+        max_frames_per_video = _get_training_frame_limit()
 
         for filename in filenames:
             try:
@@ -3839,10 +3952,11 @@ async def assign_videos_to_profile(request: dict):
                 if extract_frames:
                     temp_dir = Path(tempfile.mkdtemp(prefix="profile_frames_"))
                     try:
-                        frame_paths = frame_extractor.extract_frames(
-                            str(source_path),
-                            str(temp_dir),
-                            max_frames=max_frames_per_video
+                        frame_paths, frame_scores = _extract_training_frames(
+                            source_path,
+                            temp_dir,
+                            max_frames=max_frames_per_video,
+                            profile_id=profile_id
                         )
 
                         safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
@@ -3855,7 +3969,9 @@ async def assign_videos_to_profile(request: dict):
                                 "source_video": filename,
                                 "profile_id": profile_id,
                                 "frame_index": idx,
-                                "confidence": video_confidence,
+                                "confidence": frame_scores.get(frame_path, video_confidence),
+                                "video_confidence": video_confidence,
+                                "selection_method": "profile_scored" if frame_scores else "even_sample",
                                 "timestamp": datetime.now().isoformat()
                             }
                             metadata_path = Path(str(dest_frame_path) + ".json")
@@ -5030,18 +5146,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
 
                 review_path = Path("/data/review") / category
 
-                max_frames_per_video = 10
-                if save_as_negative and extract_frames and CONFIG_PATH.exists():
-                    try:
-                        with open(CONFIG_PATH, 'r') as f:
-                            config = yaml.safe_load(f) or {}
-                        min_negatives = int(config.get("animal_training", {}).get("min_negatives", 10))
-                        if min_negatives > 0:
-                            max_frames_per_video = min(min_negatives, 30)
-                    except Exception as config_err:
-                        logger.warning(f"Failed to read training config: {config_err}")
-
-                frame_extractor = FrameExtractor(target_fps=1) if (save_as_negative and extract_frames) else None
+                max_frames_per_video = _get_training_frame_limit()
 
                 for idx, filename in enumerate(filenames, 1):
                     try:
@@ -5070,10 +5175,11 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                             if save_as_negative and extract_frames:
                                 temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
                                 try:
-                                    frame_paths = frame_extractor.extract_frames(
-                                        str(video_path),
-                                        str(temp_dir),
-                                        max_frames=max_frames_per_video
+                                    frame_paths, frame_scores = _extract_training_frames(
+                                        video_path,
+                                        temp_dir,
+                                        max_frames=max_frames_per_video,
+                                        profile_id=profile.id
                                     )
 
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
@@ -5091,7 +5197,9 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
                                             "category": category,
                                             "frame_index": frame_idx,
                                             "label": "negative",
-                                            "confidence": video_confidence,
+                                            "confidence": frame_scores.get(frame_path, video_confidence),
+                                            "video_confidence": video_confidence,
+                                            "selection_method": "profile_scored" if frame_scores else "even_sample",
                                             "timestamp": datetime.now().isoformat()
                                         }
                                         metadata_path = Path(str(dest_frame_path) + ".json")
@@ -5246,19 +5354,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
 
                         # Extract training frames (positive and/or negative)
                         if (extract_positive or extract_negative) and profile_id:
-                            frame_extractor = FrameExtractor(target_fps=1)
-                            max_frames = 10
-
-                            # Get config for batch size
-                            if CONFIG_PATH.exists():
-                                try:
-                                    with open(CONFIG_PATH, 'r') as f:
-                                        config = yaml.safe_load(f) or {}
-                                    batch_size = int(config.get("animal_training", {}).get("batch_size", 10))
-                                    if batch_size > 0:
-                                        max_frames = min(batch_size, 30)
-                                except Exception as config_err:
-                                    logger.warning(f"Failed to read training config: {config_err}")
+                            max_frames = _get_training_frame_limit()
 
                             # Extract positive frames
                             if extract_positive:
@@ -5274,10 +5370,11 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
 
                                 temp_dir = Path(tempfile.mkdtemp(prefix="positive_frames_"))
                                 try:
-                                    frame_paths = frame_extractor.extract_frames(
-                                        str(video_path),
-                                        str(temp_dir),
-                                        max_frames=max_frames
+                                    frame_paths, frame_scores = _extract_training_frames(
+                                        video_path,
+                                        temp_dir,
+                                        max_frames=max_frames,
+                                        profile_id=profile_id
                                     )
 
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
@@ -5290,6 +5387,8 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                             "source_video": filename,
                                             "profile_id": profile_id,
                                             "frame_index": frame_idx,
+                                            "confidence": frame_scores.get(frame_path, 0.0),
+                                            "selection_method": "profile_scored" if frame_scores else "even_sample",
                                             "timestamp": datetime.now().isoformat()
                                         }
                                         metadata_path = Path(str(dest_frame_path) + ".json")
@@ -5316,10 +5415,11 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
 
                                 temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
                                 try:
-                                    frame_paths = frame_extractor.extract_frames(
-                                        str(video_path),
-                                        str(temp_dir),
-                                        max_frames=max_frames
+                                    frame_paths, frame_scores = _extract_training_frames(
+                                        video_path,
+                                        temp_dir,
+                                        max_frames=max_frames,
+                                        profile_id=profile_id
                                     )
 
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
@@ -5332,6 +5432,8 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                             "source_video": filename,
                                             "profile_id": profile_id,
                                             "frame_index": frame_idx,
+                                            "confidence": frame_scores.get(frame_path, 0.0),
+                                            "selection_method": "profile_scored" if frame_scores else "even_sample",
                                             "timestamp": datetime.now().isoformat()
                                         }
                                         metadata_path = Path(str(dest_frame_path) + ".json")
