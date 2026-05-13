@@ -32,6 +32,16 @@ face_recognition:
   # Enable face recognition for person detection
   enabled: true
 
+# Cameras that should send YOLO "person" detections to face review.
+# Leave empty to review people from all cameras.
+# Wildlife cameras should stay out of face review because YOLO often mislabels
+# animals, shadows, and night footage as "person".
+face_review:
+  cameras:
+    - Front Door
+    - Kitchen Dog Cam
+    - Side of house
+
 # Detection settings
 detection:
   # YOLO model selection: yolov8n (nano - fastest), yolov8s (small), yolov8m (medium), 

@@ -1014,15 +1014,15 @@
                                 <div class="profile-stats">
                                     <div class="stat">
                                         <div class="stat-value">${profile.accuracy_percentage.toFixed(0)}%</div>
-                                        <div class="stat-label">Accuracy</div>
+                                        <div class="stat-label">Positive Ratio</div>
                                     </div>
                                     <div class="stat">
-                                        <div class="stat-value">${profile.confirmed_count + profile.rejected_count}</div>
-                                        <div class="stat-label">Feedback</div>
+                                        <div class="stat-value">${profile.confirmed_count}</div>
+                                        <div class="stat-label">Positive Images</div>
                                     </div>
                                     <div class="stat">
-                                        <div class="stat-value">${profile.confidence_threshold.toFixed(2)}</div>
-                                        <div class="stat-label">Threshold</div>
+                                        <div class="stat-value">${profile.rejected_count}</div>
+                                        <div class="stat-label">Negative Images</div>
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap;">
@@ -1039,35 +1039,16 @@
                                         </span>
                                     </div>
                                 </div>
-                                ${profile.should_recommend_retraining ? 
-                                    `<div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--warning-color); margin-top: 0.75rem;">
-                                        <strong>⚠️ Training Recommended</strong>
-                                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0.25rem 0 0.5rem 0;">
-                                            ${profile.retraining_message}
-                                        </p>
-                                        <button class="btn btn-small btn-success" onclick="markTrainingComplete('${profile.id}')" style="margin-top: 0.5rem;">
-                                            ✓ Mark Training Complete
-                                        </button>
-                                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; font-style: italic;">
-                                            Note: Training uses a lightweight classifier on CLIP embeddings.
-                                        </p>
-                                    </div>` 
-                                    : (profile.last_training_date ? 
-                                        `<div style="background: var(--bg-secondary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-top: 0.75rem;">
-                                            ✓ Training completed: ${new Date(profile.last_training_date).toLocaleDateString()}
-                                        </div>` 
-                                        : '')}
                                 <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                     <div id="training-${profile.id}" style="font-size: 0.875rem; color: var(--text-secondary);">
                                         Training status: loading...
                                     </div>
-                                    <button class="btn btn-small" onclick="loadTrainingStatus('${profile.id}')">Refresh status</button>
                                 </div>
                                 <div id="viz-${profile.id}" style="display: none; margin-top: 1rem;"></div>
                             </div>
                             <div class="profile-actions">
                                 <button class="btn btn-small" onclick="openEditModal('${profile.id}')">Edit</button>
-                                <button class="btn btn-small btn-success" onclick="trainClassifier('${profile.id}')" title="Manually train CLIP classifier using confirmed/rejected images">🎓 Train Classifier</button>
+                                <button class="btn btn-small btn-success" id="train-btn-${profile.id}" onclick="trainClassifier('${profile.id}')" title="Train CLIP classifier using confirmed/rejected images">Train</button>
                                 <button class="btn btn-small" onclick="toggleViz('${profile.id}')" title="Show/hide top frames">🖼 Viz</button>
                                 <button class="btn btn-small" onclick="reviewProfileVideos('${profile.id}', '${profile.name}')" title="Review sorted videos for misclassifications">📹 Review Videos</button>
                                 <button class="btn btn-small" onclick="toggleProfile('${profile.id}', ${!profile.enabled})">
@@ -1098,13 +1079,32 @@
                     const lastTrained = data.last_training_date
                         ? new Date(data.last_training_date).toLocaleString()
                         : 'never';
-                    const newPositives = data.confirmed_count - data.last_trained_confirmed;
-                    const nextBatchTarget = data.last_trained_confirmed + trainingConfig.batchSize;
+                    const newPositives = data.new_confirmed || 0;
+                    const newNegatives = data.new_rejected || 0;
                     
                     // Calculate if ready to train
-                    const hasEnoughPositives = data.confirmed_count >= trainingConfig.batchSize;
-                    const hasEnoughNegatives = data.rejected_count >= trainingConfig.minNegatives;
-                    const readyToTrain = hasEnoughPositives && hasEnoughNegatives && !data.model_present;
+                    const hasEnoughPositives = data.confirmed_count >= data.min_positives;
+                    const hasEnoughNegatives = data.rejected_count >= data.min_negatives;
+                    const canTrain = data.state === 'ready_to_train' || data.state === 'retrain_available';
+                    const stateColors = {
+                        collecting_data: 'var(--warning-color)',
+                        ready_to_train: 'var(--success-color)',
+                        retrain_available: 'var(--warning-color)',
+                        trained_current: 'var(--success-color)'
+                    };
+                    const stateLabels = {
+                        collecting_data: 'Collecting data',
+                        ready_to_train: 'Ready to train',
+                        retrain_available: 'Retrain available',
+                        trained_current: 'Trained'
+                    };
+
+                    const trainBtn = document.getElementById(`train-btn-${profileId}`);
+                    if (trainBtn) {
+                        trainBtn.disabled = !canTrain;
+                        trainBtn.textContent = data.state === 'retrain_available' ? 'Retrain' : 'Train';
+                        trainBtn.title = canTrain ? data.message : 'Add more confirmed and rejected images before training';
+                    }
                     
                     // Build status HTML with visual indicators
                     el.innerHTML = `
@@ -1114,6 +1114,12 @@
                                     <strong>Model:</strong> 
                                     <span style="color: ${data.model_present ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: bold;">
                                         ${modelState}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>State:</strong>
+                                    <span style="color: ${stateColors[data.state] || 'var(--text-secondary)'}; font-weight: bold;">
+                                        ${stateLabels[data.state] || data.state}
                                     </span>
                                 </div>
                                 <div>
@@ -1128,7 +1134,7 @@
                                         ${data.confirmed_count}
                                     </span>
                                     <span style="color: var(--text-secondary);">
-                                        / ${trainingConfig.batchSize} needed
+                                        / ${data.min_positives} needed
                                     </span>
                                 </div>
                                 <div>
@@ -1137,25 +1143,19 @@
                                         ${data.rejected_count}
                                     </span>
                                     <span style="color: var(--text-secondary);">
-                                        / ${trainingConfig.minNegatives} needed
+                                        / ${data.min_negatives} needed
                                     </span>
                                 </div>
                                 <div>
-                                    <strong>New since training:</strong> 
+                                    <strong>New images:</strong>
                                     <span style="color: var(--accent-color); font-weight: bold;">
-                                        +${newPositives}
+                                        +${newPositives} / +${newNegatives}
                                     </span>
                                 </div>
                             </div>
-                            ${readyToTrain ? `
-                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--success-color); color: white; border-radius: 4px; text-align: center; font-weight: bold;">
-                                    ✓ Ready to train! Process videos to trigger automatic training.
-                                </div>
-                            ` : (!hasEnoughNegatives && hasEnoughPositives ? `
-                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--danger-color); color: white; border-radius: 4px; text-align: center;">
-                                    ⚠️ Need ${trainingConfig.minNegatives - data.rejected_count} more negative examples
-                                </div>
-                            ` : '')}
+                            <div style="margin-top: 0.5rem; padding: 0.5rem; background: ${stateColors[data.state] || 'var(--bg-primary)'}; color: white; border-radius: 4px; text-align: center; font-weight: bold;">
+                                ${data.message}
+                            </div>
                         </div>
                     `;
                 })
@@ -1196,20 +1196,6 @@
                     })
                     .catch(err => showAlert('Error: ' + err, 'error'));
             }
-        }
-        
-        function markTrainingComplete(profileId) {
-            fetch(`/api/animal-profiles/${profileId}/mark-trained`, { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showAlert(data.message, 'success');
-                        loadProfiles();
-                    } else {
-                        showAlert('Error: ' + data.detail, 'error');
-                    }
-                })
-                .catch(err => showAlert('Error: ' + err, 'error'));
         }
         
         function trainClassifier(profileId) {

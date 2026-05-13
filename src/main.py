@@ -185,6 +185,29 @@ def _forced_profiles_for_camera(config: dict, camera_name: Optional[str], profil
     return forced_profiles
 
 
+def _face_review_cameras(config: dict) -> list:
+    """Return cameras that should send person detections to face review."""
+    face_review = config.get("face_review", {})
+    cameras = face_review.get("cameras") if isinstance(face_review, dict) else None
+    if cameras is None:
+        return ["Front Door", "Kitchen Dog Cam", "Side of house"]
+    if isinstance(cameras, str):
+        return [cameras]
+    if isinstance(cameras, list):
+        return cameras
+    return []
+
+
+def _person_review_allowed(config: dict, camera_name: Optional[str]) -> bool:
+    """Check whether a person detection from this camera should enter face review."""
+    cameras = _face_review_cameras(config)
+    if not cameras:
+        return True
+    if not camera_name:
+        return True
+    return camera_name in cameras
+
+
 def process_videos(config: dict, manual_trigger: bool = False):
     """Main video processing pipeline.
     
@@ -494,6 +517,7 @@ def process_videos(config: dict, manual_trigger: bool = False):
             yolo_confidence = 0.0
             needs_clip_processing = False
             forced_clip_profiles = []
+            allow_person_review = _person_review_allowed(config, camera_name)
 
             try:
                 all_profiles = profile_manager.list_profiles()
@@ -547,19 +571,33 @@ def process_videos(config: dict, manual_trigger: bool = False):
                 except:
                     pass
                 
+                review_category = "unknown" if best_category == "person" and not allow_person_review else best_category
+
                 if needs_clip_processing:
                     # Send to review for CLIP Stage 2 processing
                     yolo_sorted_path = video_sorter.sort_by_yolo_category(
                         video_path,
-                        yolo_category=best_category,
+                        yolo_category=review_category,
                         confidence=best_confidence,
                         metadata={"all_detections": detected_objects}
                     )
-                    logger.info(f"Video sorted to /data/review/{best_category}/ (CLIP processing required)")
-                elif best_category == "person":
+                    logger.info(f"Video sorted to /data/review/{review_category}/ (CLIP processing required)")
+                elif best_category == "person" and allow_person_review:
                     # Person detected - defer sorting until after face recognition runs
                     logger.info(f"Person detected - deferring sorting until face recognition completes")
                     yolo_sorted_path = video_path  # Keep in place for now
+                elif best_category == "person":
+                    # Wildlife or media camera: keep person false positives out of face review.
+                    yolo_sorted_path = video_sorter.sort_by_yolo_category(
+                        video_path,
+                        yolo_category=review_category,
+                        confidence=best_confidence,
+                        metadata={"all_detections": detected_objects, "person_review_skipped": True}
+                    )
+                    logger.info(
+                        f"Person detected from camera '{camera_name}' but face review is disabled for this camera; "
+                        f"sorted to /data/review/{review_category}/"
+                    )
                 else:
                     # No CLIP needed and not a person - send directly to sorted
                     yolo_sorted_path = video_sorter.move_video(
@@ -649,9 +687,11 @@ def process_videos(config: dict, manual_trigger: bool = False):
             should_run_face_recognition = False
             recognized_people = set()
             
-            if face_recognition_enabled and detected_objects and 'person' in detected_objects:
+            if face_recognition_enabled and detected_objects and 'person' in detected_objects and allow_person_review:
                 should_run_face_recognition = True
                 logger.info("Face Recognition routing triggered (person detected + FR enabled)")
+            elif detected_objects and 'person' in detected_objects and not allow_person_review:
+                logger.info(f"Skipping face review for camera '{camera_name}'")
             
             if should_run_face_recognition:
                 # Update progress: face recognition
@@ -714,7 +754,7 @@ def process_videos(config: dict, manual_trigger: bool = False):
                         # Don't set final_destination - allow CLIP to process if applicable
                     except Exception as unknown_sort_err:
                         logger.error(f"Failed to sort unknown person: {unknown_sort_err}", exc_info=True)
-            elif detected_objects and 'person' in detected_objects and not face_recognition_enabled:
+            elif detected_objects and 'person' in detected_objects and not face_recognition_enabled and allow_person_review:
                 # Face recognition disabled but person detected - sort to review/person/unknown
                 logger.info("Face recognition disabled - sorting person video to review/person/unknown")
                 try:

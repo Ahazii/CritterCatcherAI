@@ -108,16 +108,17 @@ class ReviewManager:
             return
         
         batch_size = int(config.get("batch_size", 10))
-        if (profile.confirmed_count - profile.last_trained_confirmed) < batch_size:
-            return
-        
-        # Require negatives
+
+        # Require negatives and use actual files on disk, not accumulated counters.
         min_negatives = int(config.get("min_negatives", 10))
         positives_dir = self.base_data_path / "training" / profile.id / "confirmed"
         negatives_dir = self.base_data_path / "training" / profile.id / "rejected"
         
         positive_paths = sorted(str(p) for p in positives_dir.glob("*.jpg")) if positives_dir.exists() else []
         negative_paths = sorted(str(p) for p in negatives_dir.glob("*.jpg")) if negatives_dir.exists() else []
+
+        if (len(positive_paths) - profile.last_trained_confirmed) < batch_size:
+            return
         
         if len(positive_paths) < batch_size or len(negative_paths) < min_negatives:
             logger.info(

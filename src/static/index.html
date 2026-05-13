@@ -2316,6 +2316,10 @@
                 
                 // Face Recognition settings
                 const faceRecognitionEnabled = data.config.face_recognition?.enabled || false;
+                const defaultFaceReviewCameras = ['Front Door', 'Kitchen Dog Cam', 'Side of house'];
+                const faceReviewCameras = Array.isArray(data.config.face_review?.cameras)
+                    ? data.config.face_review.cameras
+                    : defaultFaceReviewCameras;
 
                 // Pathway settings
                 const pathways = data.config.pathways || {};
@@ -2498,6 +2502,18 @@
                         </p>
                     </div>
 
+                    <div class="form-group">
+                        <label class="form-label">Face Review Cameras</label>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Only these cameras send YOLO "person" detections to Face Training / person review. Keep wildlife cameras unchecked to stop animal clips filling person/unknown.
+                        </p>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem;">
+                            <input type="checkbox" id="faceReviewAllCameras" style="width: auto;">
+                            Use all cameras for Face Review
+                        </label>
+                        <div id="faceReviewCameraList" style="margin-top: 0.5rem;"></div>
+                    </div>
+
                     <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
 
                     <h3 style="margin-bottom: 1rem; color: var(--text-primary);">🧭 Pathways</h3>
@@ -2571,7 +2587,7 @@
                     <div id="configMessage" style="margin-top: 1rem;"></div>
                 `;
                 
-                await loadPathwayCameras(data.config);
+                await loadPathwayCameras(data.config, faceReviewCameras);
                 
                 // No longer need multi-select - object labels are managed in Species Training page
             } catch (error) {
@@ -2598,10 +2614,11 @@
             }
         }
 
-        async function loadPathwayCameras(config) {
+        async function loadPathwayCameras(config, faceReviewCameras = []) {
             const mediaList = document.getElementById('mediaCameraList');
             const securityList = document.getElementById('securityCameraList');
-            if (!mediaList || !securityList) return;
+            const faceReviewList = document.getElementById('faceReviewCameraList');
+            if (!mediaList || !securityList || !faceReviewList) return;
 
             try {
                 const response = await fetch('/api/cameras');
@@ -2614,8 +2631,10 @@
 
                 const mediaAll = document.getElementById('mediaAllCameras');
                 const securityAll = document.getElementById('securityAllCameras');
+                const faceReviewAll = document.getElementById('faceReviewAllCameras');
                 mediaAll.checked = mediaCameras.length === 0;
                 securityAll.checked = securityCameras.length === 0;
+                faceReviewAll.checked = faceReviewCameras.length === 0;
 
                 const renderList = (container, pathway, selected, allToggle) => {
                     if (cameras.length === 0) {
@@ -2646,10 +2665,14 @@
 
                 renderList(mediaList, 'media', mediaCameras, mediaAll);
                 renderList(securityList, 'security', securityCameras, securityAll);
+                renderList(faceReviewList, 'faceReview', faceReviewCameras, faceReviewAll);
             } catch (error) {
                 console.error('Failed to load cameras:', error);
                 mediaList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Failed to load camera list.</p>';
                 securityList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Failed to load camera list.</p>';
+                if (faceReviewList) {
+                    faceReviewList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Failed to load camera list.</p>';
+                }
             }
         }
         
@@ -2668,6 +2691,7 @@
 
                 const mediaAll = document.getElementById('mediaAllCameras')?.checked ?? true;
                 const securityAll = document.getElementById('securityAllCameras')?.checked ?? true;
+                const faceReviewAll = document.getElementById('faceReviewAllCameras')?.checked ?? false;
 
                 const config = {
                     config: {
@@ -2701,7 +2725,11 @@
                         face_recognition: {
                             enabled: document.getElementById('faceRecognitionEnabled').checked
                         },
+                        face_review: {
+                            cameras: faceReviewAll ? [] : getSelectedCameras('faceReview')
+                        },
                         logging: {
+                            ...(currentData.config?.logging || {}),
                             level: document.getElementById('logLevel').value
                         },
                         pathways: {
@@ -2716,6 +2744,9 @@
                                 unknown_only: true
                             }
                         },
+                        camera_profile_overrides: currentData.config?.camera_profile_overrides || [],
+                        animal_training: currentData.config?.animal_training || {},
+                        yolo_manual_categories: currentData.config?.yolo_manual_categories || [],
                         run_once: false,
                         interval_minutes: parseInt(document.getElementById('intervalMinutes').value)  // Keep for backwards compatibility
                     }

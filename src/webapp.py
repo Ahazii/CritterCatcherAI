@@ -147,6 +147,102 @@ def _extract_training_frames(video_path: Path, output_dir: Path, max_frames: int
     return selected, {}
 
 
+def _unique_destination_path(directory: Path, filename: str) -> Path:
+    """Return a non-existing path in directory while preserving the filename stem."""
+    destination = directory / filename
+    if not destination.exists():
+        return destination
+
+    stem = destination.stem
+    suffix = destination.suffix
+    counter = 1
+    while True:
+        candidate = directory / f"{stem}_{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def _profile_training_counts(profile_id: str) -> tuple:
+    """Return actual positive/negative training image counts from disk."""
+    confirmed_dir = Path("/data/training") / profile_id / "confirmed"
+    rejected_dir = Path("/data/training") / profile_id / "rejected"
+    confirmed_count = len(list(confirmed_dir.glob("*.jpg"))) if confirmed_dir.exists() else 0
+    rejected_count = len(list(rejected_dir.glob("*.jpg"))) if rejected_dir.exists() else 0
+    return confirmed_count, rejected_count
+
+
+def _profile_training_state(profile, confirmed_count: int, rejected_count: int, model_present: bool) -> dict:
+    """Build objective training state from file counts and model metadata."""
+    config = _load_yaml_config()
+    animal_training = config.get("animal_training", {})
+    min_positives = int(animal_training.get("batch_size", 10) or 10)
+    min_negatives = int(animal_training.get("min_negatives", 10) or 10)
+
+    new_confirmed = max(0, confirmed_count - (profile.last_trained_confirmed or 0))
+    new_rejected = max(0, rejected_count - (profile.last_trained_rejected or 0))
+    has_enough_data = confirmed_count >= min_positives and rejected_count >= min_negatives
+    has_new_data = new_confirmed > 0 or new_rejected > 0
+
+    if not has_enough_data:
+        state = "collecting_data"
+        message = f"Needs at least {min_positives} positive and {min_negatives} negative images before training."
+    elif not model_present:
+        state = "ready_to_train"
+        message = "Ready to train. No classifier model exists yet."
+    elif has_new_data:
+        state = "retrain_available"
+        message = f"New training data available: +{new_confirmed} positive, +{new_rejected} negative."
+    else:
+        state = "trained_current"
+        message = "Classifier is trained on the current image set."
+
+    return {
+        "state": state,
+        "message": message,
+        "min_positives": min_positives,
+        "min_negatives": min_negatives,
+        "new_confirmed": new_confirmed,
+        "new_rejected": new_rejected,
+        "has_enough_data": has_enough_data,
+        "has_new_data": has_new_data,
+    }
+
+
+def _profile_response(profile) -> dict:
+    """Serialize an animal profile using actual training file counts."""
+    confirmed_count, rejected_count = _profile_training_counts(profile.id)
+    total = confirmed_count + rejected_count
+    accuracy = (confirmed_count / total) * 100 if total else 0.0
+    model_path = Path(profile.classifier_model_path) if profile.classifier_model_path else Path("/data/models") / profile.id / "classifier.json"
+    model_present = model_path.exists()
+    training_state = _profile_training_state(profile, confirmed_count, rejected_count, model_present)
+
+    return {
+        "id": profile.id,
+        "name": profile.name,
+        "yolo_categories": profile.yolo_categories,
+        "text_description": profile.text_description,
+        "confidence_threshold": profile.confidence_threshold,
+        "auto_approval_enabled": profile.auto_approval_enabled,
+        "requires_manual_confirmation": profile.requires_manual_confirmation,
+        "enabled": profile.enabled,
+        "confirmed_count": confirmed_count,
+        "rejected_count": rejected_count,
+        "accuracy_percentage": accuracy,
+        "retraining_threshold": profile.retraining_threshold,
+        "confirmation_count_recommendation": profile.confirmation_count_recommendation,
+        "last_training_date": profile.last_training_date,
+        "last_trained_confirmed": profile.last_trained_confirmed,
+        "last_trained_rejected": profile.last_trained_rejected,
+        "model_present": model_present,
+        "training_state": training_state["state"],
+        "training_message": training_state["message"],
+        "should_recommend_retraining": training_state["state"] in ("ready_to_train", "retrain_available"),
+        "retraining_message": training_state["message"],
+    }
+
+
 def get_docker_image_id():
     """Get Docker container ID from /etc/hostname"""
     try:
@@ -2356,26 +2452,7 @@ async def list_animal_profiles():
 
         return {
             "status": "success",
-            "profiles": [
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "yolo_categories": p.yolo_categories,
-                    "text_description": p.text_description,
-                    "confidence_threshold": p.confidence_threshold,
-                    "auto_approval_enabled": p.auto_approval_enabled,
-                    "requires_manual_confirmation": p.requires_manual_confirmation,
-                    "enabled": p.enabled,
-                    "confirmed_count": p.confirmed_count,
-                    "rejected_count": p.rejected_count,
-                    "accuracy_percentage": p.accuracy_percentage,
-                    "retraining_threshold": p.retraining_threshold,
-                    "confirmation_count_recommendation": p.confirmation_count_recommendation,
-                    "should_recommend_retraining": p.should_recommend_retraining[0],
-                    "retraining_message": p.should_recommend_retraining[1]
-                }
-                for p in profiles
-            ],
+            "profiles": [_profile_response(p) for p in profiles],
             "count": len(profiles)
         }
     except Exception as e:
@@ -2394,26 +2471,7 @@ async def get_animal_profile(profile_id: str):
         if not profile:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
 
-        return {
-            "status": "success",
-            "profile": {
-                "id": profile.id,
-                "name": profile.name,
-                "yolo_categories": profile.yolo_categories,
-                "text_description": profile.text_description,
-                "confidence_threshold": profile.confidence_threshold,
-                "auto_approval_enabled": profile.auto_approval_enabled,
-                "requires_manual_confirmation": profile.requires_manual_confirmation,
-                "enabled": profile.enabled,
-                "confirmed_count": profile.confirmed_count,
-                "rejected_count": profile.rejected_count,
-                "accuracy_percentage": profile.accuracy_percentage,
-                "retraining_threshold": profile.retraining_threshold,
-                "confirmation_count_recommendation": profile.confirmation_count_recommendation,
-                "should_recommend_retraining": profile.should_recommend_retraining[0],
-                "retraining_message": profile.should_recommend_retraining[1]
-            }
-        }
+        return {"status": "success", "profile": _profile_response(profile)}
     except HTTPException:
         raise
     except Exception as e:
@@ -2435,23 +2493,21 @@ async def get_animal_profile_training_status(profile_id: str):
         model_path = Path(profile.classifier_model_path) if profile.classifier_model_path else Path("/data/models") / profile.id / "classifier.json"
         model_present = model_path.exists()
 
-        # Get actual file counts from training folders
-        confirmed_dir = Path("/data/training") / profile.id / "confirmed"
-        rejected_dir = Path("/data/training") / profile.id / "rejected"
-
-        confirmed_count = len(list(confirmed_dir.glob("*.jpg"))) if confirmed_dir.exists() else 0
-        rejected_count = len(list(rejected_dir.glob("*.jpg"))) if rejected_dir.exists() else 0
+        confirmed_count, rejected_count = _profile_training_counts(profile.id)
+        training_state = _profile_training_state(profile, confirmed_count, rejected_count, model_present)
 
         return {
             "status": "success",
             "profile_id": profile.id,
             "model_present": model_present,
             "model_path": str(model_path),
+            "model_last_modified": datetime.fromtimestamp(model_path.stat().st_mtime).isoformat() if model_present else None,
             "last_training_date": profile.last_training_date,
             "last_trained_confirmed": profile.last_trained_confirmed,
             "last_trained_rejected": profile.last_trained_rejected,
             "confirmed_count": confirmed_count,  # Actual file count, not accumulated total
-            "rejected_count": rejected_count  # Actual file count, not accumulated total
+            "rejected_count": rejected_count,  # Actual file count, not accumulated total
+            **training_state
         }
     except HTTPException:
         raise
@@ -2867,7 +2923,7 @@ async def reject_animal_profile_videos(request: dict, background_tasks: Backgrou
                             safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", video_path.stem)[:64]
                             for frame_idx, frame_path in enumerate(frame_paths):
                                 frame_filename = f"{safe_stem}_negative_{frame_idx:03d}.jpg"
-                                dest_frame_path = rejected_dir / frame_filename
+                                dest_frame_path = _unique_destination_path(rejected_dir, frame_filename)
                                 shutil.move(frame_path, dest_frame_path)
 
                                 metadata = {
@@ -3045,11 +3101,13 @@ async def train_classifier(profile_id: str, background_tasks: BackgroundTasks):
                 # Update profile with training metadata
                 animal_profile_manager.update_profile(
                     profile_id,
+                    confirmed_count=len(confirmed_images),
+                    rejected_count=len(rejected_images),
                     last_training_date=datetime.now().isoformat(),
                     last_trained_confirmed=len(confirmed_images),
                     last_trained_rejected=len(rejected_images),
                     classifier_model_path=str(model_path),
-                    training_manually_completed=False  # Reset so retraining can be recommended again
+                    training_manually_completed=False
                 )
 
                 logger.info(f"✓ Classifier training complete for '{profile.name}': {model_path}")
@@ -3340,13 +3398,14 @@ async def list_review_categories():
             return {"status": "success", "categories": [], "total_videos": 0}
 
         categories = []
-        for category_dir in review_base.iterdir():
+        for category_dir in review_base.rglob("*"):
             if category_dir.is_dir():
                 # Count videos in this category
                 video_count = len(list(category_dir.glob("*.mp4")))
                 if video_count > 0:
+                    category_name = str(category_dir.relative_to(review_base)).replace("\\", "/")
                     categories.append({
-                        "name": category_dir.name,
+                        "name": category_name,
                         "video_count": video_count
                     })
 
@@ -3363,7 +3422,7 @@ async def list_review_categories():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/review/categories/{category}/videos")
+@app.get("/api/review/categories/{category:path}/videos")
 async def list_category_videos(category: str, camera: Optional[str] = None):
     """List all videos in a review category."""
     try:
@@ -3456,10 +3515,21 @@ async def serve_review_video_file(category: str, filename: str):
     try:
         if not category or not filename:
             raise HTTPException(status_code=400, detail="Missing category or filename")
-        if ".." in category or ".." in filename or "/" in filename or "\\" in filename:
+        safe_category = category.replace("\\", "/").strip("/")
+        category_parts = [part for part in safe_category.split("/") if part]
+        if (
+            not category_parts
+            or ".." in category_parts
+            or "/" in filename
+            or "\\" in filename
+            or ".." in filename
+        ):
             raise HTTPException(status_code=400, detail="Invalid category or filename")
 
-        video_path = Path("/data/review") / category / filename
+        review_base = Path("/data/review").resolve()
+        video_path = (review_base.joinpath(*category_parts) / filename).resolve()
+        if not video_path.is_relative_to(review_base):
+            raise HTTPException(status_code=400, detail="Invalid category or filename")
 
         if not video_path.exists():
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
@@ -3895,6 +3965,7 @@ async def assign_videos_to_profile(request: dict):
 
         category = request.get('category')
         filenames = request.get('filenames', [])
+        category = request.get('category', 'person')
         profile_id = request.get('profile_id')
         extract_frames = bool(request.get('extract_frames', True))
         as_negative = bool(request.get('as_negative', False))
@@ -3962,7 +4033,7 @@ async def assign_videos_to_profile(request: dict):
                         safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
                         for idx, frame_path in enumerate(frame_paths):
                             frame_name = f"{safe_stem}_frame_{idx:06d}.jpg"
-                            dest_frame_path = dest_dir / frame_name
+                            dest_frame_path = _unique_destination_path(dest_dir, frame_name)
                             shutil.move(frame_path, dest_frame_path)
 
                             metadata = {
@@ -4864,7 +4935,11 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                 task_tracker.start_task(task_id, message=f"Extracting faces for '{profile.name}'...")
                 results = {"processed": [], "failed": [], "total_faces": 0}
 
-                review_path = Path("/data/review/person")
+                safe_category = str(category).replace("\\", "/").strip("/")
+                category_parts = [part for part in safe_category.split("/") if part]
+                if not category_parts or ".." in category_parts:
+                    raise ValueError("Invalid review category")
+                review_path = Path("/data/review").joinpath(*category_parts)
                 sorted_path = Path("/data/sorted") / profile_id
                 sorted_path.mkdir(parents=True, exist_ok=True)
 
@@ -5188,7 +5263,7 @@ async def reject_videos(category: str, request: dict, background_tasks: Backgrou
 
                                     for frame_idx, frame_path in enumerate(frame_paths):
                                         frame_name = f"{safe_stem}_neg_{frame_idx:06d}.jpg"
-                                        dest_frame_path = negatives_dir / frame_name
+                                        dest_frame_path = _unique_destination_path(negatives_dir, frame_name)
                                         shutil.move(frame_path, dest_frame_path)
 
                                         metadata = {
@@ -5382,7 +5457,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
                                     for frame_idx, frame_path in enumerate(frame_paths):
                                         frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
-                                        dest_frame_path = dest_dir / frame_name
+                                        dest_frame_path = _unique_destination_path(dest_dir, frame_name)
                                         shutil.move(frame_path, dest_frame_path)
 
                                         metadata = {
@@ -5427,7 +5502,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
                                     for frame_idx, frame_path in enumerate(frame_paths):
                                         frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
-                                        dest_frame_path = dest_dir / frame_name
+                                        dest_frame_path = _unique_destination_path(dest_dir, frame_name)
                                         shutil.move(frame_path, dest_frame_path)
 
                                         metadata = {
@@ -5449,7 +5524,7 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     shutil.rmtree(temp_dir, ignore_errors=True)
 
                         # Extract faces (for person videos)
-                        if extract_faces and category == 'person':
+                        if extract_faces and (category == 'person' or category.startswith('person/')):
                             try:
                                 # Use existing face extraction logic
                                 from face_recognition_module import FaceRecognitionManager

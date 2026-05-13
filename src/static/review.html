@@ -1374,6 +1374,7 @@
                         const faceExtractType = action === 'assign_face_positive' ? 'positive' : 'negative';
                         body = {
                             filenames,
+                            category,
                             profile_id: config.profile_id,
                             extract_frames: config.extract_frames !== false,
                             extract_type: faceExtractType
@@ -1461,7 +1462,7 @@
             const label = select.previousElementSibling;
             
             // Check if current category is "person"
-            const isPerson = currentCategory === 'person';
+            const isPerson = currentCategory === 'person' || currentCategory?.startsWith('person/');
             
             // Update label text
             if (label && label.tagName === 'LABEL') {
@@ -1649,7 +1650,7 @@
             if (video.tracked_video_filename) {
                 videoElement.src = `/api/review/tracked-video/${video.tracked_video_filename}`;
             } else {
-                videoElement.src = `/api/review/video/${currentCategory}/${video.filename}`;
+                videoElement.src = `/api/review/video-file?category=${encodeURIComponent(currentCategory)}&filename=${encodeURIComponent(video.filename)}`;
             }
             videoElement.controls = true;
             videoElement.preload = 'metadata';
@@ -1858,9 +1859,9 @@
             // Determine action type based on checkboxes
             let action;
             if (saveNegatives) {
-                action = currentCategory === 'person' ? 'assign_face_negative' : 'assign_negative';
+                action = (currentCategory === 'person' || currentCategory?.startsWith('person/')) ? 'assign_face_negative' : 'assign_negative';
             } else {
-                action = currentCategory === 'person' ? 'assign_face_positive' : 'assign_positive';
+                action = (currentCategory === 'person' || currentCategory?.startsWith('person/')) ? 'assign_face_positive' : 'assign_positive';
             }
             
             // Add to queue instead of executing immediately
@@ -1920,7 +1921,7 @@
             const filenames = Array.from(selectedVideos);
             
             // For person category, require a face profile selection
-            if (currentCategory === 'person') {
+            if (currentCategory === 'person' || currentCategory?.startsWith('person/')) {
                 const profileId = document.getElementById('profileSelect').value;
                 if (!profileId) {
                     alert('Please select a person profile to extract faces for positive training');
@@ -1964,7 +1965,7 @@
             const filenames = Array.from(selectedVideos);
             
             // For person category with negative training
-            if (currentCategory === 'person' && saveNegatives && profileId) {
+            if ((currentCategory === 'person' || currentCategory?.startsWith('person/')) && saveNegatives && profileId) {
                 // Extract as negative face training
                 filenames.forEach(filename => {
                     addToQueue(filename, currentCategory, 'assign_face_negative', {
@@ -2017,7 +2018,7 @@
                     extract_negative: false,
                     move_to_sorted: false,
                     delete_after: false,
-                    extract_faces: currentCategory === 'person' // Auto-enable for person videos
+                    extract_faces: currentCategory === 'person' || currentCategory?.startsWith('person/') // Auto-enable for person videos
                 });
             });
 
@@ -2073,7 +2074,7 @@
                 videoItem.innerHTML = `
                     <div class="video-review-header">
                         <div class="video-review-thumbnail">
-                            <video src="/api/review/video/${currentCategory}/${video.filename}" muted></video>
+                            <video src="/api/review/video-file?category=${encodeURIComponent(currentCategory)}&filename=${encodeURIComponent(video.filename)}" muted></video>
                         </div>
                         <div class="video-review-info">
                             <h4>${video.filename}</h4>
@@ -2115,7 +2116,7 @@
                                            onchange="updateVideoState('${video.filename}', 'delete_after', this.checked)">
                                     🗑️ Delete After Processing
                                 </label>
-                                ${currentCategory === 'person' ? `
+                                ${(currentCategory === 'person' || currentCategory?.startsWith('person/')) ? `
                                 <label>
                                     <input type="checkbox" ${state.extract_faces ? 'checked' : ''} 
                                            onchange="updateVideoState('${video.filename}', 'extract_faces', this.checked)">
