@@ -824,7 +824,7 @@
 
                 <p><strong>Main Review Actions:</strong></p>
                 <ul>
-                    <li><strong>This is / Mark Selected</strong> - Mark selected videos as the chosen profile, extract positive training frames, sort the video, and remove it from review</li>
+                    <li><strong>This is / Confirm</strong> - Confirm selected videos as the chosen profile, extract positive training frames, sort the video, and remove it from review</li>
                     <li><strong>Reject</strong> - Remove selected videos from review without training</li>
                     <li><strong>Training Options</strong> - Use detailed per-video training choices when a video should train more than one profile</li>
                 </ul>
@@ -847,7 +847,7 @@
                 <div class="info-box">
                     <strong>💡 Pro Tip:</strong> When reviewing "unknown" videos:
                     <ol>
-                        <li>Select videos that clearly ARE your target animal and use <strong>Mark Selected</strong></li>
+                        <li>Select videos that clearly ARE your target animal and use <strong>Confirm</strong></li>
                         <li>Use <strong>Training Options</strong> when the same video should be positive for one profile and negative for another</li>
                         <li>Reject clips that are not useful training material</li>
                     </ol>
@@ -901,10 +901,10 @@
                     <select id="profileSelect" onchange="updateReviewActionLabels()">
                         <option value="">-- Select Profile --</option>
                     </select>
-                    <button class="btn btn-success btn-small" onclick="markAsProfile()" id="markAsBtn" disabled>Mark Selected</button>
+                    <button class="btn btn-success btn-small" onclick="markAsProfile()" id="markAsBtn" title="Confirm and store as selected profile" aria-label="Confirm and store as selected profile" disabled>Confirm</button>
                 </div>
-                <button class="btn btn-danger btn-small" onclick="rejectVideos()" id="rejectBtn" disabled>Reject</button>
-                <button class="btn btn-advanced btn-small" onclick="openAdvancedReview()" id="advancedReviewBtn" disabled>Training Options</button>
+                <button class="btn btn-danger btn-small" onclick="rejectVideos()" id="rejectBtn" title="Reject selected videos and remove them from review without training" aria-label="Reject selected videos and remove them from review without training" disabled>Reject</button>
+                <button class="btn btn-advanced btn-small" onclick="openAdvancedReview()" id="advancedReviewBtn" title="Open advanced training options for positive and negative profile training" aria-label="Open advanced training options for positive and negative profile training" disabled>Training Options</button>
             </div>
         </div>
 
@@ -1124,7 +1124,7 @@
         function getActionLabel(action, config = {}) {
             if (action === 'advanced') {
                 if (config.extract_positive && config.negative_profile_ids?.length) return 'Training: Positive + Negative';
-                if (config.extract_positive) return 'Mark as Profile';
+                if (config.extract_positive) return 'Confirm';
                 if (config.negative_profile_ids?.length) return 'Training: Negative';
                 if (config.delete_after) return 'Reject';
                 return 'Training Options';
@@ -1132,10 +1132,10 @@
             const labels = {
                 'confirm': 'Confirm',
                 'reject': 'Reject',
-                'assign_positive': 'Mark as Profile',
+                'assign_positive': 'Confirm',
                 'assign_negative': 'Training: Negative',
                 'assign_both': 'Training: Positive + Negative',
-                'assign_face_positive': 'Mark as Person',
+                'assign_face_positive': 'Confirm Person',
                 'assign_face_negative': 'Training: Negative Face',
                 'confirm_person': 'Confirm Person'
             };
@@ -1549,8 +1549,9 @@
             const markAsBtn = document.getElementById('markAsBtn');
             const select = document.getElementById('profileSelect');
             if (!markAsBtn || !select) return;
-            const selectedName = select.options[select.selectedIndex]?.text || '';
-            markAsBtn.textContent = selectedName && select.value ? `Mark as ${selectedName}` : 'Mark Selected';
+            markAsBtn.textContent = 'Confirm';
+            markAsBtn.title = 'Confirm and store as selected profile';
+            markAsBtn.setAttribute('aria-label', 'Confirm and store as selected profile');
         }
 
         async function loadCategories() {
