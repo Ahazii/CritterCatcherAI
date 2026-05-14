@@ -2366,7 +2366,7 @@ async def create_animal_profile(request: dict):
         yolo_categories = request.get('yolo_categories', [])
         text_description = request.get('text_description', '')
         confidence_threshold = request.get('confidence_threshold', 0.80)
-        auto_approval_enabled = request.get('auto_approval_enabled', True)
+        auto_approval_enabled = request.get('auto_approval_enabled', False)
         requires_manual_confirmation = request.get('requires_manual_confirmation', True)
         retraining_threshold = request.get('retraining_threshold', 0.85)
         confirmation_count_recommendation = request.get('confirmation_count_recommendation', 50)

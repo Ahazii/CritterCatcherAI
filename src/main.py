@@ -947,9 +947,7 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                     "profile_name": profile.name,
                                     "confidence": avg_confidence,
                                     "method": method,
-                                    "threshold": profile.confidence_threshold,
-                                    "auto_approval_enabled": profile.auto_approval_enabled,
-                                    "requires_manual_confirmation": profile.requires_manual_confirmation
+                                    "threshold": profile.confidence_threshold
                                 })
                             
                             # Log GPU operation end for CLIP analysis
@@ -972,53 +970,14 @@ def process_videos(config: dict, manual_trigger: bool = False):
                                     "auto_approved": False
                                 }
                                 
-                                # HYBRID WORKFLOW: CLIP Refinement - decide if video moves to sorted
-                                should_move_to_sorted = False
-                                
-                                if best_result['requires_manual_confirmation']:
-                                    # Manual confirmation required -> stays in YOLO review folder
-                                    logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Staying in YOLO review (manual confirmation required)")
-                                    final_destination = video_path  # Keep in current YOLO category folder
-                                elif best_result['confidence'] >= best_result['threshold']:
-                                    if best_result['auto_approval_enabled']:
-                                        media_enabled = media_pathway.get("enabled", True)
-                                        if not media_enabled:
-                                            logger.info("MEDIA PATHWAY: Disabled, leaving in review")
-                                            final_destination = video_path
-                                        elif not _camera_allowed(media_pathway, camera_name):
-                                            logger.info(f"MEDIA PATHWAY: Camera '{camera_name}' not enabled, leaving in review")
-                                            final_destination = video_path
-                                        elif not _profile_allowed(media_pathway, best_result['profile_id']):
-                                            logger.info(f"MEDIA PATHWAY: Profile '{best_result['profile_id']}' not enabled, leaving in review")
-                                            final_destination = video_path
-                                        else:
-                                            # High confidence + auto-approval -> move to sorted
-                                            should_move_to_sorted = True
-                                            clip_stage2_result['auto_approved'] = True
-                                            logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Moving to sorted (confidence: {best_result['confidence']:.2f})")
-                                    else:
-                                        # High confidence but no auto-approval -> stays in YOLO review
-                                        logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Staying in YOLO review (auto-approval disabled)")
-                                        final_destination = video_path
-                                else:
-                                    # Below threshold -> stays in YOLO review folder
-                                    logger.info(f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': Below threshold ({best_result['confidence']:.2f} < {best_result['threshold']}), staying in YOLO review")
-                                    final_destination = video_path
-                                
-                                # Move to sorted if approved
-                                if should_move_to_sorted:
-                                    try:
-                                        final_destination = video_sorter.move_to_clip_sorted(
-                                            video_path,
-                                            clip_profile_id=best_result['profile_id'],
-                                            confidence=best_result['confidence'],
-                                            metadata={"clip_results": profile_results}
-                                        )
-                                        logger.info(f"Video moved to /data/sorted/{best_result['profile_id']}/")
-                                        video_path = final_destination  # Update path
-                                    except Exception as move_err:
-                                        logger.error(f"Failed to move video to sorted: {move_err}", exc_info=True)
-                                        final_destination = video_path  # Fall back to current location
+                                # CLIP now informs review grouping only. Sorting and training happen
+                                # through the Review page, where the user can assign one positive
+                                # profile and optional negative profiles for the same video.
+                                final_destination = video_path
+                                logger.info(
+                                    f"HYBRID WORKFLOW - CLIP '{best_result['profile_name']}': "
+                                    "staying in review for explicit training/sorting"
+                                )
                         
                         except Exception as clip_err:
                             logger.error(f"CLIP Stage 2 failed: {clip_err}", exc_info=True)

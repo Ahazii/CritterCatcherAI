@@ -701,63 +701,6 @@
                     </small>
                 </div>
 
-                <!-- Confidence Threshold -->
-                <div class="form-group">
-                    <label for="confidenceThreshold">
-                        Auto-Approval Confidence Threshold: <span id="thresholdValue">0.80</span>
-                    </label>
-                    <div class="slider-container">
-                        <input type="range" id="confidenceThreshold" min="0.5" max="0.99" step="0.01" 
-                               value="0.80" onchange="updateThresholdDisplay()">
-                        <span id="thresholdPercent">80%</span>
-                    </div>
-                    <small>Frames with confidence ≥ threshold will be auto-sorted</small>
-                </div>
-
-                <!-- Requires Manual Confirmation Toggle -->
-                <div class="form-group">
-                    <label class="toggle-switch">
-                        <span>Requires Manual Confirmation</span>
-                        <label class="switch">
-                            <input type="checkbox" id="requiresManualConfirmation" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </label>
-                    <small>When enabled, ALL videos go to review regardless of confidence. Disable to allow auto-sorting of high-confidence matches.</small>
-                </div>
-
-                <!-- Auto-Approval Toggle (only applies if manual confirmation is disabled) -->
-                <div class="form-group">
-                    <label class="toggle-switch">
-                        <span>Auto-Approval Enabled</span>
-                        <label class="switch">
-                            <input type="checkbox" id="autoApprovalEnabled" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </label>
-                    <small>When enabled (and manual confirmation disabled), high-confidence videos auto-sort to sorted folder. Otherwise they go to review.</small>
-                </div>
-
-                <!-- Retraining Settings -->
-                <div class="form-group">
-                    <label for="retrainingThreshold">
-                        Retraining Accuracy Threshold: <span id="retrainingValue">0.85</span>
-                    </label>
-                    <div class="slider-container">
-                        <input type="range" id="retrainingThreshold" min="0.5" max="0.99" step="0.01" 
-                               value="0.85" onchange="updateRetrainingDisplay()">
-                        <span id="retrainingPercent">85%</span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="confirmationCountRecommendation">
-                        Confirmations before retraining recommendation
-                    </label>
-                    <input type="number" id="confirmationCountRecommendation" min="10" max="500" 
-                           value="50" step="10">
-                </div>
-
                 <div class="modal-footer">
                     <button type="button" class="btn" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-success">Save Profile</button>
@@ -861,15 +804,6 @@
                     const profile = data.profile;
                     document.getElementById('profileName').value = profile.name;
                     document.getElementById('textDescription').value = profile.text_description;
-                    document.getElementById('confidenceThreshold').value = profile.confidence_threshold;
-                    document.getElementById('retrainingThreshold').value = profile.retraining_threshold;
-                    document.getElementById('confirmationCountRecommendation').value = 
-                        profile.confirmation_count_recommendation;
-                    // Handle new fields with defaults for backward compatibility
-                    document.getElementById('requiresManualConfirmation').checked = 
-                        profile.requires_manual_confirmation !== undefined ? profile.requires_manual_confirmation : true;
-                    document.getElementById('autoApprovalEnabled').checked = 
-                        profile.auto_approval_enabled !== undefined ? profile.auto_approval_enabled : true;
                     document.getElementById('useTextFallback').checked = 
                         profile.use_text_fallback !== undefined ? profile.use_text_fallback : true;
 
@@ -878,8 +812,6 @@
                         cb.checked = profile.yolo_categories.includes(cb.value);
                     });
 
-                    updateThresholdDisplay();
-                    updateRetrainingDisplay();
                     updateTokenCount();  // Update token count for loaded description
                     document.getElementById('profileModal').classList.add('active');
                 })
@@ -891,18 +823,6 @@
             currentProfileId = null;
         }
 
-        function updateThresholdDisplay() {
-            const value = parseFloat(document.getElementById('confidenceThreshold').value);
-            document.getElementById('thresholdValue').textContent = value.toFixed(2);
-            document.getElementById('thresholdPercent').textContent = (value * 100).toFixed(0) + '%';
-        }
-
-        function updateRetrainingDisplay() {
-            const value = parseFloat(document.getElementById('retrainingThreshold').value);
-            document.getElementById('retrainingValue').textContent = value.toFixed(2);
-            document.getElementById('retrainingPercent').textContent = (value * 100).toFixed(0) + '%';
-        }
-        
         function updateTokenCount() {
             const text = document.getElementById('textDescription').value;
             // Approximate CLIP tokenization: split on whitespace and punctuation
@@ -952,12 +872,7 @@
                 name: document.getElementById('profileName').value,
                 yolo_categories: selectedCategories,
                 text_description: textDescription,
-                confidence_threshold: parseFloat(document.getElementById('confidenceThreshold').value),
-                requires_manual_confirmation: document.getElementById('requiresManualConfirmation').checked,
-                auto_approval_enabled: document.getElementById('autoApprovalEnabled').checked,
-                use_text_fallback: document.getElementById('useTextFallback').checked,
-                retraining_threshold: parseFloat(document.getElementById('retrainingThreshold').value),
-                confirmation_count_recommendation: parseInt(document.getElementById('confirmationCountRecommendation').value)
+                use_text_fallback: document.getElementById('useTextFallback').checked
             };
 
             const url = currentProfileId 
@@ -1023,20 +938,6 @@
                                     <div class="stat">
                                         <div class="stat-value">${profile.rejected_count}</div>
                                         <div class="stat-label">Negative Images</div>
-                                    </div>
-                                </div>
-                                <div style="display: flex; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                                    <div style="background: var(--bg-secondary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem;">
-                                        <strong>Manual Confirmation:</strong> 
-                                        <span style="color: ${profile.requires_manual_confirmation ? 'var(--warning-color)' : 'var(--success-color)'}; font-weight: bold;">
-                                            ${profile.requires_manual_confirmation ? 'Required' : 'Optional'}
-                                        </span>
-                                    </div>
-                                    <div style="background: var(--bg-secondary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem;">
-                                        <strong>Auto-Approval:</strong> 
-                                        <span style="color: ${profile.auto_approval_enabled ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: bold;">
-                                            ${profile.auto_approval_enabled ? 'Enabled' : 'Disabled'}
-                                        </span>
                                     </div>
                                 </div>
                                 <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">

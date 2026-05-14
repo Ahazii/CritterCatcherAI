@@ -282,23 +282,15 @@ class TwoStageProcessor:
         sorted_dir.mkdir(parents=True, exist_ok=True)
         review_dir.mkdir(parents=True, exist_ok=True)
         
-        # Process high confidence frames
+        # Process high confidence frames. Profile auto-approval settings are no
+        # longer user-facing; review/training decisions happen in the Review UI.
         for frame_path, score in processing_results['high_confidence']:
             try:
-                if profile.auto_approval_enabled:
-                    # Move to sorted
-                    dest_path = sorted_dir / Path(frame_path).name
-                    shutil.copy2(frame_path, dest_path)
-                    result.sorted_frames.append(str(dest_path))
-                    result.sorted_count += 1
-                    self._save_frame_metadata(dest_path, score, profile.text_description)
-                else:
-                    # Move to review even if high confidence
-                    dest_path = review_dir / Path(frame_path).name
-                    shutil.copy2(frame_path, dest_path)
-                    result.review_frames.append(str(dest_path))
-                    result.review_count += 1
-                    self._save_frame_metadata(dest_path, score, profile.text_description)
+                dest_path = review_dir / Path(frame_path).name
+                shutil.copy2(frame_path, dest_path)
+                result.review_frames.append(str(dest_path))
+                result.review_count += 1
+                self._save_frame_metadata(dest_path, score, profile.text_description)
             
             except Exception as e:
                 logger.warning(f"Error organizing frame {frame_path}: {e}")

@@ -16,7 +16,7 @@ class AnimalProfile:
     yolo_categories: List[str]
     text_description: str
     confidence_threshold: float = 0.80
-    auto_approval_enabled: bool = True
+    auto_approval_enabled: bool = False
     requires_manual_confirmation: bool = True
     enabled: bool = True
     confirmed_count: int = 0
