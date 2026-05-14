@@ -3422,6 +3422,245 @@ async def list_review_categories():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _clip_selected_profile(metadata: dict) -> Optional[str]:
+    """Return the selected CLIP profile id from review metadata, if present."""
+    clip_results = metadata.get("clip_results")
+    if not isinstance(clip_results, dict):
+        return None
+    selected_profile = clip_results.get("selected_profile")
+    return selected_profile if isinstance(selected_profile, str) and selected_profile else None
+
+
+def _clip_selected_profile_name(metadata: dict, selected_profile: str) -> str:
+    """Best-effort display name for a selected CLIP profile."""
+    clip_results = metadata.get("clip_results")
+    if isinstance(clip_results, dict):
+        for result in clip_results.get("clip_results", []):
+            if isinstance(result, dict) and result.get("profile_id") == selected_profile:
+                return result.get("profile_name") or selected_profile
+    return selected_profile.replace("_", " ").title()
+
+
+def _review_video_payload(video_file: Path, category: str, tracked_videos_dir: Path) -> dict:
+    """Build the JSON payload used by review video listing endpoints."""
+    metadata = {}
+    metadata_file = video_file.with_suffix(video_file.suffix + ".json")
+    if metadata_file.exists():
+        try:
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
+
+    tracked_filename = metadata.get("tracked_video_filename")
+    if not tracked_filename:
+        tracked_filename = f"tracked_{video_file.name}"
+
+    tracked_video_path = tracked_videos_dir / tracked_filename
+    has_tracked_video = tracked_video_path.exists()
+    selected_profile = _clip_selected_profile(metadata)
+
+    return {
+        "filename": video_file.name,
+        "category": category,
+        "camera": _extract_camera_name(video_file.name),
+        "detected_objects": metadata.get("all_detections", metadata.get("detected_objects", {})),
+        "yolo_category": metadata.get("yolo_category", category),
+        "yolo_confidence": metadata.get("yolo_confidence", 0.0),
+        "clip_results": metadata.get("clip_results"),
+        "clip_selected_profile": selected_profile,
+        "clip_selected_profile_name": _clip_selected_profile_name(metadata, selected_profile) if selected_profile else None,
+        "status": metadata.get("status", "pending_review"),
+        "timestamp": metadata.get("timestamp", ""),
+        "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
+        "tracked_video_filename": tracked_filename if has_tracked_video else None
+    }
+
+
+def _coerce_profile_ids(value) -> list:
+    """Normalize a profile id or profile id list to a clean list of ids."""
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
+def _ensure_profile_stats(profile_stats: dict, profile_id: str) -> dict:
+    if profile_id not in profile_stats:
+        profile_stats[profile_id] = {"confirmed": 0, "rejected": 0, "frames": 0}
+    return profile_stats[profile_id]
+
+
+def _copy_training_frame(frame_path: Path, dest_frame_path: Path):
+    """Copy a temp frame into /data without preserving metadata that SMB may reject."""
+    shutil.copyfile(frame_path, dest_frame_path)
+    try:
+        frame_path.unlink()
+    except Exception as cleanup_err:
+        logger.debug(f"Could not remove temporary frame {frame_path}: {cleanup_err}")
+
+
+def _extract_profile_training_frames(
+    video_path: Path,
+    filename: str,
+    category: str,
+    profile_id: str,
+    label: str,
+    max_frames: int,
+) -> int:
+    """Extract and save profile training frames for one video/profile/label."""
+    if label not in {"positive", "negative"}:
+        raise ValueError(f"Invalid training label: {label}")
+
+    dest_subdir = "confirmed" if label == "positive" else "rejected"
+    dest_dir = Path("/data/training") / profile_id / dest_subdir
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        import stat
+        dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+    except Exception as perm_err:
+        logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
+
+    temp_dir = Path(tempfile.mkdtemp(prefix=f"{label}_frames_"))
+    try:
+        frame_paths, frame_scores = _extract_training_frames(
+            video_path,
+            temp_dir,
+            max_frames=max_frames,
+            profile_id=profile_id
+        )
+
+        safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
+        for frame_idx, frame_path in enumerate(frame_paths):
+            suffix = "pos" if label == "positive" else "neg"
+            frame_name = f"{safe_stem}_{suffix}_{frame_idx:06d}.jpg"
+            dest_frame_path = _unique_destination_path(dest_dir, frame_name)
+            _copy_training_frame(frame_path, dest_frame_path)
+
+            metadata = {
+                "source_video": filename,
+                "profile_id": profile_id,
+                "category": category,
+                "frame_index": frame_idx,
+                "label": label,
+                "confidence": frame_scores.get(frame_path, 0.0),
+                "selection_method": "profile_scored" if frame_scores else "even_sample",
+                "timestamp": datetime.now().isoformat()
+            }
+            metadata_path = Path(str(dest_frame_path) + ".json")
+            with open(metadata_path, "w") as metadata_file:
+                json.dump(metadata, metadata_file, indent=2)
+
+        logger.info(f"Extracted {len(frame_paths)} {label} frames for {profile_id} from {filename}")
+        return len(frame_paths)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.get("/api/review/profile-groups")
+async def list_review_profile_groups():
+    """List CLIP-selected profile groups across all review categories."""
+    try:
+        review_base = Path("/data/review")
+        if not review_base.exists():
+            return {"status": "success", "groups": [], "total_videos": 0}
+
+        groups = {}
+        for metadata_file in review_base.rglob("*.mp4.json"):
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load metadata for {metadata_file.name}: {e}")
+                continue
+
+            selected_profile = _clip_selected_profile(metadata)
+            if not selected_profile:
+                continue
+
+            video_path = metadata_file.with_suffix("")
+            if not video_path.exists():
+                continue
+
+            category = str(video_path.parent.relative_to(review_base)).replace("\\", "/")
+            group = groups.setdefault(selected_profile, {
+                "profile_id": selected_profile,
+                "profile_name": _clip_selected_profile_name(metadata, selected_profile),
+                "video_count": 0,
+                "categories": {}
+            })
+            group["video_count"] += 1
+            group["categories"][category] = group["categories"].get(category, 0) + 1
+
+        profile_groups = sorted(groups.values(), key=lambda x: x["profile_name"].lower())
+        return {
+            "status": "success",
+            "groups": profile_groups,
+            "total_videos": sum(group["video_count"] for group in profile_groups)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list review profile groups: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/review/profile-groups/{profile_id}/videos")
+async def list_review_profile_group_videos(profile_id: str, camera: Optional[str] = None):
+    """List review videos whose CLIP metadata selected the requested profile."""
+    try:
+        if not profile_id or "/" in profile_id or "\\" in profile_id or ".." in profile_id:
+            raise HTTPException(status_code=400, detail="Invalid profile id")
+
+        review_base = Path("/data/review")
+        tracked_videos_dir = Path("/data/objects/detected/annotated_videos")
+        if not review_base.exists():
+            return {"status": "success", "profile_id": profile_id, "video_count": 0, "videos": [], "cameras": []}
+
+        videos = []
+        cameras = set()
+
+        for metadata_file in sorted(review_base.rglob("*.mp4.json")):
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load metadata for {metadata_file.name}: {e}")
+                continue
+
+            if _clip_selected_profile(metadata) != profile_id:
+                continue
+
+            video_file = metadata_file.with_suffix("")
+            if not video_file.exists():
+                continue
+
+            camera_name = _extract_camera_name(video_file.name)
+            if camera_name:
+                cameras.add(camera_name)
+            if camera and camera_name != camera:
+                continue
+
+            category = str(video_file.parent.relative_to(review_base)).replace("\\", "/")
+            videos.append(_review_video_payload(video_file, category, tracked_videos_dir))
+
+        return {
+            "status": "success",
+            "profile_id": profile_id,
+            "video_count": len(videos),
+            "cameras": sorted(cameras),
+            "camera": camera,
+            "videos": videos
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list review profile group videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/review/categories/{category:path}/videos")
 async def list_category_videos(category: str, camera: Optional[str] = None):
     """List all videos in a review category."""
@@ -3441,39 +3680,7 @@ async def list_category_videos(category: str, camera: Optional[str] = None):
             if camera and camera_name != camera:
                 continue
 
-            # Try to load metadata
-            metadata = {}
-            metadata_file = video_file.with_suffix(video_file.suffix + ".json")
-            if metadata_file.exists():
-                try:
-                    with open(metadata_file, 'r') as f:
-                        metadata = json.load(f)
-                except Exception as e:
-                    logger.warning(f"Failed to load metadata for {video_file.name}: {e}")
-
-            # Check if tracked video exists
-            # First try metadata, fall back to naming convention
-            tracked_filename = metadata.get("tracked_video_filename")
-            if not tracked_filename:
-                # Fall back to old naming convention for backward compatibility
-                tracked_filename = f"tracked_{video_file.name}"
-
-            tracked_video_path = tracked_videos_dir / tracked_filename
-            has_tracked_video = tracked_video_path.exists()
-
-            videos.append({
-                "filename": video_file.name,
-                "category": category,
-                "camera": camera_name,
-                "detected_objects": metadata.get("all_detections", metadata.get("detected_objects", {})),
-                "yolo_category": metadata.get("yolo_category", category),
-                "yolo_confidence": metadata.get("yolo_confidence", 0.0),
-                "clip_results": metadata.get("clip_results"),
-                "status": metadata.get("status", "pending_review"),
-                "timestamp": metadata.get("timestamp", ""),
-                "size_mb": round(video_file.stat().st_size / (1024*1024), 2),
-                "tracked_video_filename": tracked_filename if has_tracked_video else None
-            })
+            videos.append(_review_video_payload(video_file, category, tracked_videos_dir))
 
         return {
             "status": "success",
@@ -4940,7 +5147,7 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                 if not category_parts or ".." in category_parts:
                     raise ValueError("Invalid review category")
                 review_path = Path("/data/review").joinpath(*category_parts)
-                sorted_path = Path("/data/sorted") / profile_id
+                sorted_path = Path("/data/sorted/person") / profile_id
                 sorted_path.mkdir(parents=True, exist_ok=True)
 
                 # Set permissions on sorted folder
@@ -4968,14 +5175,14 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
 
                         # Extract positive training frames
                         if extract_frames and extract_type in ['positive', 'both']:
-                            positive_dir = Path("/data/face_training") / profile_id / "confirmed"
+                            positive_dir = Path(profile.training_images_path)
                             faces = extract_faces_from_video_sync(video_path, positive_dir, profile.name)
                             faces_extracted += faces
                             logger.info(f"Extracted {faces} positive faces from {filename} for {profile.name}")
 
                         # Extract negative training frames
                         if extract_frames and extract_type in ['negative', 'both']:
-                            negative_dir = Path("/data/face_training") / profile_id / "rejected"
+                            negative_dir = Path("/data/training/faces") / profile_id / "rejected"
                             faces = extract_faces_from_video_sync(video_path, negative_dir, profile.name)
                             faces_extracted += faces
                             logger.info(f"Extracted {faces} negative faces from {filename} for {profile.name}")
@@ -5399,6 +5606,8 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                         filename = action.get('filename')
                         category = action.get('category')
                         profile_id = action.get('profile_id')
+                        positive_profile_id = action.get('positive_profile_id')
+                        negative_profile_ids = _coerce_profile_ids(action.get('negative_profile_ids'))
                         extract_positive = action.get('extract_positive', False)
                         extract_negative = action.get('extract_negative', False)
                         move_to_sorted = action.get('move_to_sorted', False)
@@ -5425,103 +5634,47 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                             logger.debug(f"No actions selected for {filename}, skipping")
                             continue
 
-                        # Initialize profile stats if needed
-                        if profile_id and profile_id not in profile_stats:
-                            profile_stats[profile_id] = {"confirmed": 0, "rejected": 0, "frames": 0}
+                        if not positive_profile_id and profile_id and (extract_positive or move_to_sorted):
+                            positive_profile_id = profile_id
+
+                        if not negative_profile_ids and profile_id and extract_negative:
+                            negative_profile_ids = [profile_id]
+
+                        if positive_profile_id:
+                            _ensure_profile_stats(profile_stats, positive_profile_id)
+                        for negative_profile_id in negative_profile_ids:
+                            _ensure_profile_stats(profile_stats, negative_profile_id)
 
                         # Extract training frames (positive and/or negative)
-                        if (extract_positive or extract_negative) and profile_id:
+                        if extract_positive or extract_negative:
                             max_frames = _get_training_frame_limit()
 
                             # Extract positive frames
-                            if extract_positive:
-                                dest_dir = Path("/data/training") / profile_id / "confirmed"
-                                dest_dir.mkdir(parents=True, exist_ok=True)
-
-                                # Set permissions
-                                try:
-                                    import stat
-                                    dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                                except Exception as perm_err:
-                                    logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
-
-                                temp_dir = Path(tempfile.mkdtemp(prefix="positive_frames_"))
-                                try:
-                                    frame_paths, frame_scores = _extract_training_frames(
-                                        video_path,
-                                        temp_dir,
-                                        max_frames=max_frames,
-                                        profile_id=profile_id
-                                    )
-
-                                    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
-                                    for frame_idx, frame_path in enumerate(frame_paths):
-                                        frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
-                                        dest_frame_path = _unique_destination_path(dest_dir, frame_name)
-                                        shutil.move(frame_path, dest_frame_path)
-
-                                        metadata = {
-                                            "source_video": filename,
-                                            "profile_id": profile_id,
-                                            "frame_index": frame_idx,
-                                            "confidence": frame_scores.get(frame_path, 0.0),
-                                            "selection_method": "profile_scored" if frame_scores else "even_sample",
-                                            "timestamp": datetime.now().isoformat()
-                                        }
-                                        metadata_path = Path(str(dest_frame_path) + ".json")
-                                        with open(metadata_path, "w") as metadata_file:
-                                            json.dump(metadata, metadata_file, indent=2)
-
-                                    profile_stats[profile_id]["confirmed"] += len(frame_paths)
-                                    profile_stats[profile_id]["frames"] += len(frame_paths)
-                                    logger.info(f"Extracted {len(frame_paths)} positive frames for {profile_id} from {filename}")
-                                finally:
-                                    shutil.rmtree(temp_dir, ignore_errors=True)
+                            if extract_positive and positive_profile_id:
+                                frame_count = _extract_profile_training_frames(
+                                    video_path,
+                                    filename,
+                                    category,
+                                    positive_profile_id,
+                                    "positive",
+                                    max_frames
+                                )
+                                profile_stats[positive_profile_id]["confirmed"] += frame_count
+                                profile_stats[positive_profile_id]["frames"] += frame_count
 
                             # Extract negative frames
                             if extract_negative:
-                                dest_dir = Path("/data/training") / profile_id / "rejected"
-                                dest_dir.mkdir(parents=True, exist_ok=True)
-
-                                # Set permissions
-                                try:
-                                    import stat
-                                    dest_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                                except Exception as perm_err:
-                                    logger.warning(f"Could not set permissions on {dest_dir}: {perm_err}")
-
-                                temp_dir = Path(tempfile.mkdtemp(prefix="negative_frames_"))
-                                try:
-                                    frame_paths, frame_scores = _extract_training_frames(
+                                for negative_profile_id in negative_profile_ids:
+                                    frame_count = _extract_profile_training_frames(
                                         video_path,
-                                        temp_dir,
-                                        max_frames=max_frames,
-                                        profile_id=profile_id
+                                        filename,
+                                        category,
+                                        negative_profile_id,
+                                        "negative",
+                                        max_frames
                                     )
-
-                                    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem)[:64]
-                                    for frame_idx, frame_path in enumerate(frame_paths):
-                                        frame_name = f"{safe_stem}_frame_{frame_idx:06d}.jpg"
-                                        dest_frame_path = _unique_destination_path(dest_dir, frame_name)
-                                        shutil.move(frame_path, dest_frame_path)
-
-                                        metadata = {
-                                            "source_video": filename,
-                                            "profile_id": profile_id,
-                                            "frame_index": frame_idx,
-                                            "confidence": frame_scores.get(frame_path, 0.0),
-                                            "selection_method": "profile_scored" if frame_scores else "even_sample",
-                                            "timestamp": datetime.now().isoformat()
-                                        }
-                                        metadata_path = Path(str(dest_frame_path) + ".json")
-                                        with open(metadata_path, "w") as metadata_file:
-                                            json.dump(metadata, metadata_file, indent=2)
-
-                                    profile_stats[profile_id]["rejected"] += len(frame_paths)
-                                    profile_stats[profile_id]["frames"] += len(frame_paths)
-                                    logger.info(f"Extracted {len(frame_paths)} negative frames for {profile_id} from {filename}")
-                                finally:
-                                    shutil.rmtree(temp_dir, ignore_errors=True)
+                                    profile_stats[negative_profile_id]["rejected"] += frame_count
+                                    profile_stats[negative_profile_id]["frames"] += frame_count
 
                         # Extract faces (for person videos)
                         if extract_faces and (category == 'person' or category.startswith('person/')):
@@ -5546,8 +5699,8 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                 logger.warning(f"Failed to extract faces from {filename}: {face_err}")
 
                         # Move to sorted (copy video)
-                        if move_to_sorted and profile_id:
-                            sorted_dir = Path("/data/sorted") / profile_id
+                        if move_to_sorted and positive_profile_id:
+                            sorted_dir = Path("/data/sorted") / positive_profile_id
                             sorted_dir.mkdir(parents=True, exist_ok=True)
 
                             # Set permissions
@@ -5570,15 +5723,15 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                                     counter += 1
 
                             try:
-                                shutil.copy2(str(video_path), str(sorted_video_path))
+                                shutil.copyfile(str(video_path), str(sorted_video_path))
                                 sorted_copy_success = True
-                                logger.info(f"Copied video to sorted/{profile_id}: {filename}")
+                                logger.info(f"Copied video to sorted/{positive_profile_id}: {filename}")
 
                                 # Copy metadata if exists
                                 metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                                 if metadata_path.exists():
                                     sorted_metadata_path = sorted_video_path.with_suffix(sorted_video_path.suffix + ".json")
-                                    shutil.copy2(str(metadata_path), str(sorted_metadata_path))
+                                    shutil.copyfile(str(metadata_path), str(sorted_metadata_path))
                             except Exception as copy_err:
                                 logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
 
