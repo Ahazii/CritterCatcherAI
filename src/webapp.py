@@ -8,6 +8,7 @@ import asyncio
 import re
 import tempfile
 import shutil
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -3799,41 +3800,99 @@ async def serve_face_image(filename: str):
 
 
 @app.get("/api/review/thumbnail/{filename}")
-async def serve_video_thumbnail(filename: str):
-    """Generate and serve a thumbnail for a video file."""
+async def serve_video_thumbnail(filename: str, category: Optional[str] = None):
+    """Generate and serve a cached thumbnail for a review video."""
     try:
         import cv2
-        import tempfile
 
-        # Try to find video in review folders
-        review_base = Path("/data/review")
-        video_path = None
+        if not filename or "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
 
-        for category_dir in review_base.rglob(filename):
-            if category_dir.is_file() and category_dir.suffix == '.mp4':
-                video_path = category_dir
-                break
+        review_base = Path("/data/review").resolve()
 
-        if not video_path or not video_path.exists():
+        if category:
+            safe_category = category.replace("\\", "/").strip("/")
+            category_parts = [part for part in safe_category.split("/") if part]
+            if not category_parts or ".." in category_parts:
+                raise HTTPException(status_code=400, detail="Invalid category")
+
+            video_path = (review_base.joinpath(*category_parts) / filename).resolve()
+            if not video_path.is_relative_to(review_base):
+                raise HTTPException(status_code=400, detail="Invalid category or filename")
+        else:
+            video_path = None
+            for candidate in review_base.rglob("*.mp4"):
+                if candidate.name == filename:
+                    video_path = candidate.resolve()
+                    break
+
+        if not video_path or not video_path.exists() or video_path.suffix.lower() != ".mp4":
             raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
 
-        # Extract first frame as thumbnail
-        cap = cv2.VideoCapture(str(video_path))
-        ret, frame = cap.read()
-        cap.release()
+        stat = video_path.stat()
+        relative_key = video_path.relative_to(review_base).as_posix()
+        cache_key = hashlib.sha1(f"{relative_key}|{stat.st_size}|{stat.st_mtime_ns}".encode("utf-8")).hexdigest()
+        safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", video_path.stem)[:80]
+        cache_dir = Path("/data/review_thumbnails")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            import stat as stat_module
+            cache_dir.chmod(stat_module.S_IRWXU | stat_module.S_IRWXG | stat_module.S_IRWXO)
+        except Exception as perm_err:
+            logger.warning(f"Could not set permissions on {cache_dir}: {perm_err}")
+        thumbnail_path = cache_dir / f"{safe_stem}_{cache_key}.jpg"
 
-        if not ret:
-            raise HTTPException(status_code=500, detail="Failed to read video frame")
+        if not thumbnail_path.exists():
+            cap = cv2.VideoCapture(str(video_path))
+            best_frame = None
+            best_score = -1.0
 
-        # Save frame as temporary JPEG
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            cv2.imwrite(tmp.name, frame)
-            tmp_path = tmp.name
+            try:
+                fps = cap.get(cv2.CAP_PROP_FPS) or 0
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+                duration = frame_count / fps if fps > 0 else 0
+                candidate_seconds = [0.3, 1.0, 2.0, 4.0, 7.0]
+                if duration:
+                    candidate_seconds = [min(second, max(duration - 0.1, 0)) for second in candidate_seconds]
+
+                for second in candidate_seconds:
+                    cap.set(cv2.CAP_PROP_POS_MSEC, max(second, 0) * 1000)
+                    ret, frame = cap.read()
+                    if not ret or frame is None:
+                        continue
+
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    brightness = float(gray.mean())
+                    contrast = float(gray.std())
+                    visible_ratio = float((gray > 25).mean())
+                    score = (visible_ratio * 100.0) + brightness + contrast
+
+                    if score > best_score:
+                        best_score = score
+                        best_frame = frame
+
+                if best_frame is None:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ret, best_frame = cap.read()
+                    if not ret or best_frame is None:
+                        raise HTTPException(status_code=500, detail="Failed to read video frame")
+            finally:
+                cap.release()
+
+            height, width = best_frame.shape[:2]
+            if width > 360:
+                new_height = max(1, int(height * (360 / width)))
+                best_frame = cv2.resize(best_frame, (360, new_height), interpolation=cv2.INTER_AREA)
+
+            success = cv2.imwrite(str(thumbnail_path), best_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to write thumbnail")
 
         return FileResponse(
-            path=tmp_path,
+            path=str(thumbnail_path),
             media_type="image/jpeg",
-            filename=f"thumb_{filename}.jpg"
+            filename=f"thumb_{video_path.stem}.jpg",
+            headers={"Cache-Control": "public, max-age=86400"}
         )
     except HTTPException:
         raise

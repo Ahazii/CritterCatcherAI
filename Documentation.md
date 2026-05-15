@@ -104,24 +104,28 @@ Pathways (Media + Security)
 
 Review Actions (Training)
 
-Quick Actions (batch operations - all videos treated the same):
-- Confirm Videos: moves to /data/sorted/{category}/ without extracting training data.
-- Reject Videos: deletes videos, optionally saves as negative examples for a profile.
-- Assign to Profile: extracts frames as positive OR negative (all selected videos get same treatment).
+Review page performance:
+- Review cards use cached JPEG thumbnails from /data/review_thumbnails.
+- Videos keep preload disabled until the user presses play.
+- Thumbnails are generated once per video from a useful early frame, then reused.
 
-Advanced Review (per-video configuration):
-- Click "Advanced Review" button to configure each video individually.
-- Per-video controls:
-  - Profile selection (auto-suggested based on YOLO category)
-  - Extract Positive Training Frames → /data/training/{profile}/confirmed/
-  - Extract Negative Training Frames → /data/training/{profile}/rejected/
-  - Move to Sorted Folder → /data/sorted/{profile}/
-  - Delete After Processing
-  - Extract Faces (for person videos) → /data/training/faces/unassigned/
-- Quick action buttons apply same settings to all videos at once.
-- Perfect for "unknown" category where manual identification is needed.
-- Can assign different videos to different profiles in one operation.
-- Can extract both positive AND negative from the same video.
+Selection:
+- Click a video or its checkbox to select it.
+- Ctrl-click a second video to select every video between the previous click and the second click.
+- Select All and Deselect All are available for the current tab/filter.
+
+Quick Actions:
+- Confirm: treats selected videos as the selected profile, extracts positive training, copies videos to /data/sorted/{profile}/, and removes them from review after the sorted copy succeeds.
+- Reject: removes selected videos from review without training.
+- Training Options: applies one batch training decision to all selected videos.
+
+Training Options:
+- Positive profile dropdown: saves positive examples and sorts videos to that profile.
+- Negative profile dropdown: saves negative examples for that profile.
+- Remove from review: removes videos after training; when sorting first, removal only happens after the sorted copy succeeds.
+- Animal videos use animal profiles and store frames under /data/training/{profile}/confirmed or /data/training/{profile}/rejected.
+- Person videos use face/person profiles and store face crops under /data/training/faces/{profile}/confirmed or /data/training/faces/{profile}/rejected.
+- Animal and person videos cannot be mixed in the same Training Options batch because they train different systems.
 
 Training Data Requirements:
 - Positive examples: frames that CONTAIN the target animal ("Yes, this IS a hedgehog").
@@ -141,9 +145,10 @@ GET /api/dashboard/sorted-stats (time-based sorted video stats with auto/manual 
 GET /api/dashboard/review-stats (review queue stats by time in queue)
 GET /api/review/categories
 GET /api/review/categories/{category}/videos
+GET /api/review/thumbnail/{filename}?category={category}
 POST /api/review/confirm
 POST /api/review/reject
-POST /api/review/advanced-review (per-video actions with background tasks)
+POST /api/review/advanced-review (batch actions with background tasks)
 POST /api/process
 POST /api/stop
 POST /api/ring/authenticate

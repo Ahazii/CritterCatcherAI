@@ -201,6 +201,53 @@ No configuration changes needed. The system will:
 
 ---
 
+## Additional Improvements (May 15, 2026)
+
+### Change 5: Cached Review Thumbnails
+**Files:** `src/webapp.py`, `src/static/review.html`
+
+Review cards now use cached JPEG thumbnails instead of relying on browser video metadata loading.
+
+**What changed:**
+- Thumbnails are served from `/api/review/thumbnail/{filename}?category={category}`
+- Generated thumbnails are cached under `/data/review_thumbnails/`
+- The thumbnail generator samples several early frames and chooses a useful non-black frame
+- Review videos keep `preload="none"` until the user presses play
+
+**Benefits:**
+- Review grid remains fast
+- Cards no longer appear as black video boxes
+- Thumbnails work for animal and person review videos
+- The video file is not opened by the browser until playback
+
+### Change 6: Batch Training Options
+**Files:** `src/static/review.html`, `src/webapp.py`
+
+Training Options now applies one decision to the whole selected batch.
+
+**What changed:**
+- One positive profile dropdown
+- One negative profile dropdown
+- Both dropdowns show the same relevant profile set
+- Animal videos use animal profiles
+- Person videos use face/person profiles
+- Person and animal videos cannot be mixed in one Training Options batch
+
+**Benefits:**
+- Faster review workflow for groups of similar videos
+- Positive and negative selections are visually consistent
+- Person videos train face profiles instead of animal CLIP profiles
+
+### Change 7: Range Selection
+**File:** `src/static/review.html`
+
+The Review page now supports range selection:
+- Click a first video
+- Hold Ctrl and click a second video
+- All videos between those two cards are selected
+
+---
+
 ---
 
 ## Additional Improvements (April 1, 2026)

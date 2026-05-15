@@ -863,9 +863,10 @@
 
                 <p><strong>Main Review Actions:</strong></p>
                 <ul>
+                    <li><strong>Selecting videos</strong> - Click individual videos, use Select All, or Ctrl-click a second video to select the full range between two clicks</li>
                     <li><strong>This is / Confirm</strong> - Confirm selected videos as the chosen profile, extract positive training frames, sort the video, and remove it from review</li>
                     <li><strong>Reject</strong> - Remove selected videos from review without training</li>
-                    <li><strong>Training Options</strong> - Use detailed per-video training choices when a video should train more than one profile</li>
+                    <li><strong>Training Options</strong> - Apply one batch training choice when selected videos should train positive and/or negative profiles</li>
                 </ul>
 
                 <p><strong>Training Options:</strong></p>
@@ -1084,6 +1085,8 @@
         let profiles = [];
         let selectedReviewCamera = '';
         let videoLoadRequestId = 0;
+        let lastSelectedVideoIndex = null;
+        let thumbnailObserver = null;
         
         // Queue state management
         let queuedActions = new Map(); // Map<filename, {category, action, config}>
@@ -1781,6 +1784,7 @@
             });
             
             selectedVideos.clear();
+            lastSelectedVideoIndex = null;
             
             // Update profile dropdown to reflect current category
             updateProfileDropdown();
@@ -1797,6 +1801,9 @@
         function stopGalleryVideoLoads(gallery) {
             gallery.querySelectorAll('video').forEach(video => {
                 try {
+                    if (thumbnailObserver) {
+                        thumbnailObserver.unobserve(video);
+                    }
                     video.pause();
                     video.removeAttribute('src');
                     video.load();
@@ -1897,6 +1904,37 @@
             }
         }
 
+        function getReviewThumbnailUrl(video) {
+            const category = video.category || currentCategory || '';
+            return `/api/review/thumbnail/${encodeURIComponent(video.filename)}?category=${encodeURIComponent(category)}`;
+        }
+
+        function attachLazyPoster(videoElement, posterUrl) {
+            videoElement.dataset.poster = posterUrl;
+
+            if (!('IntersectionObserver' in window)) {
+                videoElement.poster = posterUrl;
+                return;
+            }
+
+            if (!thumbnailObserver) {
+                thumbnailObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (!entry.isIntersecting) return;
+                        const video = entry.target;
+                        if (video.dataset.poster && !video.poster) {
+                            video.poster = video.dataset.poster;
+                        }
+                        thumbnailObserver.unobserve(video);
+                    });
+                }, {
+                    rootMargin: '300px 0px'
+                });
+            }
+
+            thumbnailObserver.observe(videoElement);
+        }
+
         function createVideoCard(video) {
             const card = document.createElement('div');
             card.className = 'video-card';
@@ -1918,6 +1956,7 @@
             videoElement.style.width = '100%';
             videoElement.style.height = '100%';
             videoElement.style.objectFit = 'cover';
+            attachLazyPoster(videoElement, getReviewThumbnailUrl(video));
             
             videoContainer.appendChild(videoElement);
             
@@ -1926,7 +1965,7 @@
             checkbox.className = 'select-checkbox';
             checkbox.onclick = (e) => {
                 e.stopPropagation();
-                toggleSelection(video.filename);
+                handleVideoSelection(video.filename, e);
             };
             
             const info = document.createElement('div');
@@ -1995,7 +2034,7 @@
                     if (queuedActions.has(video.filename)) {
                         removeFromQueue(video.filename);
                     } else {
-                        toggleSelection(video.filename);
+                        handleVideoSelection(video.filename, e);
                     }
                 }
             };
@@ -2079,30 +2118,62 @@
             });
         }
 
-        function toggleSelection(filename) {
-            if (selectedVideos.has(filename)) {
-                selectedVideos.delete(filename);
-            } else {
+        function setVideoSelected(filename, selected) {
+            if (selected) {
                 selectedVideos.add(filename);
+            } else {
+                selectedVideos.delete(filename);
             }
-            
+
             const card = document.querySelector(`[data-filename="${filename}"]`);
             if (card) {
-                card.classList.toggle('selected', selectedVideos.has(filename));
+                card.classList.toggle('selected', selected);
             }
-            
+        }
+
+        function selectVideoRange(startIndex, endIndex) {
+            const start = Math.min(startIndex, endIndex);
+            const end = Math.max(startIndex, endIndex);
+            for (let index = start; index <= end; index++) {
+                const video = videos[index];
+                if (video && !queuedActions.has(video.filename)) {
+                    setVideoSelected(video.filename, true);
+                }
+            }
+        }
+
+        function handleVideoSelection(filename, event = null) {
+            const currentIndex = videos.findIndex(video => video.filename === filename);
+            const isRangeSelection = Boolean(event?.ctrlKey) && lastSelectedVideoIndex !== null && currentIndex >= 0;
+
+            if (isRangeSelection) {
+                selectVideoRange(lastSelectedVideoIndex, currentIndex);
+            } else {
+                setVideoSelected(filename, !selectedVideos.has(filename));
+            }
+
+            if (currentIndex >= 0) {
+                lastSelectedVideoIndex = currentIndex;
+            }
+
             updateSelectionInfo();
+        }
+
+        function toggleSelection(filename) {
+            handleVideoSelection(filename);
         }
 
         function selectAll() {
             videos.forEach(video => selectedVideos.add(video.filename));
             document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
+            lastSelectedVideoIndex = videos.length ? 0 : null;
             updateSelectionInfo();
         }
 
         function deselectAll() {
             selectedVideos.clear();
             document.querySelectorAll('.video-card').forEach(card => card.classList.remove('selected'));
+            lastSelectedVideoIndex = null;
             updateSelectionInfo();
         }
 

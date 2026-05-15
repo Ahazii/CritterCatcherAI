@@ -74,7 +74,9 @@ Go to **YOLO Categories** tab and select which objects to detect:
 Videos are automatically sorted to `/data/review/{category}/`:
 - Navigate to **Review** tab
 - View videos by category (car, dog, bird, person, etc.)
-- Tracked videos show animated bounding boxes
+- Review cards show cached thumbnail previews so videos can stay unloaded until playback
+- Tracked videos show animated bounding boxes when opened
+- Click videos to select them; Ctrl-click a second video to select the full range between the two
 
 **📋 Queue System (Batch Processing):**
 - Select videos and queue multiple actions before executing
@@ -84,22 +86,15 @@ Videos are automatically sorted to `/data/review/{category}/`:
 - Click queued video to remove from queue
 
 **Quick Actions (Simple Batch Operations):**
-- **✓ Confirm Videos** - Move to sorted folder (for person videos with profile selected, extracts face training)
-- **✗ Reject Videos** - Delete videos (optionally save as negative training examples)
-- **→ Assign to Profile** - Extract frames as positive OR negative (all videos treated the same)
-  - For person videos: automatically uses face profiles
-  - For animal videos: uses animal profiles and supports positive/negative/both
-
-**🎯 Advanced Review (Per-Video Control):**
-- Click **Advanced Review** button for granular control over each video
-- Configure each video independently:
-  - Choose different profiles for different videos
-  - Extract positive training frames ("Yes, this IS a hedgehog")
-  - Extract negative training frames ("No, this is NOT a hedgehog")
-  - Both positive AND negative from the same video (edge cases)
-  - Move to sorted folder or delete after processing
-- **Perfect for "unknown" category** where you need to manually identify and sort videos
-- Quick action buttons to apply same settings to all videos at once
+- **Confirm** - Treat selected videos as the chosen profile, extract positive training, sort the videos, and remove them from review
+- **Reject** - Remove selected videos from review without training
+- **Training Options** - Apply one batch training decision to all selected videos:
+  - Positive profile dropdown
+  - Negative profile dropdown
+  - Optional removal from review after training
+  - For person videos: uses face/person profiles
+  - For animal videos: uses animal profiles
+  - Person and animal videos must be reviewed as separate batches because they train different systems
 
 **Understanding Training Data:**
 - **Positive examples** - Frames containing your target animal → `/data/training/{profile}/confirmed/`
