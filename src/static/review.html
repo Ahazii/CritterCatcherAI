@@ -1091,15 +1091,25 @@
         // Queue state management
         let queuedActions = new Map(); // Map<filename, {category, action, config}>
         let queueExpanded = false;
+        let queueRunInProgress = false;
+        let activeQueueRunFilenames = new Set();
         
         // Queue management functions
         function addToQueue(filename, category, action, config = {}) {
+            if (activeQueueRunFilenames.has(filename)) {
+                alert('That video is already being processed. Wait for this queue run to finish before changing it.');
+                return;
+            }
             queuedActions.set(filename, {category, action, config});
             updateQueueUI();
             updateVideoCardQueuedState(filename, true);
         }
         
-        function removeFromQueue(filename) {
+        function removeFromQueue(filename, force = false) {
+            if (!force && activeQueueRunFilenames.has(filename)) {
+                alert('That video is already being processed and cannot be removed from this run.');
+                return;
+            }
             queuedActions.delete(filename);
             updateQueueUI();
             updateVideoCardQueuedState(filename, false);
@@ -1107,15 +1117,25 @@
         
         function clearQueue() {
             if (queuedActions.size === 0) return;
-            
-            if (!confirm(`Clear all ${queuedActions.size} queued actions?`)) return;
-            
-            // Remove visual state from all queued videos
-            queuedActions.forEach((_, filename) => {
+
+            const clearableFilenames = Array.from(queuedActions.keys())
+                .filter(filename => !activeQueueRunFilenames.has(filename));
+
+            if (clearableFilenames.length === 0) {
+                alert('The remaining queued videos are already processing and cannot be cleared.');
+                return;
+            }
+
+            const message = queueRunInProgress
+                ? `Clear ${clearableFilenames.length} queued action(s) waiting for the next run? Processing videos will continue.`
+                : `Clear all ${clearableFilenames.length} queued actions?`;
+            if (!confirm(message)) return;
+
+            clearableFilenames.forEach(filename => {
+                queuedActions.delete(filename);
                 updateVideoCardQueuedState(filename, false);
             });
-            
-            queuedActions.clear();
+
             updateQueueUI();
         }
         
@@ -1150,7 +1170,7 @@
                 runQueueBtn.disabled = true;
             } else {
                 summaryDiv.style.display = 'block';
-                runQueueBtn.disabled = false;
+                runQueueBtn.disabled = queueRunInProgress;
             }
             
             // Build queue items list
@@ -1286,10 +1306,15 @@
         }
         
         async function runQueue() {
+            if (queueRunInProgress) return;
             if (queuedActions.size === 0) return;
             
-            const totalActions = queuedActions.size;
+            const actionsToRun = new Map(queuedActions);
+            const totalActions = actionsToRun.size;
             if (!confirm(`Execute ${totalActions} queued actions?`)) return;
+
+            queueRunInProgress = true;
+            activeQueueRunFilenames = new Set(actionsToRun.keys());
             
             const runBtn = document.getElementById('runQueueBtn');
             runBtn.disabled = true;
@@ -1312,7 +1337,7 @@
                 advanced_face: []
             };
             
-            queuedActions.forEach(({category, action, config}, filename) => {
+            actionsToRun.forEach(({category, action, config}, filename) => {
                 if (actionGroups[action]) {
                     actionGroups[action].push({filename, category, config});
                 }
@@ -1359,7 +1384,7 @@
                     try {
                         await processAdvancedReviewActionAndWait(item);
                         completed++;
-                        removeFromQueue(item.filename);
+                        removeFromQueue(item.filename, true);
                     } catch (error) {
                         console.error(`Failed to process ${item.filename}:`, error);
                         failed++;
@@ -1382,8 +1407,13 @@
                 console.error('Queue execution error:', error);
                 alert(`Queue execution failed: ${error.message}`);
             } finally {
-                // Clear queue and reload
-                queuedActions.clear();
+                actionsToRun.forEach((_, filename) => {
+                    if (queuedActions.has(filename)) {
+                        removeFromQueue(filename, true);
+                    }
+                });
+                queueRunInProgress = false;
+                activeQueueRunFilenames.clear();
                 runBtn.textContent = '⏳ Refreshing...';
                 await loadCategories();
                 
@@ -1511,7 +1541,7 @@
                 }
                 
                 // Remove from queue after completion
-                filenames.forEach(f => removeFromQueue(f));
+                filenames.forEach(f => removeFromQueue(f, true));
             }
         }
         
@@ -1596,7 +1626,7 @@
                     await waitForTaskCompletion(result.task_id);
                 }
 
-                group.filenames.forEach(filename => removeFromQueue(filename));
+                group.filenames.forEach(filename => removeFromQueue(filename, true));
             }
         }
 

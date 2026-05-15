@@ -3499,7 +3499,7 @@ def _copy_training_frame(frame_path: Path, dest_frame_path: Path):
     """Copy a temp frame into /data without preserving metadata that SMB may reject."""
     shutil.copyfile(frame_path, dest_frame_path)
     try:
-        frame_path.unlink()
+        Path(frame_path).unlink()
     except Exception as cleanup_err:
         logger.debug(f"Could not remove temporary frame {frame_path}: {cleanup_err}")
 
