@@ -5114,24 +5114,57 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
 
     try:
         filenames = request.get('filenames', [])
+        category = request.get('category', 'person/unknown')
         profile_id = request.get('profile_id')
+        positive_profile_id = request.get('positive_profile_id')
+        negative_profile_ids = _coerce_profile_ids(request.get('negative_profile_ids'))
+        negative_profile_id = request.get('negative_profile_id')
+        if negative_profile_id and negative_profile_id not in negative_profile_ids:
+            negative_profile_ids.append(negative_profile_id)
         extract_frames = bool(request.get('extract_frames', True))
-        extract_type = request.get('extract_type', 'positive')  # 'positive', 'negative', or 'both'
+        extract_type = request.get('extract_type')
+        if extract_type is None:
+            extract_type = 'positive' if profile_id and not negative_profile_ids and not positive_profile_id else None
+
+        if extract_type:
+            if extract_type not in ['positive', 'negative', 'both']:
+                raise HTTPException(status_code=400, detail="extract_type must be 'positive', 'negative', or 'both'")
+            if extract_type in ['positive', 'both'] and not positive_profile_id:
+                positive_profile_id = profile_id
+            if extract_type in ['negative', 'both'] and not negative_profile_ids and profile_id:
+                negative_profile_ids = [profile_id]
+
+        extract_positive = bool(request.get('extract_positive', extract_type in ['positive', 'both']))
+        extract_negative = bool(request.get('extract_negative', extract_type in ['negative', 'both'] or bool(negative_profile_ids)))
+        move_to_sorted = bool(request.get('move_to_sorted', extract_positive))
+        remove_from_review_requested = bool(request.get('remove_from_review', move_to_sorted))
+        delete_after = bool(request.get('delete_after', extract_type == 'negative'))
 
         if not filenames:
             raise HTTPException(status_code=400, detail="Missing filenames")
-        if not profile_id:
-            raise HTTPException(status_code=400, detail="Missing profile_id")
-        if extract_type not in ['positive', 'negative', 'both']:
-            raise HTTPException(status_code=400, detail="extract_type must be 'positive', 'negative', or 'both'")
+        if extract_positive and not positive_profile_id:
+            raise HTTPException(status_code=400, detail="Missing positive_profile_id")
+        if extract_negative and not negative_profile_ids:
+            raise HTTPException(status_code=400, detail="Missing negative_profile_id")
+        if not any([extract_positive, extract_negative, delete_after, remove_from_review_requested]):
+            raise HTTPException(status_code=400, detail="No face review action selected")
 
         # Get face profile
         if not face_profile_manager:
             raise HTTPException(status_code=500, detail="Face profile manager not initialized")
 
-        profile = face_profile_manager.get_profile(profile_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail=f"Face profile '{profile_id}' not found")
+        positive_profile = None
+        if positive_profile_id:
+            positive_profile = face_profile_manager.get_profile(positive_profile_id)
+            if not positive_profile:
+                raise HTTPException(status_code=404, detail=f"Face profile '{positive_profile_id}' not found")
+
+        negative_profiles = []
+        for negative_id in negative_profile_ids:
+            profile = face_profile_manager.get_profile(negative_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail=f"Face profile '{negative_id}' not found")
+            negative_profiles.append(profile)
 
         # Create background task
         task_id = task_tracker.create_task(total=len(filenames), message="Starting face extraction...")
@@ -5139,23 +5172,27 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
         def assign_face_profile_background():
             """Background task to extract faces and move videos."""
             try:
-                task_tracker.start_task(task_id, message=f"Extracting faces for '{profile.name}'...")
-                results = {"processed": [], "failed": [], "total_faces": 0}
+                task_tracker.start_task(task_id, message="Extracting faces for selected person profile(s)...")
+                results = {"processed": [], "failed": [], "positive_faces": 0, "negative_faces": 0}
+                profile_stats = {}
 
                 safe_category = str(category).replace("\\", "/").strip("/")
                 category_parts = [part for part in safe_category.split("/") if part]
                 if not category_parts or ".." in category_parts:
                     raise ValueError("Invalid review category")
                 review_path = Path("/data/review").joinpath(*category_parts)
-                sorted_path = Path("/data/sorted/person") / profile_id
-                sorted_path.mkdir(parents=True, exist_ok=True)
 
-                # Set permissions on sorted folder
-                try:
-                    import stat
-                    sorted_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                except Exception as e:
-                    logger.warning(f"Could not set permissions: {e}")
+                sorted_path = None
+                if positive_profile:
+                    sorted_path = Path("/data/sorted/person") / positive_profile.id
+                    sorted_path.mkdir(parents=True, exist_ok=True)
+
+                    # Set permissions on sorted folder
+                    try:
+                        import stat
+                        sorted_path.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    except Exception as e:
+                        logger.warning(f"Could not set permissions: {e}")
 
                 for idx, filename in enumerate(filenames, 1):
                     try:
@@ -5171,83 +5208,87 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
                             results["failed"].append({"filename": filename, "error": "File not found"})
                             continue
 
-                        faces_extracted = 0
+                        positive_faces_extracted = 0
+                        negative_faces_extracted = 0
+                        sorted_copy_success = False
 
                         # Extract positive training frames
-                        if extract_frames and extract_type in ['positive', 'both']:
-                            positive_dir = Path(profile.training_images_path)
-                            faces = extract_faces_from_video_sync(video_path, positive_dir, profile.name)
-                            faces_extracted += faces
-                            logger.info(f"Extracted {faces} positive faces from {filename} for {profile.name}")
+                        if extract_frames and extract_positive and positive_profile:
+                            positive_dir = Path(positive_profile.training_images_path)
+                            faces = extract_faces_from_video_sync(video_path, positive_dir, positive_profile.name)
+                            positive_faces_extracted += faces
+                            profile_stats.setdefault(positive_profile.id, {"confirmed": 0, "rejected": 0})
+                            profile_stats[positive_profile.id]["confirmed"] += faces
+                            logger.info(f"Extracted {faces} positive faces from {filename} for {positive_profile.name}")
 
                         # Extract negative training frames
-                        if extract_frames and extract_type in ['negative', 'both']:
-                            negative_dir = Path("/data/training/faces") / profile_id / "rejected"
-                            faces = extract_faces_from_video_sync(video_path, negative_dir, profile.name)
-                            faces_extracted += faces
-                            logger.info(f"Extracted {faces} negative faces from {filename} for {profile.name}")
+                        if extract_frames and extract_negative:
+                            for negative_profile in negative_profiles:
+                                negative_dir = Path("/data/training/faces") / negative_profile.id / "rejected"
+                                faces = extract_faces_from_video_sync(video_path, negative_dir, negative_profile.name)
+                                negative_faces_extracted += faces
+                                profile_stats.setdefault(negative_profile.id, {"confirmed": 0, "rejected": 0})
+                                profile_stats[negative_profile.id]["rejected"] += faces
+                                logger.info(f"Extracted {faces} negative faces from {filename} for {negative_profile.name}")
 
                         # Move video to sorted if positive or both
-                        if extract_type in ['positive', 'both']:
-                            dest_path = sorted_path / filename
-                            if dest_path.exists():
-                                counter = 1
-                                while dest_path.exists():
-                                    dest_path = sorted_path / f"{video_path.stem}_{counter}{video_path.suffix}"
-                                    counter += 1
+                        if move_to_sorted and sorted_path:
+                            dest_path = _unique_destination_path(sorted_path, filename)
+                            try:
+                                shutil.copyfile(str(video_path), str(dest_path))
+                                sorted_copy_success = True
 
-                            import shutil
-                            shutil.move(str(video_path), str(dest_path))
+                                # Copy metadata
+                                metadata_path = video_path.with_suffix(video_path.suffix + ".json")
+                                if metadata_path.exists():
+                                    dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
+                                    shutil.copyfile(str(metadata_path), str(dest_metadata))
+                                logger.info(f"Copied person video to sorted/person/{positive_profile.id}: {filename}")
+                            except Exception as copy_err:
+                                logger.warning(f"Failed to copy person video to sorted folder: {copy_err}")
 
-                            # Move metadata
-                            metadata_path = video_path.with_suffix(video_path.suffix + ".json")
-                            if metadata_path.exists():
-                                dest_metadata = dest_path.with_suffix(dest_path.suffix + ".json")
-                                shutil.move(str(metadata_path), str(dest_metadata))
-                        else:
-                            # Delete video (negative only)
+                        remove_from_review = (
+                            delete_after
+                            or (remove_from_review_requested and (not move_to_sorted or sorted_copy_success))
+                        )
+                        if remove_from_review:
                             video_path.unlink()
                             metadata_path = video_path.with_suffix(video_path.suffix + ".json")
                             if metadata_path.exists():
                                 metadata_path.unlink()
 
-                        # Delete tracked video if exists
-                        tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
-                        if tracked_video_path.exists():
-                            tracked_video_path.unlink()
+                            # Delete tracked video if exists
+                            tracked_video_path = Path("/data/objects/detected/annotated_videos") / f"tracked_{filename}"
+                            if tracked_video_path.exists():
+                                tracked_video_path.unlink()
 
                         results["processed"].append({
                             "filename": filename,
-                            "faces_extracted": faces_extracted
+                            "positive_faces": positive_faces_extracted,
+                            "negative_faces": negative_faces_extracted
                         })
-                        results["total_faces"] += faces_extracted
+                        results["positive_faces"] += positive_faces_extracted
+                        results["negative_faces"] += negative_faces_extracted
 
                     except Exception as e:
                         logger.error(f"Failed to process {filename}: {e}", exc_info=True)
                         results["failed"].append({"filename": filename, "error": str(e)})
 
                 # Update profile counts
-                if extract_type == 'positive':
-                    new_confirmed = profile.confirmed_count + results["total_faces"]
-                    face_profile_manager.update_profile(profile_id, confirmed_count=new_confirmed)
-                elif extract_type == 'negative':
-                    new_rejected = profile.rejected_count + results["total_faces"]
-                    face_profile_manager.update_profile(profile_id, rejected_count=new_rejected)
-                elif extract_type == 'both':
-                    # Distribute roughly evenly
-                    half = results["total_faces"] // 2
-                    new_confirmed = profile.confirmed_count + half
-                    new_rejected = profile.rejected_count + (results["total_faces"] - half)
-                    face_profile_manager.update_profile(
-                        profile_id,
-                        confirmed_count=new_confirmed,
-                        rejected_count=new_rejected
-                    )
+                for stats_profile_id, stats in profile_stats.items():
+                    profile = face_profile_manager.get_profile(stats_profile_id)
+                    if profile:
+                        face_profile_manager.update_profile(
+                            stats_profile_id,
+                            confirmed_count=profile.confirmed_count + stats["confirmed"],
+                            rejected_count=profile.rejected_count + stats["rejected"]
+                        )
 
                 # Task completed
+                total_faces = results["positive_faces"] + results["negative_faces"]
                 task_tracker.complete_task(
                     task_id,
-                    message=f"Completed! Processed {len(results['processed'])} videos, extracted {results['total_faces']} faces for '{profile.name}'"
+                    message=f"Completed! Processed {len(results['processed'])} videos, extracted {total_faces} faces"
                 )
 
             except Exception as e:
@@ -5260,8 +5301,7 @@ async def assign_person_video_to_face_profile(request: dict, background_tasks: B
         return {
             "status": "processing",
             "task_id": task_id,
-            "profile_name": profile.name,
-            "message": f"Started face extraction for '{profile.name}'",
+            "message": "Started face extraction for selected profile(s)",
             "video_count": len(filenames)
         }
     except HTTPException:
@@ -5735,10 +5775,11 @@ async def advanced_review(request: dict, background_tasks: BackgroundTasks):
                             except Exception as copy_err:
                                 logger.warning(f"Failed to copy video to sorted folder: {copy_err}")
 
-                        # Remove from review after explicit deletion or a successful sorted copy.
+                        # Remove from review when requested. If sorting first, only remove
+                        # after the sorted copy succeeds.
                         remove_from_review = (
                             delete_after
-                            or ((move_to_sorted or remove_from_review_requested) and sorted_copy_success)
+                            or (remove_from_review_requested and (not move_to_sorted or sorted_copy_success))
                         )
                         if remove_from_review:
                             try:

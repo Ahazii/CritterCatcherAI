@@ -704,6 +704,45 @@
             gap: 1rem;
         }
 
+        .batch-review-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .batch-review-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .review-hint {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .batch-action-summary {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: var(--bg-card);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .selected-video-list {
+            display: grid;
+            gap: 0.5rem;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
         .review-control-group {
             display: flex;
             flex-direction: column;
@@ -831,8 +870,8 @@
 
                 <p><strong>Training Options:</strong></p>
                 <ul>
-                    <li>Set one positive profile for a video</li>
-                    <li>Set one or more negative profiles for the same video</li>
+                    <li>Set one positive profile for all selected videos</li>
+                    <li>Set one negative profile for all selected videos</li>
                     <li>Example: positive for Hedgehog and negative for Jack Russell</li>
                     <li>Choose whether to remove the video from review after training</li>
                 </ul>
@@ -925,17 +964,51 @@
                 <button class="modal-close" onclick="closeAdvancedReview()">×</button>
             </div>
             <div class="modal-body">
-                <div class="quick-actions">
-                    <h3>Apply to All</h3>
-                    <div class="quick-actions-grid">
-                        <button class="btn btn-small btn-success" onclick="applyToAll('positive')">Positive for Selected Profile</button>
-                        <button class="btn btn-small btn-danger" onclick="applyToAll('negative')">Negative for Selected Profile</button>
-                        <button class="btn btn-small" onclick="applyToAll('delete')">Reject Only</button>
+                <div class="batch-review-panel">
+                    <div class="batch-review-summary">
+                        <div><strong>Selected:</strong> <span id="advancedBatchCount">0</span> videos</div>
+                        <div><strong>Profile set:</strong> <span id="advancedProfileSet">Animal profiles</span></div>
+                        <div><strong>Review folders:</strong> <span id="advancedBatchCategories">-</span></div>
                     </div>
+
+                    <div class="video-review-controls">
+                        <div class="review-control-group">
+                            <label for="advancedPositiveProfile">Positive profile</label>
+                            <select id="advancedPositiveProfile" onchange="updateAdvancedReviewSelection('positive_profile_id', this.value)">
+                                <option value="">No positive training</option>
+                            </select>
+                            <div class="review-hint">Positive training stores examples for this profile and sorts the videos there.</div>
+                        </div>
+                        <div class="review-control-group">
+                            <label for="advancedNegativeProfile">Negative profile</label>
+                            <select id="advancedNegativeProfile" onchange="updateAdvancedReviewSelection('negative_profile_id', this.value)">
+                                <option value="">No negative training</option>
+                            </select>
+                            <div class="review-hint">Negative training teaches this profile that the selected videos are not it.</div>
+                        </div>
+                    </div>
+
+                    <div class="review-checkboxes" style="margin-top: 1rem;">
+                        <label>
+                            <input type="checkbox" id="advancedRemoveFromReview" checked onchange="updateAdvancedReviewSelection('remove_from_review', this.checked)">
+                            Remove selected videos from review after training
+                        </label>
+                    </div>
+
+                    <div class="quick-actions" style="margin-top: 1rem; margin-bottom: 0;">
+                        <h3>Presets</h3>
+                        <div class="quick-actions-grid">
+                            <button class="btn btn-small btn-success" onclick="applyAdvancedPreset('positive')">Positive Only</button>
+                            <button class="btn btn-small btn-danger" onclick="applyAdvancedPreset('negative')">Negative Only</button>
+                            <button class="btn btn-small" onclick="applyAdvancedPreset('reject')">Reject Only</button>
+                        </div>
+                    </div>
+
+                    <div class="batch-action-summary" id="advancedActionSummary"></div>
                 </div>
 
                 <div id="videoReviewList">
-                    <!-- Video review items will be inserted here dynamically -->
+                    <!-- Selected video summary will be inserted here dynamically -->
                 </div>
             </div>
             <div class="modal-footer">
@@ -1123,6 +1196,13 @@
         }
         
         function getActionLabel(action, config = {}) {
+            if (action === 'advanced_face') {
+                if (config.extract_positive && config.negative_profile_ids?.length) return 'Face Training: Positive + Negative';
+                if (config.extract_positive) return 'Confirm Person';
+                if (config.negative_profile_ids?.length) return 'Training: Negative Face';
+                if (config.delete_after) return 'Reject';
+                return 'Training Options';
+            }
             if (action === 'advanced') {
                 if (config.extract_positive && config.negative_profile_ids?.length) return 'Training: Positive + Negative';
                 if (config.extract_positive) return 'Confirm';
@@ -1225,7 +1305,8 @@
                 assign_face_positive: [],
                 assign_face_negative: [],
                 confirm_person: [],
-                advanced: []
+                advanced: [],
+                advanced_face: []
             };
             
             queuedActions.forEach(({category, action, config}, filename) => {
@@ -1279,6 +1360,16 @@
                     } catch (error) {
                         console.error(`Failed to process ${item.filename}:`, error);
                         failed++;
+                    }
+                }
+
+                if (actionGroups.advanced_face.length > 0) {
+                    try {
+                        await processAdvancedFaceActionsAndWait(actionGroups.advanced_face);
+                        completed += actionGroups.advanced_face.length;
+                    } catch (error) {
+                        console.error('Failed to process person training options:', error);
+                        failed += actionGroups.advanced_face.length;
                     }
                 }
                 
@@ -1443,6 +1534,66 @@
             if (result.task_id) {
                 console.log(`Waiting for task ${result.task_id} to complete...`);
                 await waitForTaskCompletion(result.task_id);
+            }
+        }
+
+        async function processAdvancedFaceActionsAndWait(items) {
+            const groups = new Map();
+
+            items.forEach(item => {
+                const config = item.config || {};
+                const key = [
+                    item.category,
+                    config.positive_profile_id || '',
+                    config.negative_profile_id || '',
+                    config.extract_positive ? 'pos' : '',
+                    config.extract_negative ? 'neg' : '',
+                    config.move_to_sorted ? 'sort' : '',
+                    config.delete_after ? 'delete' : '',
+                    config.remove_from_review ? 'remove' : ''
+                ].join('|');
+
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        category: item.category,
+                        config,
+                        filenames: []
+                    });
+                }
+                groups.get(key).filenames.push(item.filename);
+            });
+
+            for (const group of groups.values()) {
+                const response = await fetch('/api/review/categories/person/assign-face-profile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        filenames: group.filenames,
+                        category: group.category,
+                        profile_id: group.config.positive_profile_id || group.config.negative_profile_id,
+                        positive_profile_id: group.config.positive_profile_id || null,
+                        negative_profile_id: group.config.negative_profile_id || null,
+                        negative_profile_ids: group.config.negative_profile_ids || [],
+                        extract_frames: true,
+                        extract_positive: group.config.extract_positive,
+                        extract_negative: group.config.extract_negative,
+                        move_to_sorted: group.config.move_to_sorted,
+                        delete_after: group.config.delete_after,
+                        remove_from_review: group.config.remove_from_review
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to process person training options: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                if (result.task_id) {
+                    console.log(`Waiting for task ${result.task_id} to complete...`);
+                    await waitForTaskCompletion(result.task_id);
+                }
+
+                group.filenames.forEach(filename => removeFromQueue(filename));
             }
         }
 
@@ -2066,7 +2217,7 @@
         }
 
         // Training Options Modal State
-        let videoReviewStates = new Map(); // filename -> training action config
+        let advancedReviewSelection = null;
 
         function openAdvancedReview() {
             if (selectedVideos.size === 0) {
@@ -2074,250 +2225,257 @@
                 return;
             }
 
-            // Initialize review states for selected videos
-            videoReviewStates.clear();
             const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
-            
-            selectedVideoObjects.forEach(video => {
-                const category = getVideoCategory(video.filename);
-                const suggestedProfile = getSuggestedProfile(category, video);
-                
-                videoReviewStates.set(video.filename, {
-                    positive_profile_id: suggestedProfile,
-                    negative_profile_ids: [],
-                    extract_positive: false,
-                    move_to_sorted: false,
-                    delete_after: false,
-                    extract_faces: isPersonCategory(category)
-                });
-            });
+            const hasPersonVideos = selectedVideoObjects.some(video => isPersonCategory(getVideoCategory(video.filename)));
+            const hasAnimalVideos = selectedVideoObjects.some(video => !isPersonCategory(getVideoCategory(video.filename)));
 
-            // Populate modal
-            document.getElementById('modalVideoCount').textContent = selectedVideos.size;
-            document.getElementById('applyCount').textContent = selectedVideos.size;
-            renderVideoReviewList(selectedVideoObjects);
-            
-            // Show modal
+            if (hasPersonVideos && hasAnimalVideos) {
+                alert('Person videos and animal videos use different training systems. Review them as separate batches.');
+                return;
+            }
+
+            const mode = hasPersonVideos ? 'person' : 'animal';
+            const profileList = getAdvancedProfileList(mode);
+            const suggestedProfile = getSuggestedAdvancedProfile(mode, selectedVideoObjects);
+
+            advancedReviewSelection = {
+                videos: selectedVideoObjects,
+                mode,
+                positive_profile_id: suggestedProfile,
+                negative_profile_id: '',
+                remove_from_review: true
+            };
+
+            document.getElementById('modalVideoCount').textContent = selectedVideoObjects.length;
+            document.getElementById('applyCount').textContent = selectedVideoObjects.length;
+            document.getElementById('advancedBatchCount').textContent = selectedVideoObjects.length;
+            document.getElementById('advancedProfileSet').textContent = mode === 'person' ? 'People profiles' : 'Animal profiles';
+            document.getElementById('advancedBatchCategories').textContent = getSelectedBatchCategories(selectedVideoObjects).join(', ');
+
+            populateAdvancedProfileSelect('advancedPositiveProfile', profileList, suggestedProfile, 'No positive training');
+            populateAdvancedProfileSelect('advancedNegativeProfile', profileList, '', 'No negative training');
+            renderAdvancedReviewSummary();
+
             document.getElementById('advancedReviewModal').classList.add('active');
         }
 
         function closeAdvancedReview() {
             document.getElementById('advancedReviewModal').classList.remove('active');
-            videoReviewStates.clear();
+            advancedReviewSelection = null;
+            document.getElementById('videoReviewList').innerHTML = '';
         }
 
-        function getSuggestedProfile(category, video = null) {
-            if (video?.clip_selected_profile) {
-                return video.clip_selected_profile;
+        function profileIsEnabled(profile) {
+            return profile.enabled !== false;
+        }
+
+        function getAdvancedProfileList(mode) {
+            return mode === 'person' ? getFaceProfiles() : getAnimalProfiles();
+        }
+
+        function getSelectedBatchCategories(videoObjects) {
+            return Array.from(new Set(videoObjects.map(video => getVideoCategory(video.filename)))).sort();
+        }
+
+        function getSuggestedAnimalProfile(videoObjects) {
+            const profileSelect = document.getElementById('profileSelect');
+            const animalProfiles = getAnimalProfiles();
+            if (profileSelect?.value && animalProfiles.some(profile => profile.id === profileSelect.value)) {
+                return profileSelect.value;
             }
-            if (currentReviewMode === 'profile' && currentProfileGroup) {
+
+            const clipSelectedProfile = videoObjects.find(video => video.clip_selected_profile)?.clip_selected_profile;
+            if (clipSelectedProfile && animalProfiles.some(profile => profile.id === clipSelectedProfile)) {
+                return clipSelectedProfile;
+            }
+
+            if (currentReviewMode === 'profile' && currentProfileGroup && animalProfiles.some(profile => profile.id === currentProfileGroup)) {
                 return currentProfileGroup;
             }
-            // Find first enabled profile that matches the current YOLO category
-            const animalProfiles = getAnimalProfiles();
-            const match = animalProfiles.find(p =>
-                p.enabled && p.yolo_categories && 
-                p.yolo_categories.some(cat => cat.toLowerCase() === category?.toLowerCase())
+
+            const categoriesForBatch = getSelectedBatchCategories(videoObjects).map(category => category.toLowerCase());
+            const match = animalProfiles.find(profile =>
+                profileIsEnabled(profile) &&
+                profile.yolo_categories &&
+                profile.yolo_categories.some(category => categoriesForBatch.includes(category.toLowerCase()))
             );
-            return match ? match.id : (animalProfiles.length > 0 && animalProfiles[0].enabled ? animalProfiles[0].id : '');
+            return match ? match.id : (animalProfiles.find(profileIsEnabled)?.id || '');
         }
 
-        function renderVideoReviewList(videoObjects) {
-            const container = document.getElementById('videoReviewList');
-            container.innerHTML = '';
-
-            videoObjects.forEach(video => {
-                const state = videoReviewStates.get(video.filename);
-                const videoItem = document.createElement('div');
-                videoItem.className = 'video-review-item';
-                videoItem.dataset.filename = video.filename;
-
-                const animalProfiles = getAnimalProfiles();
-                const category = getVideoCategory(video.filename);
-
-                // Build positive profile options
-                let profileOptions = animalProfiles.map(p => {
-                    const selected = p.id === state.positive_profile_id ? 'selected' : '';
-                    const disabled = !p.enabled ? 'disabled' : '';
-                    const label = p.enabled ? p.name : `${p.name} (disabled)`;
-                    return `<option value="${p.id}" ${selected} ${disabled}>${label}</option>`;
-                }).join('');
-
-                const negativeOptions = animalProfiles.map(p => {
-                    const checked = state.negative_profile_ids.includes(p.id) ? 'checked' : '';
-                    const disabled = !p.enabled ? 'disabled' : '';
-                    const label = p.enabled ? p.name : `${p.name} (disabled)`;
-                    return `
-                        <label>
-                            <input type="checkbox" ${checked} ${disabled}
-                                   onchange="toggleNegativeProfile('${video.filename}', '${p.id}', this.checked)">
-                            ${label}
-                        </label>
-                    `;
-                }).join('');
-
-                // Detect objects info
-                const detections = Object.entries(video.detected_objects || {})
-                    .map(([label, data]) => {
-                        const conf = typeof data === 'number' ? data : data.confidence;
-                        return `${label}: ${(conf * 100).toFixed(0)}%`;
-                    })
-                    .join(', ') || 'None';
-
-                videoItem.innerHTML = `
-                    <div class="video-review-header">
-                        <div class="video-review-thumbnail">
-                            <video src="/api/review/video-file?category=${encodeURIComponent(category)}&filename=${encodeURIComponent(video.filename)}" preload="none" muted></video>
-                        </div>
-                        <div class="video-review-info">
-                            <h4>${video.filename}</h4>
-                            <div class="video-review-meta">
-                                <div>Review folder: ${category}</div>
-                                ${video.clip_selected_profile_name ? `<div>Likely: ${video.clip_selected_profile_name}</div>` : ''}
-                                <div>YOLO: ${video.yolo_category || 'unknown'} (${video.yolo_confidence ? (video.yolo_confidence * 100).toFixed(0) + '%' : 'N/A'})</div>
-                                <div>Detections: ${detections}</div>
-                                <div>Size: ${video.size_mb} MB</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="video-review-controls">
-                        <div class="review-control-group">
-                            <label>Positive profile</label>
-                            <select onchange="updateVideoState('${video.filename}', 'positive_profile_id', this.value)">
-                                <option value="">-- Select Profile --</option>
-                                ${profileOptions}
-                            </select>
-                            <div class="review-checkboxes">
-                                <label>
-                                    <input type="checkbox" ${state.extract_positive ? 'checked' : ''} 
-                                           onchange="updateVideoState('${video.filename}', 'extract_positive', this.checked)">
-                                    Positive training and sorted video
-                                </label>
-                            </div>
-                        </div>
-                        <div class="review-control-group">
-                            <label>Negative for profiles</label>
-                            <div class="review-checkboxes">
-                                ${negativeOptions}
-                                <label>
-                                    <input type="checkbox" ${state.delete_after ? 'checked' : ''} 
-                                           onchange="updateVideoState('${video.filename}', 'delete_after', this.checked)">
-                                    Reject/remove after training
-                                </label>
-                                ${isPersonCategory(category) ? `
-                                <label>
-                                    <input type="checkbox" ${state.extract_faces ? 'checked' : ''} 
-                                           onchange="updateVideoState('${video.filename}', 'extract_faces', this.checked)">
-                                    Extract faces for recognition
-                                </label>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-card); border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary);">
-                        <strong>Will:</strong> 
-                        ${state.extract_positive ? `positive for ${getProfileName(state.positive_profile_id)}, sort video, ` : ''}
-                        ${state.negative_profile_ids.length ? `negative for ${state.negative_profile_ids.map(getProfileName).join(', ')}, ` : ''}
-                        ${state.delete_after ? 'remove from review, ' : ''}
-                        ${state.extract_faces ? 'extract faces, ' : ''}
-                        ${!state.extract_positive && state.negative_profile_ids.length === 0 && !state.delete_after && !state.extract_faces ? 'No action selected' : ''}
-                    </div>
-                `;
-
-                container.appendChild(videoItem);
-            });
-        }
-
-        function updateVideoState(filename, key, value) {
-            const state = videoReviewStates.get(filename);
-            if (state) {
-                state[key] = value;
-                if (key === 'extract_positive') {
-                    state.move_to_sorted = value;
-                }
-                // Re-render to update preview text
-                const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
-                renderVideoReviewList(selectedVideoObjects);
-            }
-        }
-
-        function toggleNegativeProfile(filename, profileId, checked) {
-            const state = videoReviewStates.get(filename);
-            if (!state) return;
-            const ids = new Set(state.negative_profile_ids || []);
-            if (checked) {
-                ids.add(profileId);
-            } else {
-                ids.delete(profileId);
-            }
-            state.negative_profile_ids = Array.from(ids);
-            const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
-            renderVideoReviewList(selectedVideoObjects);
-        }
-
-        function applyToAll(action) {
+        function getSuggestedFaceProfile() {
             const profileSelect = document.getElementById('profileSelect');
-            const defaultProfile = profileSelect.value || currentProfileGroup || getSuggestedProfile(currentCategory);
+            const faceProfiles = getFaceProfiles();
+            if (profileSelect?.value && faceProfiles.some(profile => profile.id === profileSelect.value)) {
+                return profileSelect.value;
+            }
+            return faceProfiles.find(profileIsEnabled)?.id || '';
+        }
 
-            videoReviewStates.forEach((state, filename) => {
-                // Reset all flags
-                state.extract_positive = false;
-                state.move_to_sorted = false;
-                state.delete_after = false;
-                state.positive_profile_id = defaultProfile;
-                state.negative_profile_ids = [];
+        function getSuggestedAdvancedProfile(mode, videoObjects) {
+            return mode === 'person' ? getSuggestedFaceProfile() : getSuggestedAnimalProfile(videoObjects);
+        }
 
-                // Apply action
-                switch(action) {
-                    case 'positive':
-                        state.extract_positive = true;
-                        state.move_to_sorted = true;
-                        break;
-                    case 'negative':
-                        state.negative_profile_ids = defaultProfile ? [defaultProfile] : [];
-                        state.delete_after = true;
-                        break;
-                    case 'delete':
-                        state.delete_after = true;
-                        break;
-                }
+        function populateAdvancedProfileSelect(selectId, profileList, selectedValue, emptyLabel) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '';
+
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = emptyLabel;
+            select.appendChild(emptyOption);
+
+            profileList.forEach(profile => {
+                const option = document.createElement('option');
+                option.value = profile.id;
+                option.textContent = profileIsEnabled(profile) ? profile.name : `${profile.name} (disabled)`;
+                option.disabled = !profileIsEnabled(profile);
+                option.selected = profile.id === selectedValue;
+                select.appendChild(option);
             });
+        }
 
-            // Re-render
-            const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
-            renderVideoReviewList(selectedVideoObjects);
+        function updateAdvancedReviewSelection(key, value) {
+            if (!advancedReviewSelection) return;
+            advancedReviewSelection[key] = value;
+            renderAdvancedReviewSummary();
+        }
+
+        function applyAdvancedPreset(action) {
+            if (!advancedReviewSelection) return;
+            const suggestedProfile = getSuggestedAdvancedProfile(
+                advancedReviewSelection.mode,
+                advancedReviewSelection.videos
+            );
+
+            switch (action) {
+                case 'positive':
+                    advancedReviewSelection.positive_profile_id = suggestedProfile;
+                    advancedReviewSelection.negative_profile_id = '';
+                    advancedReviewSelection.remove_from_review = true;
+                    break;
+                case 'negative':
+                    advancedReviewSelection.positive_profile_id = '';
+                    advancedReviewSelection.negative_profile_id = suggestedProfile;
+                    advancedReviewSelection.remove_from_review = true;
+                    break;
+                case 'reject':
+                    advancedReviewSelection.positive_profile_id = '';
+                    advancedReviewSelection.negative_profile_id = '';
+                    advancedReviewSelection.remove_from_review = true;
+                    break;
+            }
+
+            document.getElementById('advancedPositiveProfile').value = advancedReviewSelection.positive_profile_id;
+            document.getElementById('advancedNegativeProfile').value = advancedReviewSelection.negative_profile_id;
+            document.getElementById('advancedRemoveFromReview').checked = advancedReviewSelection.remove_from_review;
+            renderAdvancedReviewSummary();
+        }
+
+        function renderAdvancedReviewSummary() {
+            if (!advancedReviewSelection) return;
+
+            const {videos: selectedVideoObjects, mode, positive_profile_id, negative_profile_id, remove_from_review} = advancedReviewSelection;
+            const summary = document.getElementById('advancedActionSummary');
+            const videoList = document.getElementById('videoReviewList');
+            const actionParts = [];
+
+            if (positive_profile_id) {
+                actionParts.push(mode === 'person'
+                    ? `extract positive face training for ${getProfileName(positive_profile_id)} and sort to that person`
+                    : `extract positive frame training for ${getProfileName(positive_profile_id)} and sort to that profile`);
+            }
+            if (negative_profile_id) {
+                actionParts.push(mode === 'person'
+                    ? `extract negative face training for ${getProfileName(negative_profile_id)}`
+                    : `extract negative frame training for ${getProfileName(negative_profile_id)}`);
+            }
+            if (remove_from_review) {
+                actionParts.push('remove the selected videos from review');
+            }
+
+            summary.textContent = '';
+            const summaryLabel = document.createElement('strong');
+            summaryLabel.textContent = 'Will apply to all selected videos:';
+            summary.appendChild(summaryLabel);
+            summary.append(` ${actionParts.length ? actionParts.join('; ') : 'No action selected'}`);
+            videoList.innerHTML = '';
+
+            const list = document.createElement('div');
+            list.className = 'selected-video-list';
+            selectedVideoObjects.forEach(video => {
+                const item = document.createElement('div');
+                item.className = 'video-review-item';
+                item.style.marginBottom = '0';
+
+                const title = document.createElement('div');
+                title.className = 'video-review-info';
+                const filename = document.createElement('h4');
+                filename.textContent = video.filename;
+                const metadata = document.createElement('div');
+                metadata.className = 'video-review-meta';
+                metadata.textContent = `Review folder: ${getVideoCategory(video.filename)} | Size: ${video.size_mb} MB`;
+
+                title.appendChild(filename);
+                title.appendChild(metadata);
+                item.appendChild(title);
+                list.appendChild(item);
+            });
+            videoList.appendChild(list);
         }
 
         async function applyAdvancedReview() {
-            // Validate
-            const invalidActions = [];
-            videoReviewStates.forEach((state, filename) => {
-                if ((state.extract_positive || state.move_to_sorted) && !state.positive_profile_id) {
-                    invalidActions.push(filename);
-                }
-                if (state.negative_profile_ids.includes(state.positive_profile_id) && state.extract_positive) {
-                    invalidActions.push(filename);
-                }
-            });
-            
-            if (invalidActions.length > 0) {
-                alert(`${invalidActions.length} video(s) have incomplete or conflicting profile choices.`);
+            if (!advancedReviewSelection) return;
+
+            const {videos: selectedVideoObjects, mode, positive_profile_id, negative_profile_id, remove_from_review} = advancedReviewSelection;
+            const hasPositive = Boolean(positive_profile_id);
+            const hasNegative = Boolean(negative_profile_id);
+
+            if (hasPositive && hasNegative && positive_profile_id === negative_profile_id) {
+                alert('Positive and negative profiles must be different.');
                 return;
             }
 
-            // Add each video to queue with its individual configuration
-            videoReviewStates.forEach((state, filename) => {
-                addToQueue(filename, getVideoCategory(filename), 'advanced', {
-                    profile_id: state.positive_profile_id || null,
-                    positive_profile_id: state.positive_profile_id || null,
-                    negative_profile_ids: state.negative_profile_ids || [],
-                    extract_positive: state.extract_positive,
-                    extract_negative: (state.negative_profile_ids || []).length > 0,
-                    move_to_sorted: state.move_to_sorted,
-                    delete_after: state.delete_after,
-                    remove_from_review: state.move_to_sorted,
-                    extract_faces: state.extract_faces
-                });
+            if (!hasPositive && !hasNegative && !remove_from_review) {
+                alert('Choose a positive profile, a negative profile, or remove the selected videos from review.');
+                return;
+            }
+
+            selectedVideoObjects.forEach(video => {
+                const filename = video.filename;
+                const category = getVideoCategory(filename);
+
+                if (!hasPositive && !hasNegative && remove_from_review) {
+                    addToQueue(filename, category, 'reject', {
+                        save_negatives: false,
+                        profile_id: null
+                    });
+                    return;
+                }
+
+                if (mode === 'person') {
+                    addToQueue(filename, category, 'advanced_face', {
+                        profile_id: positive_profile_id || negative_profile_id || null,
+                        positive_profile_id: positive_profile_id || null,
+                        negative_profile_id: negative_profile_id || null,
+                        negative_profile_ids: negative_profile_id ? [negative_profile_id] : [],
+                        extract_positive: hasPositive,
+                        extract_negative: hasNegative,
+                        move_to_sorted: hasPositive,
+                        delete_after: remove_from_review && !hasPositive,
+                        remove_from_review: remove_from_review
+                    });
+                } else {
+                    addToQueue(filename, category, 'advanced', {
+                        profile_id: positive_profile_id || null,
+                        positive_profile_id: positive_profile_id || null,
+                        negative_profile_ids: negative_profile_id ? [negative_profile_id] : [],
+                        extract_positive: hasPositive,
+                        extract_negative: hasNegative,
+                        move_to_sorted: hasPositive,
+                        delete_after: remove_from_review && !hasPositive,
+                        remove_from_review: remove_from_review
+                    });
+                }
             });
 
             closeAdvancedReview();
