@@ -994,6 +994,7 @@
                             <input type="checkbox" id="advancedRemoveFromReview" checked onchange="updateAdvancedReviewSelection('remove_from_review', this.checked)">
                             Remove selected videos from review after training
                         </label>
+                        <div class="review-hint">This removes the review copy only after the selected training/sorting work finishes. Positive videos are still copied to sorted, and training frames or face crops are kept.</div>
                     </div>
 
                     <div class="quick-actions" style="margin-top: 1rem; margin-bottom: 0;">
@@ -1089,18 +1090,62 @@
         let thumbnailObserver = null;
         
         // Queue state management
+        const QUEUE_STORAGE_KEY = 'crittercatcher.review.queue.v1';
         let queuedActions = new Map(); // Map<filename, {category, action, config}>
         let queueExpanded = false;
         let queueRunInProgress = false;
         let activeQueueRunFilenames = new Set();
         
         // Queue management functions
+        function saveQueuedActionsToStorage() {
+            try {
+                const entries = Array.from(queuedActions.entries())
+                    .filter(([filename]) => !activeQueueRunFilenames.has(filename))
+                    .map(([filename, value]) => [filename, value]);
+                localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(entries));
+            } catch (error) {
+                console.warn('Could not save review queue:', error);
+            }
+        }
+
+        function loadQueuedActionsFromStorage() {
+            try {
+                const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+                if (!raw) return;
+
+                const entries = JSON.parse(raw);
+                if (!Array.isArray(entries)) return;
+
+                queuedActions.clear();
+                entries.forEach(entry => {
+                    if (!Array.isArray(entry) || entry.length !== 2) return;
+                    const [filename, value] = entry;
+                    if (
+                        typeof filename === 'string' &&
+                        value &&
+                        typeof value.category === 'string' &&
+                        typeof value.action === 'string'
+                    ) {
+                        queuedActions.set(filename, {
+                            category: value.category,
+                            action: value.action,
+                            config: value.config || {}
+                        });
+                    }
+                });
+            } catch (error) {
+                console.warn('Could not restore review queue:', error);
+                localStorage.removeItem(QUEUE_STORAGE_KEY);
+            }
+        }
+
         function addToQueue(filename, category, action, config = {}) {
             if (activeQueueRunFilenames.has(filename)) {
                 alert('That video is already being processed. Wait for this queue run to finish before changing it.');
                 return;
             }
             queuedActions.set(filename, {category, action, config});
+            saveQueuedActionsToStorage();
             updateQueueUI();
             updateVideoCardQueuedState(filename, true);
         }
@@ -1111,6 +1156,7 @@
                 return;
             }
             queuedActions.delete(filename);
+            saveQueuedActionsToStorage();
             updateQueueUI();
             updateVideoCardQueuedState(filename, false);
         }
@@ -1136,6 +1182,7 @@
                 updateVideoCardQueuedState(filename, false);
             });
 
+            saveQueuedActionsToStorage();
             updateQueueUI();
         }
         
@@ -1315,6 +1362,7 @@
 
             queueRunInProgress = true;
             activeQueueRunFilenames = new Set(actionsToRun.keys());
+            saveQueuedActionsToStorage();
             
             const runBtn = document.getElementById('runQueueBtn');
             runBtn.disabled = true;
@@ -1414,6 +1462,7 @@
                 });
                 queueRunInProgress = false;
                 activeQueueRunFilenames.clear();
+                saveQueuedActionsToStorage();
                 runBtn.textContent = '⏳ Refreshing...';
                 await loadCategories();
                 
@@ -1632,7 +1681,9 @@
 
         async function init() {
             await loadProfiles();
+            loadQueuedActionsFromStorage();
             await loadCategories();
+            updateQueueUI();
         }
 
         async function loadProfiles() {
@@ -2172,12 +2223,28 @@
             }
         }
 
+        function getRangeSelectionAnchorIndex() {
+            if (lastSelectedVideoIndex !== null && videos[lastSelectedVideoIndex]) {
+                return lastSelectedVideoIndex;
+            }
+
+            for (let index = videos.length - 1; index >= 0; index--) {
+                if (selectedVideos.has(videos[index].filename)) {
+                    return index;
+                }
+            }
+
+            return null;
+        }
+
         function handleVideoSelection(filename, event = null) {
             const currentIndex = videos.findIndex(video => video.filename === filename);
-            const isRangeSelection = Boolean(event?.ctrlKey) && lastSelectedVideoIndex !== null && currentIndex >= 0;
+            const isRangeRequested = Boolean(event?.ctrlKey || event?.metaKey || event?.shiftKey);
+            const rangeAnchorIndex = getRangeSelectionAnchorIndex();
+            const isRangeSelection = isRangeRequested && rangeAnchorIndex !== null && currentIndex >= 0;
 
             if (isRangeSelection) {
-                selectVideoRange(lastSelectedVideoIndex, currentIndex);
+                selectVideoRange(rangeAnchorIndex, currentIndex);
             } else {
                 setVideoSelected(filename, !selectedVideos.has(filename));
             }
