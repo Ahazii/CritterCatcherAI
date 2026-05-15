@@ -1010,6 +1010,7 @@
         let selectedVideos = new Set();
         let profiles = [];
         let selectedReviewCamera = '';
+        let videoLoadRequestId = 0;
         
         // Queue state management
         let queuedActions = new Map(); // Map<filename, {category, action, config}>
@@ -1600,10 +1601,10 @@
                     await switchReviewGroup('profile', currentProfileGroup);
                 } else if (currentCategory && categories.some(cat => cat.name === currentCategory)) {
                     await switchReviewGroup('category', currentCategory);
-                } else if (profileGroups.length > 0) {
-                    await switchReviewGroup('profile', profileGroups[0].profile_id);
                 } else if (categories.length > 0) {
                     await switchReviewGroup('category', categories[0].name);
+                } else if (profileGroups.length > 0) {
+                    await switchReviewGroup('profile', profileGroups[0].profile_id);
                 }
             } catch (error) {
                 console.error('Failed to load categories:', error);
@@ -1642,11 +1643,25 @@
             loadVideos();
         }
 
+        function stopGalleryVideoLoads(gallery) {
+            gallery.querySelectorAll('video').forEach(video => {
+                try {
+                    video.pause();
+                    video.removeAttribute('src');
+                    video.load();
+                } catch (error) {
+                    console.debug('Could not stop video load:', error);
+                }
+            });
+        }
+
         async function loadVideos() {
             const gallery = document.getElementById('videoGallery');
             const emptyState = document.getElementById('emptyState');
             const controls = document.getElementById('controls');
+            const requestId = ++videoLoadRequestId;
             
+            stopGalleryVideoLoads(gallery);
             gallery.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading videos...</p></div>';
             emptyState.style.display = 'none';
             controls.style.display = 'none';
@@ -1657,6 +1672,8 @@
                     ? await fetch(`/api/review/profile-groups/${encodeURIComponent(currentProfileGroup)}/videos${cameraParam}`)
                     : await fetch(`/api/review/categories/${currentCategory}/videos${cameraParam}`);
                 const data = await response.json();
+                if (requestId !== videoLoadRequestId) return;
+
                 videos = data.videos || [];
                 updateReviewCameraFilter(data.cameras || []);
                 
@@ -1676,6 +1693,7 @@
                 
                 updateSelectionInfo();
             } catch (error) {
+                if (requestId !== videoLoadRequestId) return;
                 console.error('Failed to load videos:', error);
                 gallery.innerHTML = '<div class="empty-state"><p>Failed to load videos</p></div>';
             }
@@ -1745,7 +1763,7 @@
                 videoElement.src = `/api/review/video-file?category=${encodeURIComponent(video.category || currentCategory)}&filename=${encodeURIComponent(video.filename)}`;
             }
             videoElement.controls = true;
-            videoElement.preload = 'metadata';
+            videoElement.preload = 'none';
             videoElement.style.width = '100%';
             videoElement.style.height = '100%';
             videoElement.style.objectFit = 'cover';
@@ -2149,7 +2167,7 @@
                 videoItem.innerHTML = `
                     <div class="video-review-header">
                         <div class="video-review-thumbnail">
-                            <video src="/api/review/video-file?category=${encodeURIComponent(category)}&filename=${encodeURIComponent(video.filename)}" muted></video>
+                            <video src="/api/review/video-file?category=${encodeURIComponent(category)}&filename=${encodeURIComponent(video.filename)}" preload="none" muted></video>
                         </div>
                         <div class="video-review-info">
                             <h4>${video.filename}</h4>
