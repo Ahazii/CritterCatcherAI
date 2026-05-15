@@ -1336,7 +1336,9 @@
             if (!videoCard) return;
             
             if (isQueued) {
+                selectedVideos.delete(filename);
                 videoCard.classList.add('queued');
+                videoCard.classList.remove('selected');
                 
                 // Add queued badge if not present
                 if (!videoCard.querySelector('.queued-badge')) {
@@ -1876,6 +1878,7 @@
         function changeReviewCameraFilter() {
             selectedReviewCamera = document.getElementById('reviewCameraFilter').value;
             selectedVideos.clear();
+            lastSelectedVideoIndex = null;
             loadVideos();
         }
 
@@ -2040,6 +2043,13 @@
             attachLazyPoster(videoElement, getReviewThumbnailUrl(video));
             
             videoContainer.appendChild(videoElement);
+            videoElement.onclick = (e) => {
+                if (isRangeSelectionEvent(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleVideoSelection(video.filename, e);
+                }
+            };
             
             // Checkbox with better click handling
             const checkbox = document.createElement('div');
@@ -2108,16 +2118,17 @@
             card.appendChild(videoContainer);
             card.appendChild(info);
             
-            // Card click handler (exclude video and checkbox)
+            // Card click handler. Video modifier-clicks are handled on the video element.
             card.onclick = (e) => {
-                if (e.target.tagName !== 'VIDEO' && !e.target.classList.contains('select-checkbox')) {
-                    // If video is queued, remove from queue on click
-                    if (queuedActions.has(video.filename)) {
-                        removeFromQueue(video.filename);
-                    } else {
-                        handleVideoSelection(video.filename, e);
-                    }
+                if (e.target.classList.contains('select-checkbox')) {
+                    return;
                 }
+
+                if (e.target.tagName === 'VIDEO') {
+                    return;
+                }
+
+                handleVideoSelection(video.filename, e);
             };
             
             // Check if this video is already queued and apply state
@@ -2200,6 +2211,10 @@
         }
 
         function setVideoSelected(filename, selected) {
+            if (selected && queuedActions.has(filename)) {
+                return;
+            }
+
             if (selected) {
                 selectedVideos.add(filename);
             } else {
@@ -2223,6 +2238,10 @@
             }
         }
 
+        function isRangeSelectionEvent(event) {
+            return Boolean(event?.ctrlKey || event?.metaKey || event?.shiftKey);
+        }
+
         function getRangeSelectionAnchorIndex() {
             if (lastSelectedVideoIndex !== null && videos[lastSelectedVideoIndex]) {
                 return lastSelectedVideoIndex;
@@ -2239,14 +2258,18 @@
 
         function handleVideoSelection(filename, event = null) {
             const currentIndex = videos.findIndex(video => video.filename === filename);
-            const isRangeRequested = Boolean(event?.ctrlKey || event?.metaKey || event?.shiftKey);
+            const isRangeRequested = isRangeSelectionEvent(event);
             const rangeAnchorIndex = getRangeSelectionAnchorIndex();
             const isRangeSelection = isRangeRequested && rangeAnchorIndex !== null && currentIndex >= 0;
+            const isQueued = queuedActions.has(filename);
 
             if (isRangeSelection) {
                 selectVideoRange(rangeAnchorIndex, currentIndex);
-            } else {
+            } else if (!isQueued) {
                 setVideoSelected(filename, !selectedVideos.has(filename));
+            } else {
+                // Queued videos can act as range anchors, but are not re-selected.
+                setVideoSelected(filename, false);
             }
 
             if (currentIndex >= 0) {
@@ -2261,9 +2284,19 @@
         }
 
         function selectAll() {
-            videos.forEach(video => selectedVideos.add(video.filename));
-            document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
-            lastSelectedVideoIndex = videos.length ? 0 : null;
+            let firstSelectedIndex = null;
+            videos.forEach((video, index) => {
+                if (!queuedActions.has(video.filename)) {
+                    selectedVideos.add(video.filename);
+                    if (firstSelectedIndex === null) {
+                        firstSelectedIndex = index;
+                    }
+                }
+            });
+            document.querySelectorAll('.video-card').forEach(card => {
+                card.classList.toggle('selected', selectedVideos.has(card.dataset.filename));
+            });
+            lastSelectedVideoIndex = firstSelectedIndex;
             updateSelectionInfo();
         }
 
