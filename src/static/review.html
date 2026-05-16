@@ -1086,22 +1086,46 @@
         let profiles = [];
         let selectedReviewCamera = '';
         let videoLoadRequestId = 0;
-        let lastSelectedVideoIndex = null;
+        let rangeAnchorVideoKey = null;
         let thumbnailObserver = null;
         
         // Queue state management
         const QUEUE_STORAGE_KEY = 'crittercatcher.review.queue.v1';
-        let queuedActions = new Map(); // Map<filename, {category, action, config}>
+        let queuedActions = new Map(); // Map<category+filename key, {filename, category, action, config}>
         let queueExpanded = false;
         let queueRunInProgress = false;
-        let activeQueueRunFilenames = new Set();
+        let activeQueueRunKeys = new Set();
+
+        function makeReviewItemKey(filename, category) {
+            return `${encodeURIComponent(category || '')}|${encodeURIComponent(filename || '')}`;
+        }
+
+        function getVideoKey(video) {
+            return makeReviewItemKey(video.filename, video.category || currentCategory);
+        }
+
+        function getQueuedActionKey(filename, category) {
+            return makeReviewItemKey(filename, category);
+        }
+
+        function getVideoCardByKey(videoKey) {
+            return Array.from(document.querySelectorAll('.video-card'))
+                .find(card => card.dataset.videoKey === videoKey);
+        }
+
+        function resetVisibleSelection() {
+            selectedVideos.clear();
+            rangeAnchorVideoKey = null;
+            document.querySelectorAll('.video-card').forEach(card => card.classList.remove('selected'));
+            updateSelectionInfo();
+        }
         
         // Queue management functions
         function saveQueuedActionsToStorage() {
             try {
                 const entries = Array.from(queuedActions.entries())
-                    .filter(([filename]) => !activeQueueRunFilenames.has(filename))
-                    .map(([filename, value]) => [filename, value]);
+                    .filter(([queueKey]) => !activeQueueRunKeys.has(queueKey))
+                    .map(([queueKey, value]) => [queueKey, value]);
                 localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(entries));
             } catch (error) {
                 console.warn('Could not save review queue:', error);
@@ -1119,14 +1143,17 @@
                 queuedActions.clear();
                 entries.forEach(entry => {
                     if (!Array.isArray(entry) || entry.length !== 2) return;
-                    const [filename, value] = entry;
+                    const [storedKey, value] = entry;
                     if (
-                        typeof filename === 'string' &&
+                        typeof storedKey === 'string' &&
                         value &&
                         typeof value.category === 'string' &&
                         typeof value.action === 'string'
                     ) {
-                        queuedActions.set(filename, {
+                        const filename = typeof value.filename === 'string' ? value.filename : storedKey;
+                        const queueKey = getQueuedActionKey(filename, value.category);
+                        queuedActions.set(queueKey, {
+                            filename,
                             category: value.category,
                             action: value.action,
                             config: value.config || {}
@@ -1140,46 +1167,47 @@
         }
 
         function addToQueue(filename, category, action, config = {}) {
-            if (activeQueueRunFilenames.has(filename)) {
+            const queueKey = getQueuedActionKey(filename, category);
+            if (activeQueueRunKeys.has(queueKey)) {
                 alert('That video is already being processed. Wait for this queue run to finish before changing it.');
                 return;
             }
-            queuedActions.set(filename, {category, action, config});
+            queuedActions.set(queueKey, {filename, category, action, config});
             saveQueuedActionsToStorage();
             updateQueueUI();
-            updateVideoCardQueuedState(filename, true);
+            updateVideoCardQueuedState(queueKey, true);
         }
         
-        function removeFromQueue(filename, force = false) {
-            if (!force && activeQueueRunFilenames.has(filename)) {
+        function removeFromQueue(queueKey, force = false) {
+            if (!force && activeQueueRunKeys.has(queueKey)) {
                 alert('That video is already being processed and cannot be removed from this run.');
                 return;
             }
-            queuedActions.delete(filename);
+            queuedActions.delete(queueKey);
             saveQueuedActionsToStorage();
             updateQueueUI();
-            updateVideoCardQueuedState(filename, false);
+            updateVideoCardQueuedState(queueKey, false);
         }
         
         function clearQueue() {
             if (queuedActions.size === 0) return;
 
-            const clearableFilenames = Array.from(queuedActions.keys())
-                .filter(filename => !activeQueueRunFilenames.has(filename));
+            const clearableKeys = Array.from(queuedActions.keys())
+                .filter(queueKey => !activeQueueRunKeys.has(queueKey));
 
-            if (clearableFilenames.length === 0) {
+            if (clearableKeys.length === 0) {
                 alert('The remaining queued videos are already processing and cannot be cleared.');
                 return;
             }
 
             const message = queueRunInProgress
-                ? `Clear ${clearableFilenames.length} queued action(s) waiting for the next run? Processing videos will continue.`
-                : `Clear all ${clearableFilenames.length} queued actions?`;
+                ? `Clear ${clearableKeys.length} queued action(s) waiting for the next run? Processing videos will continue.`
+                : `Clear all ${clearableKeys.length} queued actions?`;
             if (!confirm(message)) return;
 
-            clearableFilenames.forEach(filename => {
-                queuedActions.delete(filename);
-                updateVideoCardQueuedState(filename, false);
+            clearableKeys.forEach(queueKey => {
+                queuedActions.delete(queueKey);
+                updateVideoCardQueuedState(queueKey, false);
             });
 
             saveQueuedActionsToStorage();
@@ -1242,7 +1270,7 @@
                 queueItemsDiv.appendChild(summaryP);
                 
                 // Individual queue items
-                queuedActions.forEach(({category, action, config}, filename) => {
+                queuedActions.forEach(({filename, category, action, config}, queueKey) => {
                     const item = document.createElement('div');
                     item.className = 'queue-item';
                     
@@ -1253,7 +1281,7 @@
                     removeBtn.textContent = '×';
                     removeBtn.className = 'btn btn-small btn-danger';
                     removeBtn.style.marginLeft = 'auto';
-                    removeBtn.onclick = () => removeFromQueue(filename);
+                    removeBtn.onclick = () => removeFromQueue(queueKey);
                     
                     item.appendChild(label);
                     item.appendChild(removeBtn);
@@ -1331,12 +1359,12 @@
             });
         }
         
-        function updateVideoCardQueuedState(filename, isQueued) {
-            const videoCard = document.querySelector(`[data-filename="${filename}"]`);
+        function updateVideoCardQueuedState(queueKey, isQueued) {
+            const videoCard = getVideoCardByKey(queueKey);
             if (!videoCard) return;
             
             if (isQueued) {
-                selectedVideos.delete(filename);
+                selectedVideos.delete(queueKey);
                 videoCard.classList.add('queued');
                 videoCard.classList.remove('selected');
                 
@@ -1363,7 +1391,7 @@
             if (!confirm(`Execute ${totalActions} queued actions?`)) return;
 
             queueRunInProgress = true;
-            activeQueueRunFilenames = new Set(actionsToRun.keys());
+            activeQueueRunKeys = new Set(actionsToRun.keys());
             saveQueuedActionsToStorage();
             
             const runBtn = document.getElementById('runQueueBtn');
@@ -1387,7 +1415,7 @@
                 advanced_face: []
             };
             
-            actionsToRun.forEach(({category, action, config}, filename) => {
+            actionsToRun.forEach(({filename, category, action, config}) => {
                 if (actionGroups[action]) {
                     actionGroups[action].push({filename, category, config});
                 }
@@ -1434,7 +1462,7 @@
                     try {
                         await processAdvancedReviewActionAndWait(item);
                         completed++;
-                        removeFromQueue(item.filename, true);
+                        removeFromQueue(getQueuedActionKey(item.filename, item.category), true);
                     } catch (error) {
                         console.error(`Failed to process ${item.filename}:`, error);
                         failed++;
@@ -1457,13 +1485,13 @@
                 console.error('Queue execution error:', error);
                 alert(`Queue execution failed: ${error.message}`);
             } finally {
-                actionsToRun.forEach((_, filename) => {
-                    if (queuedActions.has(filename)) {
-                        removeFromQueue(filename, true);
+                actionsToRun.forEach((_, queueKey) => {
+                    if (queuedActions.has(queueKey)) {
+                        removeFromQueue(queueKey, true);
                     }
                 });
                 queueRunInProgress = false;
-                activeQueueRunFilenames.clear();
+                activeQueueRunKeys.clear();
                 saveQueuedActionsToStorage();
                 runBtn.textContent = '⏳ Refreshing...';
                 await loadCategories();
@@ -1592,7 +1620,7 @@
                 }
                 
                 // Remove from queue after completion
-                filenames.forEach(f => removeFromQueue(f, true));
+                filenames.forEach(filename => removeFromQueue(getQueuedActionKey(filename, category), true));
             }
         }
         
@@ -1677,7 +1705,7 @@
                     await waitForTaskCompletion(result.task_id);
                 }
 
-                group.filenames.forEach(filename => removeFromQueue(filename, true));
+                group.filenames.forEach(filename => removeFromQueue(getQueuedActionKey(filename, group.category), true));
             }
         }
 
@@ -1867,7 +1895,7 @@
             });
             
             selectedVideos.clear();
-            lastSelectedVideoIndex = null;
+            rangeAnchorVideoKey = null;
             
             // Update profile dropdown to reflect current category
             updateProfileDropdown();
@@ -1878,7 +1906,7 @@
         function changeReviewCameraFilter() {
             selectedReviewCamera = document.getElementById('reviewCameraFilter').value;
             selectedVideos.clear();
-            lastSelectedVideoIndex = null;
+            rangeAnchorVideoKey = null;
             loadVideos();
         }
 
@@ -1947,6 +1975,10 @@
 
         function getVideoByFilename(filename) {
             return videos.find(video => video.filename === filename);
+        }
+
+        function getSelectedVideoObjects() {
+            return videos.filter(video => selectedVideos.has(getVideoKey(video)));
         }
 
         function getAnimalProfiles() {
@@ -2023,6 +2055,8 @@
             const card = document.createElement('div');
             card.className = 'video-card';
             card.dataset.filename = video.filename;
+            card.dataset.category = video.category || currentCategory || '';
+            card.dataset.videoKey = getVideoKey(video);
             
             // Create video container with canvas overlay
             const videoContainer = document.createElement('div');
@@ -2047,7 +2081,7 @@
                 if (isRangeSelectionEvent(e)) {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleVideoSelection(video.filename, e);
+                    handleVideoSelection(video, e);
                 }
             };
             
@@ -2056,7 +2090,7 @@
             checkbox.className = 'select-checkbox';
             checkbox.onclick = (e) => {
                 e.stopPropagation();
-                handleVideoSelection(video.filename, e);
+                handleVideoSelection(video, e);
             };
             
             const info = document.createElement('div');
@@ -2128,12 +2162,12 @@
                     return;
                 }
 
-                handleVideoSelection(video.filename, e);
+                handleVideoSelection(video, e);
             };
             
             // Check if this video is already queued and apply state
-            if (queuedActions.has(video.filename)) {
-                updateVideoCardQueuedState(video.filename, true);
+            if (queuedActions.has(getVideoKey(video))) {
+                updateVideoCardQueuedState(getVideoKey(video), true);
             }
             
             return card;
@@ -2210,18 +2244,19 @@
             });
         }
 
-        function setVideoSelected(filename, selected) {
-            if (selected && queuedActions.has(filename)) {
+        function setVideoSelected(video, selected) {
+            const videoKey = getVideoKey(video);
+            if (selected && queuedActions.has(videoKey)) {
                 return;
             }
 
             if (selected) {
-                selectedVideos.add(filename);
+                selectedVideos.add(videoKey);
             } else {
-                selectedVideos.delete(filename);
+                selectedVideos.delete(videoKey);
             }
 
-            const card = document.querySelector(`[data-filename="${filename}"]`);
+            const card = getVideoCardByKey(videoKey);
             if (card) {
                 card.classList.toggle('selected', selected);
             }
@@ -2232,8 +2267,8 @@
             const end = Math.max(startIndex, endIndex);
             for (let index = start; index <= end; index++) {
                 const video = videos[index];
-                if (video && !queuedActions.has(video.filename)) {
-                    setVideoSelected(video.filename, true);
+                if (video && !queuedActions.has(getVideoKey(video))) {
+                    setVideoSelected(video, true);
                 }
             }
         }
@@ -2243,12 +2278,15 @@
         }
 
         function getRangeSelectionAnchorIndex() {
-            if (lastSelectedVideoIndex !== null && videos[lastSelectedVideoIndex]) {
-                return lastSelectedVideoIndex;
+            if (rangeAnchorVideoKey) {
+                const anchorIndex = videos.findIndex(video => getVideoKey(video) === rangeAnchorVideoKey);
+                if (anchorIndex >= 0) {
+                    return anchorIndex;
+                }
             }
 
             for (let index = videos.length - 1; index >= 0; index--) {
-                if (selectedVideos.has(videos[index].filename)) {
+                if (selectedVideos.has(getVideoKey(videos[index]))) {
                     return index;
                 }
             }
@@ -2256,24 +2294,30 @@
             return null;
         }
 
-        function handleVideoSelection(filename, event = null) {
-            const currentIndex = videos.findIndex(video => video.filename === filename);
+        function handleVideoSelection(videoOrFilename, event = null) {
+            const video = typeof videoOrFilename === 'string'
+                ? getVideoByFilename(videoOrFilename)
+                : videoOrFilename;
+            if (!video) return;
+
+            const videoKey = getVideoKey(video);
+            const currentIndex = videos.findIndex(item => getVideoKey(item) === videoKey);
             const isRangeRequested = isRangeSelectionEvent(event);
             const rangeAnchorIndex = getRangeSelectionAnchorIndex();
             const isRangeSelection = isRangeRequested && rangeAnchorIndex !== null && currentIndex >= 0;
-            const isQueued = queuedActions.has(filename);
+            const isQueued = queuedActions.has(videoKey);
 
             if (isRangeSelection) {
                 selectVideoRange(rangeAnchorIndex, currentIndex);
             } else if (!isQueued) {
-                setVideoSelected(filename, !selectedVideos.has(filename));
+                setVideoSelected(video, !selectedVideos.has(videoKey));
             } else {
                 // Queued videos can act as range anchors, but are not re-selected.
-                setVideoSelected(filename, false);
+                setVideoSelected(video, false);
             }
 
             if (currentIndex >= 0) {
-                lastSelectedVideoIndex = currentIndex;
+                rangeAnchorVideoKey = videoKey;
             }
 
             updateSelectionInfo();
@@ -2284,26 +2328,27 @@
         }
 
         function selectAll() {
-            let firstSelectedIndex = null;
-            videos.forEach((video, index) => {
-                if (!queuedActions.has(video.filename)) {
-                    selectedVideos.add(video.filename);
-                    if (firstSelectedIndex === null) {
-                        firstSelectedIndex = index;
+            let firstSelectedKey = null;
+            videos.forEach(video => {
+                const videoKey = getVideoKey(video);
+                if (!queuedActions.has(videoKey)) {
+                    selectedVideos.add(videoKey);
+                    if (firstSelectedKey === null) {
+                        firstSelectedKey = videoKey;
                     }
                 }
             });
             document.querySelectorAll('.video-card').forEach(card => {
-                card.classList.toggle('selected', selectedVideos.has(card.dataset.filename));
+                card.classList.toggle('selected', selectedVideos.has(card.dataset.videoKey));
             });
-            lastSelectedVideoIndex = firstSelectedIndex;
+            rangeAnchorVideoKey = firstSelectedKey;
             updateSelectionInfo();
         }
 
         function deselectAll() {
             selectedVideos.clear();
             document.querySelectorAll('.video-card').forEach(card => card.classList.remove('selected'));
-            lastSelectedVideoIndex = null;
+            rangeAnchorVideoKey = null;
             updateSelectionInfo();
         }
 
@@ -2319,9 +2364,10 @@
                 return;
             }
             
-            const filenames = Array.from(selectedVideos);
-            filenames.forEach(filename => {
-                const category = getVideoCategory(filename);
+            const selectedVideoObjects = getSelectedVideoObjects();
+            selectedVideoObjects.forEach(video => {
+                const filename = video.filename;
+                const category = video.category || getVideoCategory(filename);
                 const isPerson = isPersonCategory(category);
                 addToQueue(filename, category, isPerson ? 'assign_face_positive' : 'advanced', {
                     profile_id: profileId,
@@ -2350,17 +2396,17 @@
                 return;
             }
             
-            if (!confirm(`Delete ${selectedVideos.size} video(s)?`)) {
+            const selectedVideoObjects = getSelectedVideoObjects();
+            if (!confirm(`Delete ${selectedVideoObjects.length} video(s)?`)) {
                 return;
             }
-            
-            const filenames = Array.from(selectedVideos);
             
             try {
                 let deletedCount = 0;
                 const byCategory = {};
-                filenames.forEach(filename => {
-                    const category = getVideoCategory(filename);
+                selectedVideoObjects.forEach(video => {
+                    const filename = video.filename;
+                    const category = video.category || getVideoCategory(filename);
                     if (!byCategory[category]) byCategory[category] = [];
                     byCategory[category].push(filename);
                 });
@@ -2399,9 +2445,8 @@
                 return;
             }
 
-            const filenames = Array.from(selectedVideos);
-            filenames.forEach(filename => {
-                addToQueue(filename, getVideoCategory(filename), 'reject', {
+            getSelectedVideoObjects().forEach(video => {
+                addToQueue(video.filename, video.category || getVideoCategory(video.filename), 'reject', {
                     save_negatives: false,
                     profile_id: null
                 });
@@ -2426,9 +2471,9 @@
                 return;
             }
 
-            const selectedVideoObjects = videos.filter(v => selectedVideos.has(v.filename));
-            const hasPersonVideos = selectedVideoObjects.some(video => isPersonCategory(getVideoCategory(video.filename)));
-            const hasAnimalVideos = selectedVideoObjects.some(video => !isPersonCategory(getVideoCategory(video.filename)));
+            const selectedVideoObjects = getSelectedVideoObjects();
+            const hasPersonVideos = selectedVideoObjects.some(video => isPersonCategory(video.category || getVideoCategory(video.filename)));
+            const hasAnimalVideos = selectedVideoObjects.some(video => !isPersonCategory(video.category || getVideoCategory(video.filename)));
 
             if (hasPersonVideos && hasAnimalVideos) {
                 alert('Person videos and animal videos use different training systems. Review them as separate batches.');
@@ -2475,7 +2520,7 @@
         }
 
         function getSelectedBatchCategories(videoObjects) {
-            return Array.from(new Set(videoObjects.map(video => getVideoCategory(video.filename)))).sort();
+            return Array.from(new Set(videoObjects.map(video => video.category || getVideoCategory(video.filename)))).sort();
         }
 
         function getSuggestedAnimalProfile(videoObjects) {
@@ -2614,7 +2659,7 @@
                 filename.textContent = video.filename;
                 const metadata = document.createElement('div');
                 metadata.className = 'video-review-meta';
-                metadata.textContent = `Review folder: ${getVideoCategory(video.filename)} | Size: ${video.size_mb} MB`;
+                metadata.textContent = `Review folder: ${video.category || getVideoCategory(video.filename)} | Size: ${video.size_mb} MB`;
 
                 title.appendChild(filename);
                 title.appendChild(metadata);
@@ -2643,7 +2688,7 @@
 
             selectedVideoObjects.forEach(video => {
                 const filename = video.filename;
-                const category = getVideoCategory(filename);
+                const category = video.category || getVideoCategory(filename);
 
                 if (!hasPositive && !hasNegative && remove_from_review) {
                     addToQueue(filename, category, 'reject', {
@@ -2684,12 +2729,27 @@
         }
 
         function updateSelectionInfo() {
+            const visibleSelectedKeys = new Set(getSelectedVideoObjects().map(getVideoKey));
+            selectedVideos = visibleSelectedKeys;
+            document.querySelectorAll('.video-card').forEach(card => {
+                card.classList.toggle('selected', selectedVideos.has(card.dataset.videoKey));
+            });
+
             const count = selectedVideos.size;
             document.getElementById('selectionInfo').textContent = `${count} of ${videos.length} selected`;
             document.getElementById('markAsBtn').disabled = count === 0;
             document.getElementById('rejectBtn').disabled = count === 0;
             document.getElementById('advancedReviewBtn').disabled = count === 0;
         }
+
+        window.addEventListener('pageshow', () => {
+            resetVisibleSelection();
+        });
+
+        window.addEventListener('pagehide', () => {
+            selectedVideos.clear();
+            rangeAnchorVideoKey = null;
+        });
 
         init();
     </script>
